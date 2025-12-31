@@ -37,10 +37,13 @@ pub fn PageFaultHandler(faultVAddr:VirAddr){
     let inner=TASK_MANAER.task_que_inner.lock();
     let current=inner.current;
     drop(inner);
-    let mut inner=TASK_MANAER.task_que_inner.lock();
-    let mut memset=&mut inner.task_queen[current].memory_set;
+    let  inner=TASK_MANAER.task_que_inner.lock();
     //有areacontain并且都是mmap类型的area
-    if !memset.AallArea_Iscontain_thisVpn(contain_vpn) || !memset.AllArea_NoDefaultType(VirNumRange(contain_vpn,contain_vpn)){
+    let will_kill :bool={
+        let  memset=&mut inner.task_queen[current].lock().memory_set;
+        !memset.AallArea_Iscontain_thisVpn(contain_vpn) || !memset.AllArea_NoDefaultType(VirNumRange(contain_vpn,contain_vpn))
+    }; 
+    if will_kill {
         //没有area包含mmap的地址，杀掉
         error!("area not contain mmap addr kill!");
         drop(inner);//杀任务的话提前drop了
@@ -50,12 +53,17 @@ pub fn PageFaultHandler(faultVAddr:VirAddr){
     
     debug!("ligel!");
 
+    
+    {
+    //重新拿锁
+    let memset=&mut inner.task_queen[current].lock().memory_set;
+
     //合法，然后
     //2.分配物理页帧挂载到对应的maparea下面
     //3.设置合法页表项
     //一部到位
     memset.findarea_allocFrame_and_setPte(contain_vpn);
-  
+    }
 
     
     //返回 释放inner

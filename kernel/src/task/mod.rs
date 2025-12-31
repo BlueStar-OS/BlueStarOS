@@ -1,52 +1,41 @@
 mod task;
 mod process;
-use crate::config::*;
-use alloc::vec::Vec;
-use alloc::format;
-use log::debug;
-
+use crate::fs::vfs::{OpenFlags, vfs_open};
+use alloc::vec::{Vec};
+use alloc::vec;
+use log::{debug, error, info, warn};
 /// 文件加载器，根据 app_id 从文件系统 /test 目录加载对应的 ELF 文件
 /// app_id 从 0 开始
-pub fn file_loader(app_id: usize) -> Vec<u8> {
-    use BlueosFS::read_file;
-    
-    // 应用文件名列表（对应 app.asm 中的顺序）
-    let app_names = [
-        "init",
-        "idle",
-        "create_and_read_file",
-        "for_read",
-        "i_can_yield",
-        "loop",
-        "loop2",
-        "printf",
-        "switch",
-        "sys_map",
-        "unmap",
-    ];
-    
-    let app_name = if app_id < app_names.len() {
-        app_names[app_id]
-    } else {
-        panic!("App id {} out of range", app_id);
+pub fn file_loader(file_path: &str) -> Vec<u8> {
+    debug!("Eter in loader");
+    let fd =match vfs_open(file_path, OpenFlags::RDONLY){
+        Ok(res)=>{
+            res.fd
+        }
+        Err(_)=>{
+            warn!("Open Application faild,can't open it");
+            return vec![];//提前结束
+        }
     };
-    
-    let file_path = format!("/test/{}", app_name);
-    
-    match read_file(&file_path) {
-        Ok(data) => {
-            debug!("Loading app {} ({}) from {} with size {} bytes", app_id, app_name, file_path, data.len());
-            data
-        }
-        Err(e) => {
-            panic!("Failed to load app {} from {}: {:?}", app_id, file_path, e);
-        }
-    }
-}
+    debug!("open file success");
 
-/// 获取应用程序总数
-pub fn get_app_count() -> usize {
-    get_app_num()
+    let mut out: Vec<u8> = Vec::new();
+    let mut tmp = [0u8; 512];
+    loop {
+        let n = match fd.read(&mut tmp) {
+            Ok(n) => n,
+            Err(e) => {
+                error!("file_loader: fd.read failed: path={} err={:?}", file_path, e);
+                return vec![];
+            }
+        };
+        if n == 0 {
+            break;
+        }
+        out.extend_from_slice(&tmp[..n]);
+    }
+    info!("Load app for {} success!", file_path);
+    out
 }
 
 pub use task::*;

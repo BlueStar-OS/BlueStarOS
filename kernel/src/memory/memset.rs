@@ -10,6 +10,8 @@ use core::arch::asm;
 use crate::{config::*, memory::{address::*, alloc_frame, frame_allocator::FramTracker}};
 use crate::trap::no_return_start;
 use crate::trap::TrapFunction;
+ use lazy_static::lazy_static;
+ use crate::sync::UPSafeCell;
 ///开始和结束，一个范围,自动[start,end] start地址自动向下取整，end也向下取整，因为virnumrange用于代码映射，防止代码缺失, startva/PAGE =num+offset ,从num开始，endva/pagesize=endva+offset由于闭区间所以向下取整,防止多映射
 #[derive(Debug,Clone, Copy)]
 pub struct VirNumRange(pub VirNumber,pub VirNumber);
@@ -31,6 +33,33 @@ pub struct VirNumRangeIter{
     current:VirNumber,
     end:VirNumber
 }
+
+ pub struct KernelStackAllocator {
+     current_id: usize,
+     recycle: Vec<usize>,
+ }
+
+ impl KernelStackAllocator {
+     fn new() -> Self {
+         Self { current_id: 0, recycle: Vec::new() }
+     }
+
+     fn alloc_id(&mut self) -> usize {
+         if let Some(id) = self.recycle.pop() {
+             id
+         } else {
+             let id = self.current_id;
+             self.current_id += 1;
+             id
+         }
+     }
+ }
+
+ lazy_static! {
+     static ref KERNEL_STACK_ALLOCATOR: UPSafeCell<KernelStackAllocator> = unsafe {
+         UPSafeCell::new(KernelStackAllocator::new())
+     };
+ }
 impl Iterator for VirNumRangeIter {
     type Item = VirNumber;
     fn next(&mut self) -> Option<Self::Item> {
@@ -221,6 +250,80 @@ impl MapArea {
 }
 impl MapSet {
 
+    ///复制Mapset 解析每一个maparea的页表，申请新页然后将数据搬过去
+    pub fn clone_mapset(&mut self)->Self{
+        // 目标：为 fork 复制一份“独立”的地址空间。
+        // - DEFAULT + MAPED：逐页分配新物理页帧，建立相同的页表映射，并复制页内容
+        // - DEFAULT + INDENTICAL：建立相同的恒等映射（不分配新页帧）
+        // - MMAP：只复制虚拟地址空间的“预留信息”（MapArea 元数据），不建立页表项、不分配物理页
+        //
+        // 注意：当前实现是“全量拷贝”（不是 COW），所以父子进程互不影响。
+
+        // 1) 创建一个空的 MapSet，先把 trap 映射补齐（trap 映射不是通过 MapArea 管理的）
+        let mut new_set = MapSet::new_bare();
+        new_set.map_traper();
+
+        // 2) 逐个克隆 MapArea
+        for area in self.areas.iter() {
+            // 复制一份 MapArea 的元信息（range/flags/map_type/area_type）
+            let mut new_area = MapArea::new(area.range, area.flags, area.map_type, area.area_type);
+
+            match area.area_type {
+                MapAreaType::MMAP => {
+                    // MMAP 类型只预留地址空间：不映射、不分配页帧
+                }
+                MapAreaType::DEFAULT => {
+                    match area.map_type {
+                        MapType::Indentical => {
+                            // 恒等映射：直接建立相同 vpn->ppn(vpn) 映射即可
+                            // 这种映射一般用于内核空间或特殊区域（用户 MapSet 中通常较少）
+                            let start = area.range.0;
+                            let end = area.range.1;
+                            let mut vpn = start;
+                            while vpn.0 <= end.0 {
+                                // MapType::Indentical 时 ppn 就是 vpn
+                                new_set.table.map(vpn, PhysiNumber(vpn.0), area.flags.into());
+                                vpn.0 += 1;
+                            }
+                        }
+                        MapType::Maped => {
+                            // 普通映射：逐页分配新帧并复制页内容
+                            let start = area.range.0;
+                            let end = area.range.1;
+                            let mut vpn = start;
+                            while vpn.0 <= end.0 {
+                                // 如果父进程页表中该页并没有合法映射（例如 MMAP 尚未触发缺页），则跳过
+                                if !self.table.is_maped(vpn) {
+                                    vpn.0 += 1;
+                                    continue;
+                                }
+
+                                // 2.1 在新地址空间中分配页帧并建立页表项
+                                // new_area.map_one 会：alloc_frame + new_area.frames.insert + new_set.table.map
+                                new_area.map_one(vpn, &mut new_set.table);
+
+                                // 2.2 拷贝父进程该页的内容到子进程
+                                // 这里直接按 PAGE_SIZE 全页拷贝（ELF 段尾的空洞也会被拷贝为 0/原值）
+                                let src = self.table.get_mut_byte(vpn)
+                                    .expect("clone_mapset: src page not mapped");
+                                let dst = new_set.table.get_mut_byte(vpn)
+                                    .expect("clone_mapset: dst page not mapped");
+                                dst.copy_from_slice(src);
+
+                                vpn.0 += 1;
+                            }
+                        }
+                    }
+                }
+            }
+
+            new_set.areas.push(new_area);
+        }
+
+        new_set
+    }
+    
+
     ///获取当前memset的table临时借用
     pub fn get_table(&mut self)->&mut PageTable{
         &mut self.table    
@@ -303,10 +406,8 @@ impl MapSet {
 
 
     ///从elf解析数据创建应用地址空间 Mapset entry user_stack,kernel_sp
-    /// appid从0开始，必须手动+1
     /// elf_data: ELF 文件数据（可以从文件系统读取）
-    pub fn from_elf(old_appid:usize,elf_data:&[u8])->(Self,usize,VirAddr,usize){ 
-        let appid=old_appid+1;//适配之前的栈布局
+    pub fn from_elf(elf_data:&[u8])->(Self,usize,VirAddr,usize){ 
         let mut memory_set = Self::new_bare();
         // map program headers of elf, with U flag
         let elf = xmas_elf::ElfFile::new(elf_data).unwrap();
@@ -369,18 +470,9 @@ impl MapSet {
          MapAreaFlags::R | MapAreaFlags::W | MapAreaFlags::U, 
          None,
         MapAreaType::DEFAULT);
-        //映射内核栈
-        //debug!("Kernel stack start viadr:{:#x} appid:{}",TRAP_BOTTOM_ADDR-(PAGE_SIZE+PAGE_SIZE)*appid,appid);
-        let strat_kernel_vpn =VirAddr(TRAP_BOTTOM_ADDR-(PAGE_SIZE+KERNEL_STACK_SIZE)*appid).strict_into_virnum();//隔了一个guardpage 
-        let end_kernel_vpn=VirAddr(TRAP_BOTTOM_ADDR-((PAGE_SIZE+KERNEL_STACK_SIZE)*appid)+KERNEL_STACK_SIZE-PAGE_SIZE).strict_into_virnum();
-        let kernel_stack_top =TRAP_BOTTOM_ADDR-((PAGE_SIZE+KERNEL_STACK_SIZE)*appid)+KERNEL_STACK_SIZE;//保命
-        //debug!("Kernel stack vpn:{}",strat_adn_end_vpn.0);
-    
-        KERNEL_SPACE.lock().add_area(
-            VirNumRange(strat_kernel_vpn, end_kernel_vpn),
-             MapType::Maped, MapAreaFlags::R | MapAreaFlags::W, 
-             None
-            ,MapAreaType::DEFAULT);
+
+        // 分配并映射内核栈（使用全局分配器，不再依赖 appid）
+        let kernel_stack_top = Self::alloc_kernel_stack();
         (
             memory_set,
             entry_point as usize,
@@ -389,8 +481,33 @@ impl MapSet {
         )
     }
 
+    pub(crate) fn alloc_kernel_stack() -> usize {
+        // 分配一个逻辑 id（从 1 开始），用于在高地址区域切分出一段内核栈虚拟地址区间
+        let id = KERNEL_STACK_ALLOCATOR.lock().alloc_id() + 1;
 
-    fn new_bare()->Self{
+        // 高地址向下切：TRAP_BOTTOM_ADDR 之下为多个 task kernel stack，每段栈前留一个 guard page
+        let strat_kernel_vpn = VirAddr(TRAP_BOTTOM_ADDR - (PAGE_SIZE + KERNEL_STACK_SIZE) * id)
+            .strict_into_virnum();
+        let end_kernel_vpn = VirAddr(
+            TRAP_BOTTOM_ADDR - ((PAGE_SIZE + KERNEL_STACK_SIZE) * id) + KERNEL_STACK_SIZE - PAGE_SIZE,
+        )
+        .strict_into_virnum();
+        let kernel_stack_top =
+            TRAP_BOTTOM_ADDR - ((PAGE_SIZE + KERNEL_STACK_SIZE) * id) + KERNEL_STACK_SIZE;
+
+        KERNEL_SPACE.lock().add_area(
+            VirNumRange(strat_kernel_vpn, end_kernel_vpn),
+            MapType::Maped,
+            MapAreaFlags::R | MapAreaFlags::W,
+            None,
+            MapAreaType::DEFAULT,
+        );
+
+        kernel_stack_top
+    }
+
+
+    pub(crate) fn new_bare()->Self{
         MapSet{
             table:PageTable::new(),
             areas:Vec::new(),

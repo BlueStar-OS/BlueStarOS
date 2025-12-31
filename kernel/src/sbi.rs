@@ -1,5 +1,9 @@
 use core::arch::asm;
 
+use log::error;
+
+use crate::fs::vfs::{ROOTFS, VfsFs};
+
 
 const SET_TIMER:usize=0;
 const PUTC_CALLID:usize=1;
@@ -30,8 +34,13 @@ pub fn putc(cha:usize){
 pub fn get_char()->isize{//非阻塞 -1没有字符，>=0ascii码
     sbi_call(GETCHAR_CALLID, 0, 0, 0)
 }
-
+///关机的操作的副作用文件系统卸载
 pub fn shutdown()->!{
+    //取消文件系统挂载
+    if ROOTFS.lock().as_mut().unwrap().fs.lock().umount().is_err(){
+        error!("VFS umount error!");
+    }
+
     sbi_call(SHUTDOWN_CALLID, 0, 0, 0);
     panic!("It should shutdown!");
 }

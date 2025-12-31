@@ -1,5 +1,5 @@
 use core::fmt;
-use crate::driver::print as driver_print;
+use crate::fs::component::stdio::stdio::print as driver_print;
 
 /// 打印函数（委托给driver模块）
 pub fn print(fmt: fmt::Arguments) {

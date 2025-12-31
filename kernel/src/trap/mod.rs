@@ -8,6 +8,8 @@ use riscv::register::sie;
 use riscv::register::scause::Interrupt;
 use core::arch::asm;
 use crate::memory::VirAddr;
+use log::warn;
+
 
 mod pagefaultHandler;
 
@@ -113,7 +115,7 @@ pub fn set_kernel_forbid(){
 
 /// 第一次进入用户态的入口点
 /// __switch 会跳转到这里，设置好 trap 环境后跳转到用户态
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn app_entry_point() {
     set_kernel_trap_handler();
     let user_satp = TASK_MANAER.get_current_stap();
@@ -143,17 +145,26 @@ pub extern "C" fn kernel_trap_handler(){//内核专属trap（目前不应该被�
     let scauses = scause::read();
     let sepc_val = sepc::read();
     let stval_val = stval::read();
-    let current_trapcx= TASK_MANAER.get_current_trapcx();
-    let a1=current_trapcx.x[17];
-    let a2 =[current_trapcx.x[10],current_trapcx.x[11],current_trapcx.x[12]];
+    let (sys_id, sys_args) = {
+        let current_trapcx = TASK_MANAER.get_current_trapcx();
+        let id = current_trapcx.x[17];
+        let args = [current_trapcx.x[10], current_trapcx.x[11], current_trapcx.x[12]];
+        (id, args)
+    };
         match scauses.cause(){
         Trap::Exception(Exception::UserEnvCall)=>{
-            debug!("pre sepc:{:#x}",current_trapcx.sepc_entry_point);
-            current_trapcx.sepc_entry_point += 4;
-            // 调用系统调用处理器，返回值存入 a0 (x10)
-            let ret = syscall_handler(a1, a2);
-            debug!("lat sepc:{:#x}",current_trapcx.sepc_entry_point);
-            current_trapcx.x[10] = ret as usize;
+            {
+                let current_trapcx = TASK_MANAER.get_current_trapcx();
+                debug!("pre sepc:{:#x}",current_trapcx.sepc_entry_point);
+                current_trapcx.sepc_entry_point += 4;
+            }
+            // 注意：sys_exec 可能会替换地址空间并重建 TrapContext，不能持有旧 trapcx 引用跨 syscall。
+            let ret = syscall_handler(sys_id, sys_args);
+            {
+                let current_trapcx = TASK_MANAER.get_current_trapcx();
+                debug!("lat sepc:{:#x}",current_trapcx.sepc_entry_point);
+                current_trapcx.x[10] = ret as usize;
+            }
         }
         Trap::Exception(Exception::IllegalInstruction)=>{
             panic!("User IllegalInstruction at {:#x}", sepc_val)
@@ -163,7 +174,7 @@ pub extern "C" fn kernel_trap_handler(){//内核专属trap（目前不应该被�
             PageFaultHandler(VirAddr(stval_val));
         }
         Trap::Exception(Exception::LoadPageFault)=>{
-            error!("User LoadPageFault at {:#x}, accessing {:#x}", sepc_val, stval_val);
+            warn!("User LoadPageFault at {:#x}, accessing {:#x}", sepc_val, stval_val);
             PageFaultHandler(VirAddr(stval_val));
         }
         Trap::Exception(Exception::StorePageFault)=>{

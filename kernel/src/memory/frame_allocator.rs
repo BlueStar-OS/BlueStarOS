@@ -2,14 +2,20 @@ use buddy_system_allocator::LockedHeap;
 use log::trace;
 use crate::{config::{KERNEL_HEADP, KERNEL_HEAP_SIZE, MB, PAGE_SIZE}, memory::address::*,sync::UPSafeCell};
 use core::cell::UnsafeCell;
+#[allow(static_mut_refs)]
 use lazy_static::lazy_static;
-
 #[global_allocator]
 pub static ALLOCATOR:LockedHeap=LockedHeap::empty(); //内核堆分配器
 use alloc::vec::Vec;
 
 pub fn allocator_init(){
     unsafe{
+        #[allow(static_mut_refs)]
+        let start = KERNEL_HEADP.as_ptr() as usize;
+        let end = start + KERNEL_HEAP_SIZE;
+        use log::info;
+        info!("heap range: [{:#x}, {:#x}) size={} MB", start, end, KERNEL_HEAP_SIZE/MB);
+        #[allow(static_mut_refs)]
         ALLOCATOR.lock().init(KERNEL_HEADP.as_ptr() as usize,KERNEL_HEAP_SIZE);
     }
     trace!("Kernel HeapAlloctor init, can use size:{}MB , mount on KERNEL_HEADP",KERNEL_HEAP_SIZE/MB);
@@ -86,6 +92,11 @@ pub struct FramTracker{
 }
 impl FramTracker{
     fn new(ppn:PhysiNumber)->Self{
+        unsafe {
+            let addr: PhysiAddr = ppn.into();
+            // 清洗旧数据，确保新分配的帧是干净的
+            core::slice::from_raw_parts_mut(addr.0 as *mut u8, PAGE_SIZE).fill(0);
+        }
         FramTracker{
             ppn
         }
@@ -104,6 +115,10 @@ pub fn alloc_frame()->Option<FramTracker>{
     FRAME_ALLOCATOR.lock().alloc()
 }
 
+pub fn alloc_contiguous_frames(pages: usize) -> Option<Vec<FramTracker>> {
+    FRAME_ALLOCATOR.lock().alloc_contiguous(pages)
+}
+
 pub fn dealloc_frame(ppn:usize){
     FRAME_ALLOCATOR.lock().dealloc(ppn);
 }
@@ -112,5 +127,29 @@ impl Drop for FramTracker {
     fn drop(&mut self) {
         dealloc_frame(self.ppn.0);
         //trace!("free frame:ppn:{}",self.ppn.0);
+    }
+}
+
+impl FrameAlloctor {
+    /// Allocate `pages` physically contiguous frames from the bump region.
+    ///
+    /// This is primarily used for DMA buffers (e.g. VirtIO queues) which
+    /// require physical contiguity. It intentionally does NOT allocate from
+    /// the recycle list, because recycled frames are not guaranteed to be
+    /// contiguous.
+    pub fn alloc_contiguous(&mut self, pages: usize) -> Option<Vec<FramTracker>> {
+        if pages == 0 {
+            return Some(Vec::new());
+        }
+        if self.start + pages > self.end {
+            return None;
+        }
+        let base = self.start;
+        self.start += pages;
+        let mut v = Vec::with_capacity(pages);
+        for i in 0..pages {
+            v.push(FramTracker::new(PhysiNumber(base + i)));
+        }
+        Some(v)
     }
 }

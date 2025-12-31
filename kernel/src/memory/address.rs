@@ -297,7 +297,7 @@ impl PageTable {
 
         if pte.is_valid(){
             //说明之前已经存在对应的映射了,给个警告级别的提示，因为可能有重叠的
-            warn!("MAP error！vpn:{}has maped before, pte exist ppn:{}",vpn.0,pte.ppn().0);
+            warn!("MAP error! vpn:{}has maped before, pte exist ppn:{}",vpn.0,pte.ppn().0);
             return;//返回
         }
 

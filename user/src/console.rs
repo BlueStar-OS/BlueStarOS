@@ -4,8 +4,8 @@ use spin::mutex::Mutex;
 use lazy_static::lazy_static;
 use crate::{sys_write};
 
-pub const FD_TYPE_STDIN: usize = 1;
-pub const FD_TYPE_STDOUT: usize = 2;
+pub const FD_TYPE_STDIN: usize = 0;
+pub const FD_TYPE_STDOUT: usize = 1;
 const BUFFER_SIZE: usize = 256 * 10;
 
 struct STDIN;
@@ -62,22 +62,19 @@ pub fn stdout_buffer_flush(){
         locak.flush();
         drop(locak);
     }
-    panic!("locaked!")
-
+    // 如果当前持锁（比如 print 内部），这里直接返回，避免递归加锁导致 panic
+    
 }
 
 pub fn print(fmt: fmt::Arguments,flush:bool) {
     // 不使用 expect()，避免在 panic handler 中再次获取锁导致死锁
-    if let Some(mut buffer) =STD_BUFFER.try_lock(){
-       let _ = buffer.write_fmt(fmt);
-       drop(buffer);//释放锁
-        if flush{
-            stdout_buffer_flush();//手动刷新缓冲区的情况
+    if let Some(mut buffer) = STD_BUFFER.try_lock(){
+        let _ = buffer.write_fmt(fmt);
+        if flush {
+            let _ = buffer.flush();
         }
-       return;
+        drop(buffer);
     }
-
-    panic!("locaked!")
 }
 
 #[macro_export]

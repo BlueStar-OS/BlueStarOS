@@ -8,6 +8,7 @@ pub struct UPSafeCell<T>{
 }
 
 unsafe impl<T> Sync  for UPSafeCell<T>{}
+unsafe impl<T> Send for UPSafeCell<T> {}
 
 impl<T> UPSafeCell<T>{
     pub const fn new(value:T)->Self{
@@ -16,7 +17,19 @@ impl<T> UPSafeCell<T>{
         }
     }
 
+    #[track_caller]
     pub fn lock(&self)->core::cell::RefMut<'_,T>{
-        self.inner.borrow_mut()
+        match self.inner.try_borrow_mut() {
+            Ok(g) => g,
+            Err(_) => {
+                let loc = core::panic::Location::caller();
+                panic!(
+                    "RefCell already borrowed at {}:{}:{}",
+                    loc.file(),
+                    loc.line(),
+                    loc.column()
+                );
+            }
+        }
     }
 }
