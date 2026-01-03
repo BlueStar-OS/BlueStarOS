@@ -8,12 +8,12 @@ use alloc::string::String;
 use log::{debug, error, warn};
 use crate::sbi::shutdown;
 use crate::sync::UPSafeCell;
-use crate::task::{ProcessId, TaskStatus, INIT_PID};
+use crate::task::{INIT_PID, ProcessId, TaskControlBlock, TaskStatus};
 use crate::{config::PAGE_SIZE, memory::{PageTable, VirAddr, VirNumber}, task::TASK_MANAER, time::{TimeVal, get_time_ms}};
 use alloc::vec;
 use crate::memory::MapSet;
-use crate::fs::vfs::VfsFsError;
-use crate::fs::vfs::{vfs_getdents64, vfs_mkdir, vfs_open, vfs_stat, vfs_unlink, OpenFlags, VfsStat};
+use crate::fs::vfs::{self, VfsFsError, normalize_path};
+use crate::fs::vfs::{vfs_getdents64, vfs_mkdir, vfs_open, vfs_stat, vfs_unlink, OpenFlags, VfsStat, VFS_DT_DIR};
 use crate::fs::vfs::FileDescriptor;
 use crate::fs::component::pipe::pipe::{make_pipe, PipeHandle};
 use crate::trap::TrapContext;
@@ -21,6 +21,153 @@ use crate::TRAP_CONTEXT_ADDR;
 use crate::task::ProcessId_ALLOCTOR;
 use crate::task::TaskContext;
 use crate::alloc::string::ToString;
+use alloc::format;
+
+///SYS_DUP2系统调用
+/// 返回一个符合最小fd的结果
+/// 传入需要复制的fd
+pub fn sys_dup2(old_fd:i32,new_fd:i32) ->isize{
+
+    if old_fd < 0 || new_fd < 0 {
+        return -1;
+    }
+
+    let current_task = {
+        let inner = TASK_MANAER.task_que_inner.lock();
+        inner.task_queen[inner.current].clone()
+    };
+
+    let mut tcb = current_task.lock();
+
+    let old_idx = old_fd as usize;
+    if old_idx >= tcb.file_descriptor.len() {
+        return -1;
+    }
+    let Some(source_fd) = tcb.file_descriptor[old_idx].clone() else {
+        return -1;
+    };
+
+    if old_fd == new_fd {
+        return new_fd as isize;
+    }
+
+    let new_idx = new_fd as usize;
+    if new_idx >= tcb.file_descriptor.len() {
+        tcb.file_descriptor.resize_with(new_idx + 1, || None);
+    }
+
+    // close(newfd) if it is open
+    tcb.file_descriptor[new_idx] = None;
+    tcb.file_descriptor[new_idx] = Some(source_fd);
+    new_fd as isize
+}
+
+///SYS_DUP系统调用
+/// 返回一个符合最小fd的结果
+/// 传入需要复制的fd
+pub fn sys_dup(old_fd:i32) ->isize{
+    let current_task = {
+        let inner = TASK_MANAER.task_que_inner.lock();
+        inner.task_queen[inner.current].clone()
+    };
+
+    let mut tcb = current_task.lock();
+
+    if old_fd < 0 {
+        return -1;
+    }
+    let old_idx = old_fd as usize;
+    if old_idx >= tcb.file_descriptor.len() {
+        return -1;
+    }
+    let Some(source_fd) = tcb.file_descriptor[old_idx].clone() else {
+        return -1;
+    };
+
+    if let Some((idx, _)) = tcb
+        .file_descriptor
+        .iter()
+        .enumerate()
+        .find(|(_, slot)| slot.is_none())
+    {
+        tcb.file_descriptor[idx] = Some(source_fd);
+        return idx as isize;
+    }
+
+    // No empty slot: grow fd table.
+    let idx = tcb.file_descriptor.len();
+    tcb.file_descriptor.push(Some(source_fd));
+    idx as isize
+}
+
+pub fn sys_getpid() -> isize {
+    let current_task = {
+        let inner = TASK_MANAER.task_que_inner.lock();
+        inner.task_queen[inner.current].clone()
+    };
+    current_task.lock().pid.0 as isize
+}
+
+pub fn sys_getppid() -> isize {
+    let current_task = {
+        let inner = TASK_MANAER.task_que_inner.lock();
+        inner.task_queen[inner.current].clone()
+    };
+    let tcb = current_task.lock();
+    if let Some(parent) = tcb.parent.as_ref().and_then(|w| w.upgrade()) {
+        parent.lock().pid.0 as isize
+    } else {
+        0
+    }
+}
+
+///SYS_BRK系统调用 
+/// brk->堆顶, new_brk可不对齐，由用户库处理
+/// 传入0返回当前brk地址（用户空间），其它地址->尝试brk，失败的话返回原来的brk，成功返回新的brk
+pub fn sys_brk(new_brk:VirAddr)->isize{ 
+    let new_brkaddr = new_brk.0;
+
+    // 先取出当前 task 的 Arc，避免持有 task queue 的锁期间再 lock task。
+    let current_task = {
+        let inner = TASK_MANAER.task_que_inner.lock();
+        inner.task_queen[inner.current].clone()
+    };
+
+    let mut tcb = current_task.lock();
+    let old_brk = tcb.memory_set.brk.0;
+
+    // Linux 语义：brk(0) 只查询当前 break。
+    if new_brkaddr == 0 {
+        return old_brk as isize;
+    }
+
+    // shrink：先只更新 brk，不回收映射（最小实现，优先兼容测试）。
+    if new_brkaddr <= old_brk {
+        tcb.memory_set.brk = VirAddr(new_brkaddr);
+        return new_brkaddr as isize;
+    }
+
+    // expand：需要把 [old_brk, new_brk) 涉及到的新页映射出来。
+    // 已经映射的旧页不需要重复映射：从包含 old_brk 的页的下一页开始。
+    let mut start_vpn: VirNumber = VirAddr(old_brk).floor_down();
+    start_vpn.step();
+    let end_vpn: VirNumber = VirAddr(new_brkaddr - 1).floor_down();
+
+    if start_vpn.0 <= end_vpn.0 {
+        // 注意：add_area 会检查区间是否与现有 MapArea 重叠，
+        // 所以这里从 floor_up(old_brk) 开始，避免覆盖旧页。
+        tcb.memory_set.add_area(
+            crate::memory::VirNumRange(start_vpn, end_vpn),
+            crate::memory::MapType::Maped,
+            crate::memory::MapAreaFlags::R | crate::memory::MapAreaFlags::W | crate::memory::MapAreaFlags::U,
+            None,
+            crate::memory::MapAreaType::DEFAULT,
+        );
+    }
+
+    tcb.memory_set.brk = VirAddr(new_brkaddr);
+    new_brkaddr as isize
+}
 
 ///SYS_EXEC系统调用
 /// argv 命令行字符串参数数组起始地址
@@ -94,15 +241,15 @@ pub fn sys_pipe(fds_ptr: usize) -> isize {
     ));
     let write_fd = Arc::new(FileDescriptor::new_from_inner(
         OpenFlags::WRONLY,
-        false,
+        true,
         Box::new(PipeHandle::new(write_end)),
     ));
 
-    let rfd = TASK_MANAER.alloc_fd_for_current(read_fd);
+    let rfd:i32 = TASK_MANAER.alloc_fd_for_current(read_fd);
     if rfd < 0 {
         return -1;
     }
-    let wfd = TASK_MANAER.alloc_fd_for_current(write_fd);
+    let wfd:i32 = TASK_MANAER.alloc_fd_for_current(write_fd);
     if wfd < 0 {
         return -1;
     }
@@ -114,9 +261,9 @@ pub fn sys_pipe(fds_ptr: usize) -> isize {
         VirAddr(fds_ptr),
     );
 
-    let mut tmp: [u8; core::mem::size_of::<usize>() * 2] = [0u8; core::mem::size_of::<usize>() * 2];
-    tmp[..core::mem::size_of::<usize>()].copy_from_slice(&(rfd as usize).to_ne_bytes());
-    tmp[core::mem::size_of::<usize>()..].copy_from_slice(&(wfd as usize).to_ne_bytes());
+    let mut tmp: [u8; core::mem::size_of::<i32>() * 2] = [0u8; core::mem::size_of::<i32>() * 2];
+    tmp[..core::mem::size_of::<i32>()].copy_from_slice(&rfd.to_ne_bytes());
+    tmp[core::mem::size_of::<i32>()..].copy_from_slice(&wfd.to_ne_bytes());
 
     let mut off = 0usize;
     for s in slices.iter_mut() {
@@ -133,7 +280,71 @@ pub fn sys_pipe(fds_ptr: usize) -> isize {
     0
 }
 
-pub fn sys_mkdir(path_ptr: usize) -> isize {
+pub fn sys_chdir(path_ptr: usize) -> isize {
+    let path = match read_c_string_from_user(path_ptr) {
+        Ok(p) => p,
+        Err(e) => {
+            error!("sys_chdir: invalid user path ptr={:#x}, err={}", path_ptr, e);
+            return -1;
+        }
+    };
+
+    
+    let abs = match normalize_path(&path) {
+        Ok(p) => p,
+        Err(_) => return -1,
+    };
+
+    let st = match vfs_stat(&abs) {
+        Ok(s) => s,
+        Err(e) => {
+            error!("sys_chdir: vfs_stat failed: path={} err={}", abs, e);
+            return -1;
+        }
+    };
+    if st.file_type != VFS_DT_DIR {
+        return -1;
+    }
+
+    TASK_MANAER.set_current_cwd(abs);
+    0
+}
+
+pub fn sys_getcwd(user_buf_ptr: usize, buf_len: usize) -> isize {
+    if user_buf_ptr == 0 || buf_len == 0 {
+        return 0;
+    }
+
+    let cwd = TASK_MANAER.get_current_cwd();
+    let mut tmp: Vec<u8> = Vec::new();
+    tmp.extend_from_slice(cwd.as_bytes());
+    tmp.push(0);
+
+    if tmp.len() > buf_len {
+        return 0;
+    }
+
+    let user_satp = TASK_MANAER.get_current_stap();
+    let mut slices = PageTable::get_mut_slice_from_satp(user_satp, tmp.len(), VirAddr(user_buf_ptr));
+    let mut off = 0usize;
+    for s in slices.iter_mut() {
+        if off >= tmp.len() {
+            break;
+        }
+        let n = core::cmp::min(s.len(), tmp.len() - off);
+        s[..n].copy_from_slice(&tmp[off..off + n]);
+        off += n;
+    }
+    if off != tmp.len() {
+        return 0;
+    }
+    user_buf_ptr as isize
+}
+
+pub fn sys_mkdirat(dirfd: isize, path_ptr: usize, _mode: usize) -> isize {
+    // NOTE: oscomp uses mkdir() implemented via mkdirat(AT_FDCWD,...,mode).
+    // We currently ignore dirfd/mode and rely on VFS/ext4 without permission bits.
+    let _ = dirfd;
     let path = match read_c_string_from_user(path_ptr) {
         Ok(p) => p,
         Err(e) => {
@@ -148,6 +359,10 @@ pub fn sys_mkdir(path_ptr: usize) -> isize {
             -1
         }
     }
+}
+
+pub fn sys_mkdir(path_ptr: usize) -> isize {
+    sys_mkdirat(-100, path_ptr, 0)
 }
 
 pub fn sys_unlink(path_ptr: usize) -> isize {
@@ -300,7 +515,7 @@ pub fn sys_open(path_ptr: usize, flags_bits: usize) -> isize {
     if fd < 0 {
         error!("sys_open: alloc fd failed: path={} flags_bits={:#x}", path, flags_bits);
     }
-    fd
+    fd as isize
 }
 
 pub fn sys_creat(path_ptr: usize) -> isize {
@@ -427,24 +642,55 @@ fn read_c_string_from_user(path_ptr: usize) -> Result<String, VfsFsError> {
 fn read_c_string_from_user_with_satp(user_satp: usize, path_ptr: usize) -> Result<String, VfsFsError> {
     const MAX_PATH_LEN: usize = 4096;
 
-    let buffer = PageTable::get_mut_slice_from_satp(user_satp, MAX_PATH_LEN, VirAddr(path_ptr));
+    debug!(
+        "read_c_string_from_user_with_satp: satp={:#x} path_ptr={:#x}",
+        user_satp, path_ptr
+    );
+
+    // 不要一次性取 MAX_PATH_LEN 的 slice：字符串可能位于页尾，跨页会触发内核态 fault。
+    // 这里逐字节翻译虚拟地址并读取，直到遇到 '\0' 或超过最大长度。
+    let mut table = PageTable::crate_table_from_satp(user_satp);
     let mut data: Vec<u8> = Vec::new();
-    for slice in buffer {
-        data.extend_from_slice(slice);
-        if data.len() >= MAX_PATH_LEN {
-            break;
+
+    for off in 0..MAX_PATH_LEN {
+        let vaddr = VirAddr(path_ptr + off);
+        let paddr = match table.translate(vaddr) {
+            Some(p) => p,
+            None => {
+                error!(
+                    "read_c_string_from_user_with_satp: translate failed: satp={:#x} path_ptr={:#x} off={} vaddr={:#x}",
+                    user_satp,
+                    path_ptr,
+                    off,
+                    vaddr.0
+                );
+                return Err(VfsFsError::Invalid);
+            }
+        };
+        let b = unsafe { *(paddr.0 as *const u8) };
+        if b == 0 {
+            debug!(
+                "read_c_string_from_user_with_satp: found NUL: len={} satp={:#x} path_ptr={:#x}",
+                data.len(),
+                user_satp,
+                path_ptr
+            );
+            let s = core::str::from_utf8(&data)
+                .map_err(|_| VfsFsError::Invalid)?
+                .to_string();
+            debug!("read_c_string_from_user_with_satp: str='{}'", s);
+            return Ok(s);
         }
+        data.push(b);
     }
 
-    let null_pos = data
-        .iter()
-        .position(|&b| b == 0)
-        .ok_or(VfsFsError::FsInnerError)?;
-
-    let s = core::str::from_utf8(&data[..null_pos])
-        .map_err(|_| VfsFsError::FsInnerError)?
-        .to_string();
-    Ok(s)
+    error!(
+        "read_c_string_from_user_with_satp: no NUL within {} bytes: satp={:#x} path_ptr={:#x}",
+        MAX_PATH_LEN,
+        user_satp,
+        path_ptr
+    );
+    Err(VfsFsError::Invalid)
 }
 
 
@@ -544,8 +790,18 @@ pub fn sys_write(fd_target: usize, source_buffer: usize, buffer_len: usize) -> i
         Ok(written) => written as isize,
         Err(e) => {
             error!(
-                "sys_write: fd.write failed fd={} len={} err={}",
-                fd_target, write_buffer.len(), e
+                "sys_write: fd.write failed fd={} req_len={} copied_len={} inode={} flags(read={},write={},append={},create={},truncate={}) has_write_lock={} err={}",
+                fd_target,
+                buffer_len,
+                write_buffer.len(),
+                fd.inode_num,
+                fd.flags.read,
+                fd.flags.write,
+                fd.flags.append,
+                fd.flags.create,
+                fd.flags.truncate,
+                fd.has_write_lock(),
+                e
             );
             -1
         }
@@ -610,7 +866,7 @@ pub fn sys_exit(exit_code:usize)->isize{
     };
     if current_pid == INIT_PID {
         warn!("Init exiting (pid={}), shutting down", current_pid);
-        println!("Bye");
+        kprintln!("Bye");
         shutdown();
     }
 

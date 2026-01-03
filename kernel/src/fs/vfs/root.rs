@@ -20,7 +20,7 @@ pub static ref ROOTFS: UPSafeCell<Option<RootFs>> = UPSafeCell::new(None);
 #[cfg(feature = "ext4")]
 pub struct RootFs{
     pub fs:Arc<Mutex<Ext4Fs>>, //根文件系统
-    pub path:String, //当前路径
+
 }
 
 #[cfg(not(feature = "ext4"))]
@@ -30,6 +30,7 @@ pub struct RootFs{
 
 //虚拟根文件系统
 impl RootFs {
+    ///testuse
     pub fn vfs_mkfs(&mut self){
         mkfs(&mut self.fs.lock().dev);
     }
@@ -46,7 +47,6 @@ impl RootFs {
 
             let rootfs = RootFs {
                 fs,
-                path: String::from("/"),
             };
             *(ROOTFS.lock()) = Some(rootfs);
         }

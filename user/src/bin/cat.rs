@@ -26,8 +26,7 @@ pub fn main() -> usize {
     let mut buf = [0u8; 512];
 
     for i in 1..argv.len() {
-        let mut p = argv[i].clone();
-        p.push('\0');
+        let p = argv[i].clone();
         let fd = sys_open(&p, O_RDONLY);
         if fd < 0 {
             println!("cat: open failed: {}", argv[i]);

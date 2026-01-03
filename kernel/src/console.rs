@@ -1,23 +1,21 @@
 use core::fmt;
 use crate::fs::component::stdio::stdio::print as driver_print;
 
-/// 打印函数（委托给driver模块）
-pub fn print(fmt: fmt::Arguments) {
+/// 内核打印函数,直接输出到当前任务缓冲区？？，不对吧。
+pub fn kprint(fmt: fmt::Arguments) {
     driver_print(fmt);
 }
 
-
-///print string
 #[macro_export]
-macro_rules! print {
+macro_rules! kprint {
     ($fmt: literal $(, $($arg: tt)+)?) => {
-        $crate::console::print(format_args!($fmt $(, $($arg)+)?))
+        $crate::console::kprint(format_args!($fmt $(, $($arg)+)?))
     }
 }
-/// Println! to the host console using the format string and arguments.
+
 #[macro_export]
-macro_rules! println {
+macro_rules! kprintln {
     ($fmt: literal $(, $($arg: tt)+)?) => {
-        $crate::console::print(format_args!(concat!($fmt, "\n") $(, $($arg)+)?))
+        $crate::console::kprint(format_args!(concat!($fmt, "\n") $(, $($arg)+)?))
     }
 }

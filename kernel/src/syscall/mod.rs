@@ -1,100 +1,105 @@
 mod syscall;
-use log::error;
-
+use log::{error, warn};
+use crate::memory::VirAddr;
 use crate::syscall::syscall::*;
-pub const GET_TIME:usize   =0;     //获取系统时间
-pub const SYS_WRITE:usize  =1;     //stdin write系统调用
-pub const SYS_READ:usize   =2;     //stdin read系统调用
-pub const SYS_EXIT:usize   =3;     //exit程序结束，运行下一个程序
-pub const SYS_YIELD:usize  =4;     //主动放弃cpu
-pub const SYS_MAP:usize    =5;     //mmap映射系统调用
-pub const SYS_UNMAP:usize  =6;     //unmap映射系统调用
-pub const SYS_OPEN:usize   =7;     //open
-pub const SYS_CLOSE:usize  =8;     //close
-pub const SYS_LSEEK:usize  =9;     //lseek
-pub const SYS_FORK:usize   =10;    //fork系统调用
-pub const SYS_EXEC:usize   =11;    //exec系统调用
-pub const SYS_WAIT:usize   =12;    //wait系统调用
-pub const SYS_CREAT:usize  =13;    //creat
-pub const SYS_MKDIR:usize  =14;    //mkdir
-pub const SYS_UNLINK:usize =15;    //unlink
-pub const SYS_STAT:usize   =16;    //stat
-pub const SYS_GETDENTS64:usize =17; //getdents64
-pub const SYS_PIPE:usize   =18;    //pipe
+// Linux riscv64 syscall numbers (subset used by the oscomp test suite)
+pub const SYS_GETCWD: usize = 17;
+pub const SYS_UNLINKAT: usize = 35;
+pub const SYS_LINKAT: usize = 37;
+pub const SYS_UMOUNT2: usize = 39;
+pub const SYS_MOUNT: usize = 40;
+pub const SYS_MKDIRAT: usize = 34;
+pub const SYS_CHDIR: usize = 49;
+pub const SYS_OPENAT: usize = 56;
+pub const SYS_CLOSE: usize = 57;
+pub const SYS_PIPE2: usize = 59;
+pub const SYS_GETDENTS64: usize = 61;
+pub const SYS_LSEEK: usize = 62;
+pub const SYS_READ: usize = 63;
+pub const SYS_WRITE: usize = 64;
+pub const SYS_NEWFSTATAT: usize = 79;
+pub const SYS_FSTAT: usize = 80;
+pub const SYS_EXIT: usize = 93;
+pub const SYS_NANOSLEEP: usize = 101;
+pub const SYS_SETPRIORITY: usize = 140;
+pub const SYS_TIMES: usize = 153;
+pub const SYS_UNAME: usize = 160;
+pub const SYS_GETTIMEOFDAY: usize = 169;
+pub const SYS_GETPID: usize = 172;
+pub const SYS_GETPPID: usize = 173;
+pub const SYS_BRK: usize = 214;
+pub const SYS_MUNMAP: usize = 215;
+pub const SYS_CLONE: usize = 220;
+pub const SYS_EXECVE: usize = 221;
+pub const SYS_MMAP: usize = 222;
+pub const SYS_WAIT4: usize = 260;
+pub const SYS_SCHED_YIELD: usize = 124;
+pub const SYS_DUP: usize = 23;
+pub const SYS_DUP3: usize = 24;
 ///id: 系统调用号
 ///args:接受1个usize参数
 ///返回值：通过 x10 (a0) 寄存器返回给用户态
-pub fn syscall_handler(id:usize,arg:[usize;3]) -> isize {
+pub fn syscall_handler(id:usize,arg:[usize;6]) -> isize {
     match id {
-        GET_TIME => {
-            0  // 暂未实现
+        SYS_WRITE => sys_write(arg[0], arg[1], arg[2]),
+        SYS_READ => sys_read(arg[0], arg[1], arg[2]),
+        SYS_EXIT => sys_exit(arg[0]),
+        SYS_SCHED_YIELD => sys_yield(),
+
+        SYS_GETPID => sys_getpid(),
+        SYS_GETPPID => sys_getppid(),
+
+        SYS_DUP => sys_dup(arg[0] as i32),
+        // Linux riscv64 userspace often implements dup2 via dup3(old, new, flags=0)
+        SYS_DUP3 => {
+            if arg[2] != 0 {
+                -1
+            } else {
+                sys_dup2(arg[0] as i32, arg[1] as i32)
+            }
         }
-        SYS_WRITE => {
-            ///bufferpoint fd_type buffer_len
-            sys_write(arg[0], arg[1], arg[2])
-        }
-        SYS_READ => {
-            sys_read(arg[0], arg[1], arg[2])
-        }
-        SYS_EXIT=>{
-            //error!("exit call");
-            sys_exit(arg[0])
-        }
-        SYS_YIELD=>{
-            sys_yield()
-        }
-        SYS_MAP=>{
-            sys_map(arg[0], arg[1])
-        }
-        SYS_UNMAP=>{
-            sys_unmap(arg[0], arg[1])
-        }
-        SYS_OPEN=>{
-            sys_open(arg[0], arg[1])
-        }
+
+        // NOTE: oscomp user/lib/syscall.c implements open() via openat(AT_FDCWD,...)
+        // We currently ignore dirfd/mode and reuse sys_open's semantics.
+        SYS_OPENAT => sys_open(arg[1], arg[2]),
+
         SYS_CLOSE=>{
             sys_close(arg[0])
         }
         SYS_LSEEK=>{
             sys_lseek(arg[0], arg[1] as isize, arg[2])
         }
-        SYS_FORK=>{
-            sys_fork()
-        }
-        SYS_EXEC=>{
-            sys_exec(arg[0],arg[1],arg[2])
+        // newfstatat(dirfd, pathname, statbuf, flags)
+        // For now we ignore dirfd/flags and reuse the existing path-based sys_stat.
+        SYS_NEWFSTATAT => sys_stat(arg[1], arg[2]),
+        SYS_CLONE => sys_fork(),
+        SYS_EXECVE => sys_exec(arg[0], arg[1], arg[2]),
+        SYS_WAIT4 => sys_wait(arg[1]),
+
+        // mkdirat(dirfd, pathname, mode)
+        // oscomp user/lib/syscall.c implements mkdir() via mkdirat(AT_FDCWD,...,mode)
+        SYS_MKDIRAT => {sys_mkdirat(arg[0] as isize, arg[1], arg[2])},
+        SYS_UNLINKAT => sys_unlink(arg[1]),
+
+        SYS_GETDENTS64 => sys_getdents64(arg[0], arg[1], arg[2]),
+        SYS_PIPE2 => sys_pipe(arg[0]),
+
+        SYS_BRK => sys_brk(VirAddr(arg[0])) as isize,
+
+        SYS_CHDIR => sys_chdir(arg[0]),
+        SYS_GETCWD => sys_getcwd(arg[0], arg[1]),
+
+        // Not implemented yet in this kernel:
+        SYS_FSTAT | SYS_MMAP | SYS_MUNMAP |
+        SYS_GETTIMEOFDAY | SYS_TIMES | SYS_UNAME | SYS_NANOSLEEP | SYS_SETPRIORITY | SYS_LINKAT |
+        SYS_MOUNT | SYS_UMOUNT2 => {
+            error!("Unimplemented syscall id={}", id);
+            -1
         }
 
-        SYS_WAIT=>{
-            sys_wait(arg[0])
-        }
-
-        SYS_CREAT=>{
-            sys_creat(arg[0])
-        }
-
-        SYS_MKDIR => {
-            sys_mkdir(arg[0])
-        }
-
-        SYS_UNLINK => {
-            sys_unlink(arg[0])
-        }
-
-        SYS_STAT => {
-            sys_stat(arg[0], arg[1])
-        }
-
-        SYS_GETDENTS64 => {
-            sys_getdents64(arg[0], arg[1], arg[2])
-        }
-        
-        SYS_PIPE => {
-            sys_pipe(arg[0])
-        }
-        
         _ => {
-            panic!("Unknown Syscall type: {}", id);
+            error!("Unknown syscall id={}", id);
+            -1
         }
     }
 }

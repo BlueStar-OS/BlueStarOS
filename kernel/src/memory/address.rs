@@ -9,7 +9,7 @@ use crate::{config::*, memory::frame_allocator::*};
 use alloc::vec::Vec;
 use alloc::vec;
 #[derive(Debug,Clone,Copy,PartialEq, Eq, PartialOrd, Ord)]
-pub struct VirNumber(pub usize);
+pub struct VirNumber(pub usize); //虚拟页号
 #[derive(Debug,Clone,Copy,PartialEq, Eq, PartialOrd, Ord)]
 pub struct PhysiNumber(pub usize);
 #[derive(Debug,Clone,Copy,PartialEq, Eq, PartialOrd, Ord)]

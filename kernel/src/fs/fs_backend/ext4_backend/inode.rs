@@ -5,7 +5,7 @@ use rsext4::{
     OpenFile,read as ext4_read, lseek as ext4_lseek, mkdir, mkfile, mv as ext4_mv, open as ext4_open, read_at as ext4_read_at, rename as ext4_rename, write_at as ext4_write_at
 };
 use spin::Mutex;
-use crate::{fs::{fs_backend::Ext4Fs, vfs::{VfsInode, VfsInodeError}}, sync::UPSafeCell};
+use crate::{fs::{fs_backend::Ext4Fs, vfs::{VfsInode}}, sync::UPSafeCell};
 use alloc::vec::Vec;
 pub struct VfsExt4Inode{
     inode:UPSafeCell<OpenFile>,

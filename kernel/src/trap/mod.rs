@@ -9,7 +9,7 @@ use riscv::register::scause::Interrupt;
 use core::arch::asm;
 use crate::memory::VirAddr;
 use log::warn;
-
+use riscv::register::satp;
 
 mod pagefaultHandler;
 
@@ -148,7 +148,14 @@ pub extern "C" fn kernel_trap_handler(){//内核专属trap（目前不应该被�
     let (sys_id, sys_args) = {
         let current_trapcx = TASK_MANAER.get_current_trapcx();
         let id = current_trapcx.x[17];
-        let args = [current_trapcx.x[10], current_trapcx.x[11], current_trapcx.x[12]];
+        let args = [
+            current_trapcx.x[10],
+            current_trapcx.x[11],
+            current_trapcx.x[12],
+            current_trapcx.x[13],
+            current_trapcx.x[14],
+            current_trapcx.x[15],
+        ];
         (id, args)
     };
         match scauses.cause(){
@@ -204,8 +211,20 @@ panic("Start Function you ret ,WTF????");
 }
 
 pub extern "C" fn kernel_traped_forbid(){//内核专属trap目前只支持时钟设置
-let scauses = scause::read();
-            panic!("UnSupport Kernel Trap: {:?}", scauses.cause())
+    let scauses = scause::read();
+    let sepc_val = sepc::read();
+    let stval_val = stval::read();
+    let sstatus_val = sstatus::read();
+    let satp_val = satp::read();
+
+    panic!(
+        "UnSupport Kernel Trap: cause={:?} sepc={:#x} stval={:#x} sstatus={:#x} satp={:#x}",
+        scauses.cause(),
+        sepc_val,
+        stval_val,
+        sstatus_val.bits(),
+        satp_val.bits()
+    )
 
 }
 

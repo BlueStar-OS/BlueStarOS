@@ -2,6 +2,7 @@ kernel/target
 user/target
 target/
 rsext4/
+testsuits-for-oskernel/
 *.img
 .vscode
 *.elf

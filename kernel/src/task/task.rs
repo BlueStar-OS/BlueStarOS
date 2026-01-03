@@ -3,6 +3,7 @@ use core::panicking::panic;
 
 use alloc::collections::vec_deque::VecDeque;
 use alloc::string::String;
+use alloc::string::ToString;
 use alloc::sync::Arc;
 use alloc::sync::Weak;
 use alloc::vec;
@@ -22,7 +23,7 @@ use crate::memory::*;
 use crate::sbi::shutdown;
 use crate::task::file_loader;
 use log::debug;
-use crate::fs::component::stdio::stdio::{new_stdin_fd, new_stdout_fd};
+use crate::fs::component::stdio::stdio::{stdin_fd, stdout_fd, stderr_fd};
 use crate::trap::{app_entry_point, kernel_trap_handler};
 ///init进程PID
 pub const INIT_PID:usize=1;
@@ -72,18 +73,16 @@ pub struct TaskControlBlock{
         pass:usize,                                     //行程
         stride:usize,                                   //步长
         ticket:usize,                                   //权重
-        file_descriptor:Vec<Option<Arc<FileDescriptor>>>,       //文件描述符表
-        parent:Option<Weak<UPSafeCell<TaskControlBlock>>>,                  //父进程弱引用
+        pub file_descriptor:Vec<Option<Arc<FileDescriptor>>>,       //文件描述符表
+        cwd:String,         //进程工作的路径 默认/
+        pub parent:Option<Weak<UPSafeCell<TaskControlBlock>>>,                  //父进程弱引用
         pub childrens:Vec<Arc<UPSafeCell<TaskControlBlock>>>            //子进程强引用
 }
 
 
 
 
-//暂留，后期再重构
-pub struct TaskControlBlockInner{
 
-}
 
 
 
@@ -195,6 +194,14 @@ impl TaskControlBlock {
         self.childrens.push(tlb);
     }
 
+    pub fn get_cwd(&self) -> &str {
+        &self.cwd
+    }
+
+    pub fn set_cwd(&mut self, cwd: String) {
+        self.cwd = cwd;
+    }
+
     ///exec换血
     /// path:可执行文件位置
     /// 不应该返回
@@ -258,10 +265,11 @@ impl TaskControlBlock {
         let argv = alloc::vec![alloc::string::String::from(app_path)];
         let new_user_sp = Self::push_args_to_user_stack(user_satp, user_sp.0, &argv);
         
-        // 初始化文件描述符表：0=stdin, 1=stdout
+        // 初始化文件描述符表：0=stdin, 1=stdout, 2=stderr
         let mut file_descriptor_table: Vec<Option<Arc<FileDescriptor>>> = Vec::new();
-        file_descriptor_table.push(Some(new_stdin_fd()));
-        file_descriptor_table.push(Some(new_stdout_fd()));
+        file_descriptor_table.push(Some(stdin_fd()));
+        file_descriptor_table.push(Some(stdout_fd()));
+        file_descriptor_table.push(Some(stderr_fd()));
         
         let task_control_block = TaskControlBlock {
             pid:ProcessId_ALLOCTOR.lock().alloc_id().expect("No Process ID Can use"),
@@ -274,6 +282,7 @@ impl TaskControlBlock {
             stride: BIG_INT / TASK_TICKET,
             ticket: TASK_TICKET,
             file_descriptor: file_descriptor_table,
+            cwd:"/".to_string(),
             parent:father,
             childrens:Vec::new()
         };
@@ -750,7 +759,31 @@ impl TaskManager {//全局唯一
         result
     }
 
-    pub fn alloc_fd_for_current(&self, new_fd: Arc<FileDescriptor>) -> isize {
+    pub fn get_current_cwd(&self) -> String {
+        if self.task_que_inner.lock().task_queen.is_empty(){
+            return "/".to_string();
+        }
+        let inner = self.task_que_inner.lock();
+        let current_task = inner.current;
+        let cwd = {
+            let task = inner.task_queen[current_task].lock();
+            task.get_cwd().to_string()
+        };
+        drop(inner);
+        cwd
+    }
+
+    pub fn set_current_cwd(&self, cwd: String) {
+        let inner = self.task_que_inner.lock();
+        let current_task = inner.current;
+        {
+            let mut task = inner.task_queen[current_task].lock();
+            task.set_cwd(cwd);
+        }
+        drop(inner);
+    }
+
+    pub fn alloc_fd_for_current(&self, new_fd: Arc<FileDescriptor>) -> i32 {
         let inner = self.task_que_inner.lock();
         let current_task = inner.current;
         let mut task = inner.task_queen[current_task].lock();
@@ -765,17 +798,14 @@ impl TaskManager {//全局唯一
             }
             if slot.is_none() {
                 *slot = Some(new_fd);
-                return i as isize;
+                return i as i32;
             }
         }
         task.file_descriptor.push(Some(new_fd));
-        (task.file_descriptor.len() - 1) as isize
+        (task.file_descriptor.len() - 1) as i32
     }
 
     pub fn close_current_fd(&self, fd: usize) -> isize {
-        if fd < 2 {
-            return -1;
-        }
         let inner = self.task_que_inner.lock();
         let current_task = inner.current;
         let mut task = inner.task_queen[current_task].lock();

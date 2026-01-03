@@ -1,7 +1,7 @@
 use alloc::{boxed::Box, vec::Vec};
 use alloc::string::String;
 
-use crate::fs::vfs::vfserror::{VfsFsError, VfsInodeError};
+use crate::fs::vfs::vfserror::{VfsFsError};
 
 pub enum EntryType {
     File,

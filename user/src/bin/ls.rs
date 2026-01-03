@@ -2,7 +2,10 @@
 #![no_main]
 
 extern crate user_lib;
-use user_lib::print;
+extern crate alloc;
+use alloc::vec::{ Vec};
+use user_lib::{getcwd, print};
+use alloc::vec;
 use user_lib::{
     args,
     String,
@@ -19,6 +22,7 @@ const DT_LNK: u8 = 10;
 
 const COLOR_BLUE: &str = "\x1b[34m";
 const COLOR_RED: &str = "\x1b[31m";
+const COLOR_GRAY_ITALIC_BOLD: &str = "\x1b[1;3;90m";
 const COLOR_RESET: &str = "\x1b[0m";
 
 #[inline]
@@ -51,8 +55,11 @@ fn print_name(dt: u8, name: &str) {
         DT_LNK => {
             print!("{}{}{}", COLOR_RED, name, COLOR_RESET);
         }
+        DT_REG => {
+            print!("{}{}{}", COLOR_GRAY_ITALIC_BOLD, name, COLOR_RESET);
+        }
         _ => {
-            print!("{}", name);
+            print!("{}{}{}", COLOR_GRAY_ITALIC_BOLD, name, COLOR_RESET);
         }
     }
 }
@@ -72,18 +79,20 @@ pub fn main() -> usize {
     let mut path_s = if argv.len() >= 2 {
         argv[1].clone()
     } else {
-        String::from("/test")
+        getcwd().expect("Kernal errpr")
     };
+
     path_s.push('\0');
+    //print!("path:{}\n",path_s);
     let fd = sys_open(&path_s, O_RDONLY);
     if fd < 0 {
         println!("[ls] open failed, ret={}", fd);
         return 1;
     }
 
-    let mut buf = [0u8; 512];
+    let mut buf:Vec<u8> = vec![0;8192];
     loop {
-        let n = sys_getdents64(fd as usize, buf.as_mut_ptr() as usize, buf.len());
+        let n = sys_getdents64(fd as usize, buf.as_mut_ptr() as usize, buf.capacity());
         if n < 0 {
             println!("[ls] getdents64 failed, ret={}", n);
             let _ = sys_close(fd as usize);

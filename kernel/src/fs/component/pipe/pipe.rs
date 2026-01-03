@@ -2,6 +2,7 @@ use alloc::sync::{Arc, Weak};
 
 use crate::sync::UPSafeCell;
 use crate::fs::vfs::{FileDescriptorTrait, VfsFsError};
+use crate::task::TASK_MANAER;
 
 pub const RINGBUFFERSIZE:usize = 512;
 
@@ -19,6 +20,7 @@ pub struct PipeRingBuffer{
     head:usize,
     tail:usize,
     write_point:Weak<UPSafeCell<Pipe>>, //写段弱引用计数,检测写段是否关闭
+    read_point:Weak<UPSafeCell<Pipe>>, //读端弱引用计数，检测读端是否关闭
 }
 
 ///pipe环形缓冲区状态
@@ -36,16 +38,26 @@ impl PipeRingBuffer {
             head: 0,
             tail: 0,
             write_point: Weak::new(),
+            read_point:Weak::new(),
         }
     }
 
     pub fn set_write_point(&mut self, w: Weak<UPSafeCell<Pipe>>) {
         self.write_point = w;
     }
+    pub fn set_read_point(&mut self, r: Weak<UPSafeCell<Pipe>>) {
+        self.read_point = r;
+    }
 
     fn is_write_end_closed(&self) -> bool {
         self.write_point.upgrade().is_none()
     }
+
+    fn is_read_end_closed(&self) -> bool {
+        self.read_point.upgrade().is_none()
+    }
+
+
 
     fn readable_len(&self) -> usize {
         match self.status {
@@ -93,9 +105,12 @@ impl PipeRingBuffer {
         Some(b)
     }
 
-    pub fn write(&mut self, buf: &[u8]) -> usize {
+    pub fn write(&mut self, buf: &[u8]) -> Result<usize, VfsFsError> {
         if buf.is_empty() {
-            return 0;
+            return Ok(0);
+        }
+        if self.is_read_end_closed() {
+            return Err(VfsFsError::BrokenPipe);
         }
         let mut n = 0usize;
         for &b in buf.iter() {
@@ -104,7 +119,7 @@ impl PipeRingBuffer {
             }
             n += 1;
         }
-        n
+        Ok(n)
     }
 
     pub fn read(&mut self, buf: &mut [u8]) -> usize {
@@ -142,27 +157,33 @@ impl Pipe {
         }
     }
 
-    pub fn read(&self, buf: &mut [u8]) -> usize {
+    pub fn read(&self, buf: &mut [u8]) -> Result<usize, VfsFsError> {
         if !self.readble {
-            return 0;
+            return Ok(0);
         }
-        let mut ring = self.ringbuffer.lock();
-        if !ring.can_read() {
-            if ring.is_write_end_closed() {
-                return 0;
+        loop {
+            let (can_read, write_closed) = {
+                let ring = self.ringbuffer.lock();
+                (ring.can_read(), ring.is_write_end_closed())
+            };
+            if can_read {
+                let mut ring = self.ringbuffer.lock();
+                return Ok(ring.read(buf));
             }
-            return 0;
+            if write_closed {
+                return Ok(0);
+            }
+            TASK_MANAER.suspend_and_run_task();
         }
-        ring.read(buf)
     }
 
-    pub fn write(&self, buf: &[u8]) -> usize {
+    pub fn write(&self, buf: &[u8]) -> Result<usize, VfsFsError> {
         if !self.writeble {
-            return 0;
+            return Ok(0);
         }
         let mut ring = self.ringbuffer.lock();
         if !ring.can_write() {
-            return 0;
+            return Ok(0);
         }
         ring.write(buf)
     }
@@ -173,6 +194,7 @@ pub fn make_pipe() -> (Arc<UPSafeCell<Pipe>>, Arc<UPSafeCell<Pipe>>) {
     let read_end = Arc::new(UPSafeCell::new(Pipe::new(true, false, ring.clone())));
     let write_end = Arc::new(UPSafeCell::new(Pipe::new(false, true, ring.clone())));
     ring.lock().set_write_point(Arc::downgrade(&write_end));
+    ring.lock().set_read_point(Arc::downgrade(&read_end));
     (read_end, write_end)
 }
 
@@ -189,11 +211,11 @@ impl PipeHandle {
 impl FileDescriptorTrait for PipeHandle {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize, VfsFsError> {
         let pipe = self.end.lock();
-        Ok(pipe.read(buf))
+        pipe.read(buf)
     }
 
     fn write(&mut self, buf: &[u8]) -> Result<usize, VfsFsError> {
         let pipe = self.end.lock();
-        Ok(pipe.write(buf))
+        pipe.write(buf)
     }
 }

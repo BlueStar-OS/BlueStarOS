@@ -1,26 +1,45 @@
 use crate::print;
+use alloc::string::String;
 
-pub const GET_TIME:usize   =0;     //获取系统时间
-pub const SYS_WRITE:usize  =1;     //stdin write系统调用
-pub const SYS_READ:usize   =2;     //stdin read系统调用
-pub const SYS_EXIT:usize   =3;     //exit程序结束，运行下一个程序
-pub const SYS_YIELD:usize  =4;     //主动放弃cpu
-pub const SYS_MAP:usize    =5;     //mmap映射系统调用
-pub const SYS_UNMAP:usize  =6;     //unmap映射系统调用
-pub const SYS_OPEN:usize   =7;     //open
-pub const SYS_CLOSE:usize  =8;     //close
-pub const SYS_LSEEK:usize  =9;     //lseek
-pub const SYS_FORK:usize   =10;    //fork系统调用
-pub const SYS_EXEC:usize   =11;    //exec系统调用
-pub const SYS_WAIT:usize   =12;    //wait系统调用
-pub const SYS_CREAT:usize  =13;    //creat
-pub const SYS_MKDIR:usize  =14;    //mkdir
-pub const SYS_UNLINK:usize =15;    //unlink
-pub const SYS_STAT:usize   =16;    //stat
-pub const SYS_GETDENTS64:usize =17; //getdents64
-pub const SYS_PIPE:usize   =18;    //pipe
-///syscall封装 3个参数版本
-pub fn sys_call(id: usize, args: [usize; 3]) -> isize {
+// Linux riscv64 syscall numbers (subset)
+pub const SYS_GETCWD: usize = 17;
+pub const SYS_UNLINKAT: usize = 35;
+pub const SYS_LINKAT: usize = 37;
+pub const SYS_UMOUNT2: usize = 39;
+pub const SYS_MOUNT: usize = 40;
+pub const SYS_MKDIRAT: usize = 34;
+pub const SYS_CHDIR: usize = 49;
+pub const SYS_OPENAT: usize = 56;
+pub const SYS_CLOSE: usize = 57;
+pub const SYS_PIPE2: usize = 59;
+pub const SYS_GETDENTS64: usize = 61;
+pub const SYS_LSEEK: usize = 62;
+pub const SYS_READ: usize = 63;
+pub const SYS_WRITE: usize = 64;
+pub const SYS_NEWFSTATAT: usize = 79;
+pub const SYS_FSTAT: usize = 80;
+pub const SYS_EXIT: usize = 93;
+pub const SYS_NANOSLEEP: usize = 101;
+pub const SYS_SETPRIORITY: usize = 140;
+pub const SYS_TIMES: usize = 153;
+pub const SYS_UNAME: usize = 160;
+pub const SYS_GETTIMEOFDAY: usize = 169;
+pub const SYS_GETPID: usize = 172;
+pub const SYS_GETPPID: usize = 173;
+pub const SYS_BRK: usize = 214;
+pub const SYS_MUNMAP: usize = 215;
+pub const SYS_CLONE: usize = 220;
+pub const SYS_EXECVE: usize = 221;
+pub const SYS_MMAP: usize = 222;
+pub const SYS_WAIT4: usize = 260;
+pub const SYS_SCHED_YIELD: usize = 124;
+pub const SYS_DUP: usize = 23;
+pub const SYS_DUP3: usize = 24;
+
+pub const AT_FDCWD: isize = -100;
+
+/// syscall 封装：Linux ABI 版本（最多 6 个参数）
+pub fn sys_call(id: usize, args: [usize; 6]) -> isize {
     let mut ret: isize;
     unsafe {
         core::arch::asm!(
@@ -28,6 +47,9 @@ pub fn sys_call(id: usize, args: [usize; 3]) -> isize {
             inlateout("x10") args[0] => ret,
             in("x11") args[1],
             in("x12") args[2],
+            in("x13") args[3],
+            in("x14") args[4],
+            in("x15") args[5],
             in("x17") id
         );
     }
@@ -35,19 +57,36 @@ pub fn sys_call(id: usize, args: [usize; 3]) -> isize {
 }
 
 pub fn sys_map(startAddr:usize,len:usize)->isize{
-    sys_call(SYS_MAP,[startAddr,len,0])
+    sys_call(SYS_MMAP,[startAddr,len,0,0,0,0])
 }
 
 pub fn sys_unmap(startAddr:usize,len:usize)->isize{
-    sys_call(SYS_UNMAP,[startAddr,len,0])
+    sys_call(SYS_MUNMAP,[startAddr,len,0,0,0,0])
 }
 
 pub fn sys_read(fd:usize,buffer_ptr:usize,buffer_len:usize)->isize{
-    sys_call(SYS_READ, [fd,buffer_ptr,buffer_len])
+    sys_call(SYS_READ, [fd,buffer_ptr,buffer_len,0,0,0])
 }
 
 pub fn sys_write(fd:usize,buffer_ptr:usize,buffer_len:usize)->isize{
-    sys_call(SYS_WRITE, [fd,buffer_ptr,buffer_len])
+    sys_call(SYS_WRITE, [fd,buffer_ptr,buffer_len,0,0,0])
+}
+
+pub fn sys_dup(oldfd: usize) -> isize {
+    sys_call(SYS_DUP, [oldfd, 0, 0, 0, 0, 0])
+}
+
+pub fn sys_dup2(oldfd: usize, newfd: usize) -> isize {
+    // dup2 is commonly implemented via dup3(old, new, flags=0)
+    sys_call(SYS_DUP3, [oldfd, newfd, 0, 0, 0, 0])
+}
+
+pub fn sys_getpid() -> isize {
+    sys_call(SYS_GETPID, [0, 0, 0, 0, 0, 0])
+}
+
+pub fn sys_getppid() -> isize {
+    sys_call(SYS_GETPPID, [0, 0, 0, 0, 0, 0])
 }
 
 pub const O_RDONLY: usize = 0;
@@ -62,19 +101,53 @@ pub const SEEK_CUR: usize = 1;
 pub const SEEK_END: usize = 2;
 
 pub fn sys_open(path: &str, flags: usize) -> isize {
-    sys_call(SYS_OPEN, [path.as_ptr() as usize, flags, 0])
+    let mut st = String::from(path);
+    st.push('\0');
+    sys_call(
+        SYS_OPENAT,
+        [
+            AT_FDCWD as usize,
+            st.as_ptr() as usize,
+            flags,
+            0,
+            0,
+            0,
+        ],
+    )
 }
 
 pub fn sys_creat(path: &str) -> isize {
-    sys_call(SYS_CREAT, [path.as_ptr() as usize, 0, 0])
+    let mut st = String::from(path);
+    st.push('\0');
+    sys_call(
+        SYS_OPENAT,
+        [
+            AT_FDCWD as usize,
+            st.as_ptr() as usize,
+            (1 << 6) | (1 << 9) | 1,
+            0,
+            0,
+            0,
+        ],
+    )
 }
 
 pub fn sys_mkdir(path: &str) -> isize {
-    sys_call(SYS_MKDIR, [path.as_ptr() as usize, 0, 0])
+    let mut st = String::from(path);
+    st.push('\0');
+    sys_call(
+        SYS_MKDIRAT,
+        [AT_FDCWD as usize, st.as_ptr() as usize, 0, 0, 0, 0],
+    )
 }
 
 pub fn sys_unlink(path: &str) -> isize {
-    sys_call(SYS_UNLINK, [path.as_ptr() as usize, 0, 0])
+    let mut st = String::from(path);
+    st.push('\0');
+    sys_call(
+        SYS_UNLINKAT,
+        [AT_FDCWD as usize, st.as_ptr() as usize, 0, 0, 0, 0],
+    )
 }
 
 #[repr(C)]
@@ -87,48 +160,80 @@ pub struct VfsStat {
 }
 
 pub fn sys_stat(path: &str, stat_buf: *mut VfsStat) -> isize {
-    sys_call(SYS_STAT, [path.as_ptr() as usize, stat_buf as usize, 0])
+    let mut st = String::from(path);
+    st.push('\0');
+    // Use newfstatat(AT_FDCWD, path, stat_buf, flags=0) so we can stat by path.
+    sys_call(
+        SYS_NEWFSTATAT,
+        [
+            AT_FDCWD as usize,
+            st.as_ptr() as usize,
+            stat_buf as usize,
+            0,
+            0,
+            0,
+        ],
+    )
+    
 }
 
 pub fn sys_getdents64(fd: usize, buf_ptr: usize, buf_len: usize) -> isize {
-    sys_call(SYS_GETDENTS64, [fd, buf_ptr, buf_len])
+    sys_call(SYS_GETDENTS64, [fd, buf_ptr, buf_len, 0, 0, 0])
 }
 
 pub fn sys_close(fd: usize) -> isize {
-    sys_call(SYS_CLOSE, [fd, 0, 0])
+    sys_call(SYS_CLOSE, [fd, 0, 0, 0, 0, 0])
 }
 
 pub fn sys_lseek(fd: usize, offset: isize, whence: usize) -> isize {
-    sys_call(SYS_LSEEK, [fd, offset as usize, whence])
+    sys_call(SYS_LSEEK, [fd, offset as usize, whence, 0, 0, 0])
 }
 
 pub fn sys_fork()->isize{
-    sys_call(SYS_FORK, [0,0,0])//args为空，fork不需要参数
+    sys_call(SYS_CLONE, [0, 0, 0, 0, 0, 0])
 }
 pub fn sys_exec(path:&str)->isize{
-    sys_call(SYS_EXEC, [path.as_ptr() as usize,0,0])
+    let mut st = String::from(path);
+    st.push('\0');
+    sys_call(SYS_EXECVE, [st.as_ptr() as usize, 0, 0, 0, 0, 0])
 }
 
 pub fn sys_exec_args(path: &str, argv_ptrs: *const usize, argc: usize) -> isize {
+    let mut st = String::from(path);
+    st.push('\0');
+    // NOTE: kernel currently treats SYS_EXECVE as sys_exec(path, argv, argc).
+    // Pass argc in a2 to keep existing argv parsing working.
     sys_call(
-        SYS_EXEC,
-        [path.as_ptr() as usize, argv_ptrs as usize, argc],
+        SYS_EXECVE,
+        [st.as_ptr() as usize, argv_ptrs as usize, argc, 0, 0, 0],
     )
 }
 
-pub fn sys_pipe(fds_ptr: *mut usize) -> isize {
-    sys_call(SYS_PIPE, [fds_ptr as usize, 0, 0])
+pub fn sys_pipe(fds_ptr: *mut i32) -> isize {
+    // pipe2(fds, flags=0)
+    sys_call(SYS_PIPE2, [fds_ptr as usize, 0, 0, 0, 0, 0])
+}
+
+pub fn sys_chdir(path: &str) -> isize {
+    let mut p = String::from(path);
+    p.push('\0');
+    sys_call(SYS_CHDIR, [p.as_ptr() as usize, 0, 0, 0, 0, 0])
+}
+
+pub fn sys_getcwd(buf_ptr: usize, buf_len: usize) -> isize {
+    sys_call(SYS_GETCWD, [buf_ptr, buf_len, 0, 0, 0, 0])
 }
 
 ///wait任意子进程，返回回收的子进程pid，-1表示无子进程或错误
 ///exit_code_ptr: 若非空，内核会写回子进程退出码
 pub fn sys_wait(exit_code_ptr: *mut isize)->isize{
-    sys_call(SYS_WAIT, [exit_code_ptr as usize,0,0])
+    // wait4(pid=-1, wstatus, options=0, rusage=NULL)
+    sys_call(SYS_WAIT4, [usize::MAX, exit_code_ptr as usize, 0, 0, 0, 0])
 }
 
 ///永远不返回 里面有loop封装为！
 pub fn sys_exit(exit_code:usize)->!{//sys_exit 
-    sys_call(SYS_EXIT, [exit_code,0,0]);
+    sys_call(SYS_EXIT, [exit_code,0,0,0,0,0]);
     loop {
         
     }
@@ -136,6 +241,6 @@ pub fn sys_exit(exit_code:usize)->!{//sys_exit
 
 ///主动放弃一次cpu
 pub fn sys_yield(){
-    sys_call(SYS_YIELD, [0;3]);
+    sys_call(SYS_SCHED_YIELD, [0,0,0,0,0,0]);
 }
 

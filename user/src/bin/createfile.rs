@@ -12,8 +12,9 @@ extern crate user_lib;
 
 #[no_mangle]
 pub fn main() -> usize {
-    let path = "/test/hello.txt\0";
-    let msg = b"hello from BlueStarOS\n";
+    let path = "/test/hello.txt";
+    let msg = b"hello from BlueStarO
+    S";
 
     println!("[fs] creat: {}", path);
     let fd = sys_creat(path);
@@ -62,10 +63,7 @@ pub fn main() -> usize {
         println!("[fs] reopen read mismatch");
         return 7;
     }
-
-
-    println!("read data:{:?}",String::from_utf8(buf2.to_vec()));
-
+    println!("read data:{:?}",String::from_utf8(buf2[..nr2 as usize].to_vec()));
     println!("[fs] PASS");
     0
 }

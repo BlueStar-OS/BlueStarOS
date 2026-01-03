@@ -69,7 +69,6 @@ pub fn blue_main() -> ! {//永远不会返回
     debug!("traper {:#x}",straper as usize);
     debug!("trap refume virtualaddr:{:#x}",__kernel_refume as usize - __kernel_trap as usize + TRAP_BOTTOM_ADDR);
     
-
     RootFs::init_rootfs();
     
     run_first_task();

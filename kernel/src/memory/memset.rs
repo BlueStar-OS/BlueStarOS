@@ -157,6 +157,7 @@ pub struct MapSet{
     ///页表
     pub table:PageTable,
     areas:Vec<MapArea>,
+    pub brk:VirAddr, //进程brk点
 }
 impl MapArea {
     ///range,闭区间
@@ -462,14 +463,17 @@ impl MapSet {
          MapAreaFlags::W | MapAreaFlags::R | MapAreaFlags::U,
           None
         ,MapAreaType::DEFAULT);
-        //映射用户堆
-        let userheap_start_end_vpn = VirNumber(userstack_start_vpn.0+1);//无需guardpage，堆不会向下溢出
+        //映射用户堆 初始0 通过brk生长---------------------------------------------+0
+        let userheap_start_end_vpn = VirNumber(userstack_end_vpn.0+1);//无需guardpage，堆不会向下溢出
         debug!("  Mapping user heap: vpn={:#x}", userheap_start_end_vpn.0);
         memory_set.add_area(VirNumRange(userheap_start_end_vpn, userheap_start_end_vpn),
          MapType::Maped, 
          MapAreaFlags::R | MapAreaFlags::W | MapAreaFlags::U, 
          None,
         MapAreaType::DEFAULT);
+
+        //设置brk
+        memory_set.brk = userheap_start_end_vpn.into();
 
         // 分配并映射内核栈（使用全局分配器，不再依赖 appid）
         let kernel_stack_top = Self::alloc_kernel_stack();
@@ -511,6 +515,7 @@ impl MapSet {
         MapSet{
             table:PageTable::new(),
             areas:Vec::new(),
+            brk:VirAddr(0)
         }
     }
 
@@ -660,6 +665,9 @@ impl MapSet {
               None,
             MapAreaType::DEFAULT);
        // trace!("{} {}\n",phys_start.0,phys_end.0);
+
+        //设置brk
+        mem_set.brk = VirAddr(ebss as usize + 1);
 
         //内核地址空间映射完成
         let vdr:VirAddr=phys_end.into();

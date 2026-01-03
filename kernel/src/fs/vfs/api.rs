@@ -1,16 +1,17 @@
 //!上层通用接口
 use alloc::collections::BTreeMap;
 use alloc::boxed::Box;
+use alloc::string::String;
+use alloc::sync::Arc;
 use alloc::vec::Vec;
-use alloc::{format, string::String, sync::Arc};
-use spin::Mutex;
 use crate::alloc::string::ToString;
+use log::{debug, error, info, warn};
+use crate::task::TASK_MANAER;
 use crate::fs::fs_backend::Ext4Fs;
 use crate::fs::vfs::{ROOTFS, VfsFsError};
 use crate::sync::UPSafeCell;
-use log::{debug, error};
 use lazy_static::lazy_static;
-
+use alloc::format;
 use rsext4::{
     OpenFile,
     lseek as ext4_lseek,
@@ -36,15 +37,15 @@ pub trait FileDescriptorTrait: Send + Sync {
     fn write(&mut self, buf: &[u8]) -> Result<usize, VfsFsError>;
 
     fn read_at(&mut self, _offset: usize, _buf: &mut [u8]) -> Result<usize, VfsFsError> {
-        Err(VfsFsError::FsInnerError)
+        Err(VfsFsError::NotSupported)
     }
 
     fn write_at(&mut self, _offset: usize, _buf: &[u8]) -> Result<usize, VfsFsError> {
-        Err(VfsFsError::FsInnerError)
+        Err(VfsFsError::NotSupported)
     }
 
     fn lseek(&mut self, _offset: isize, _whence: usize) -> Result<usize, VfsFsError> {
-        Err(VfsFsError::FsInnerError)
+        Err(VfsFsError::NotSupported)
     }
 
     fn path(&self) -> Option<&str> {
@@ -56,7 +57,7 @@ pub trait FileDescriptorTrait: Send + Sync {
     }
 
     fn set_offset(&mut self, _off: u64) -> Result<(), VfsFsError> {
-        Err(VfsFsError::FsInnerError)
+        Err(VfsFsError::NotSupported)
     }
 }
 
@@ -79,10 +80,10 @@ pub struct LinuxDirent64 {
     // d_name starts right after this header (offset 19)
 }
 
-const VFS_DT_UNKNOWN: u32 = 0;
-const VFS_DT_REG: u32 = 8;
-const VFS_DT_DIR: u32 = 4;
-const VFS_DT_LNK: u32 = 10;
+pub const VFS_DT_UNKNOWN: u32 = 0;
+pub const VFS_DT_REG: u32 = 8;
+pub const VFS_DT_DIR: u32 = 4;
+pub const VFS_DT_LNK: u32 = 10;
 
 #[inline]
 fn align_up(x: usize, align: usize) -> usize {
@@ -155,13 +156,13 @@ impl OpenFileHandle {
 impl FileDescriptorTrait for OpenFileHandle {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize, VfsFsError> {
         let mut rootfs_guard = ROOTFS.lock();
-        let rootfs = rootfs_guard.as_mut().ok_or(VfsFsError::FsInnerError)?;
+        let rootfs = rootfs_guard.as_mut().ok_or(VfsFsError::IO)?;
         let mut fs_guard = rootfs.fs.lock();
         let Ext4Fs { dev, fs } = &mut *fs_guard;
-        let fs_inner = fs.as_mut().ok_or(VfsFsError::FsInnerError)?;
+        let fs_inner = fs.as_mut().ok_or(VfsFsError::IO)?;
 
         let data = ext4_read_at(dev, fs_inner, &mut self.of, buf.len())
-            .map_err(|_| VfsFsError::FsInnerError)?;
+            .map_err(|_| VfsFsError::IO)?;
         let n = core::cmp::min(buf.len(), data.len());
         buf[..n].copy_from_slice(&data[..n]);
         Ok(n)
@@ -169,25 +170,25 @@ impl FileDescriptorTrait for OpenFileHandle {
 
     fn write(&mut self, buf: &[u8]) -> Result<usize, VfsFsError> {
         let mut rootfs_guard = ROOTFS.lock();
-        let rootfs = rootfs_guard.as_mut().ok_or(VfsFsError::FsInnerError)?;
+        let rootfs = rootfs_guard.as_mut().ok_or(VfsFsError::IO)?;
         let mut fs_guard = rootfs.fs.lock();
         let Ext4Fs { dev, fs } = &mut *fs_guard;
-        let fs_inner = fs.as_mut().ok_or(VfsFsError::FsInnerError)?;
+        let fs_inner = fs.as_mut().ok_or(VfsFsError::IO)?;
 
-        ext4_write_at(dev, fs_inner, &mut self.of, buf).map_err(|_| VfsFsError::FsInnerError)?;
+        ext4_write_at(dev, fs_inner, &mut self.of, buf).map_err(|_| VfsFsError::IO)?;
         Ok(buf.len())
     }
 
     fn read_at(&mut self, offset: usize, buf: &mut [u8]) -> Result<usize, VfsFsError> {
         let mut rootfs_guard = ROOTFS.lock();
-        let rootfs = rootfs_guard.as_mut().ok_or(VfsFsError::FsInnerError)?;
+        let rootfs = rootfs_guard.as_mut().ok_or(VfsFsError::IO)?;
         let mut fs_guard = rootfs.fs.lock();
         let Ext4Fs { dev, fs } = &mut *fs_guard;
-        let fs_inner = fs.as_mut().ok_or(VfsFsError::FsInnerError)?;
+        let fs_inner = fs.as_mut().ok_or(VfsFsError::IO)?;
 
         ext4_lseek(&mut self.of, offset as u64);
         let data = ext4_read_at(dev, fs_inner, &mut self.of, buf.len())
-            .map_err(|_| VfsFsError::FsInnerError)?;
+            .map_err(|_| VfsFsError::IO)?;
         let n = core::cmp::min(buf.len(), data.len());
         buf[..n].copy_from_slice(&data[..n]);
         Ok(n)
@@ -195,13 +196,13 @@ impl FileDescriptorTrait for OpenFileHandle {
 
     fn write_at(&mut self, offset: usize, buf: &[u8]) -> Result<usize, VfsFsError> {
         let mut rootfs_guard = ROOTFS.lock();
-        let rootfs = rootfs_guard.as_mut().ok_or(VfsFsError::FsInnerError)?;
+        let rootfs = rootfs_guard.as_mut().ok_or(VfsFsError::IO)?;
         let mut fs_guard = rootfs.fs.lock();
         let Ext4Fs { dev, fs } = &mut *fs_guard;
-        let fs_inner = fs.as_mut().ok_or(VfsFsError::FsInnerError)?;
+        let fs_inner = fs.as_mut().ok_or(VfsFsError::IO)?;
 
         ext4_lseek(&mut self.of, offset as u64);
-        ext4_write_at(dev, fs_inner, &mut self.of, buf).map_err(|_| VfsFsError::FsInnerError)?;
+        ext4_write_at(dev, fs_inner, &mut self.of, buf).map_err(|_| VfsFsError::IO)?;
         Ok(buf.len())
     }
 
@@ -215,10 +216,10 @@ impl FileDescriptorTrait for OpenFileHandle {
                 let end = self.of.inode.size() as i64;
                 end.saturating_add(off)
             }
-            _ => return Err(VfsFsError::FsInnerError),
+            _ => return Err(VfsFsError::NotSupported),
         };
         if new_off < 0 {
-            return Err(VfsFsError::FsInnerError);
+            return Err(VfsFsError::NotSupported);
         }
         ext4_lseek(&mut self.of, new_off as u64);
         Ok(self.of.offset as usize)
@@ -294,9 +295,13 @@ impl FileDescriptor {
         }
     }
 
+    pub fn has_write_lock(&self) -> bool {
+        self.has_write_lock
+    }
+
     pub fn read_at(&self, offset: usize, buf: &mut [u8]) -> Result<usize, VfsFsError> {
         if !self.flags.read {
-            return Err(VfsFsError::FsInnerError);
+            return Err(VfsFsError::PermissionDenied);
         }
         let mut inner = self.inner.lock();
         inner.read_at(offset, buf)
@@ -304,7 +309,7 @@ impl FileDescriptor {
 
     pub fn read(&self, buf: &mut [u8]) -> Result<usize, VfsFsError> {
         if !self.flags.read {
-            return Err(VfsFsError::FsInnerError);
+            return Err(VfsFsError::PermissionDenied);
         }
         let mut inner = self.inner.lock();
         inner.read(buf)
@@ -312,7 +317,7 @@ impl FileDescriptor {
 
     pub fn write_at(&self, offset: usize, buf: &[u8]) -> Result<usize, VfsFsError> {
         if !self.flags.write || !self.has_write_lock {
-            return Err(VfsFsError::FsInnerError);
+            return Err(VfsFsError::PermissionDenied);
         }
         let mut inner = self.inner.lock();
         inner.write_at(offset, buf)
@@ -320,7 +325,7 @@ impl FileDescriptor {
 
     pub fn write(&self, buf: &[u8]) -> Result<usize, VfsFsError> {
         if !self.flags.write || !self.has_write_lock {
-            return Err(VfsFsError::FsInnerError);
+            return Err(VfsFsError::PermissionDenied);
         }
         let mut inner = self.inner.lock();
         inner.write(buf)
@@ -333,8 +338,8 @@ impl FileDescriptor {
 
     fn dir_path_and_offset(&self) -> Result<(String, usize), VfsFsError> {
         let inner = self.inner.lock();
-        let path = inner.path().ok_or(VfsFsError::FsInnerError)?;
-        let off = inner.offset().ok_or(VfsFsError::FsInnerError)? as usize;
+        let path = inner.path().ok_or(VfsFsError::IO)?;
+        let off = inner.offset().ok_or(VfsFsError::IO)? as usize;
         Ok((path.to_string(), off))
     }
 
@@ -344,18 +349,31 @@ impl FileDescriptor {
     }
 }
 
-/// 统一路径：绝对路径保持不变，相对路径以 ROOTFS.path 为前缀
-fn normalize_path(path: &str) -> Result<String, VfsFsError> {
-    let guard = ROOTFS.lock();
-    let rootfs = guard.as_ref().ok_or(VfsFsError::FsInnerError)?;
-    let cwd = &rootfs.path;
-
-    if path.starts_with('/') {
-        Ok(path.to_string())
-    } else if cwd == "/" {
-        Ok(format!("/{}", path))
+/// 统一路径：绝对路径保持不变，相对路径以 进程打开的路径 为前缀
+/// TASK_MANAER初始化期间只能用绝对路径，内核也不应该出现相对路径
+pub fn normalize_path(path: &str) -> Result<String, VfsFsError> {
+    let combin = if path.starts_with('/') {
+        path.to_string()
     } else {
-        Ok(format!("{}/{}", cwd, path))
+        let cwd = TASK_MANAER.get_current_cwd();
+        format!("{}/{}", cwd, path)
+    };
+
+    let mut parts: Vec<&str> = Vec::new();
+    for pa in combin.split('/') {
+        if pa.is_empty() || pa == "." {
+            continue;
+        }
+        if pa == ".." {
+            parts.pop();
+            continue;
+        }
+        parts.push(pa);
+    }
+    if parts.is_empty() {
+        Ok("/".to_string())
+    } else {
+        Ok(format!("/{}", parts.join("/")))
     }
 }
 
@@ -390,7 +408,7 @@ pub fn vfs_open(path: &str, mut flags: OpenFlags) -> Result<OpenResult, VfsFsErr
         Some(r) => r,
         None => {
             error!("vfs_open: ROOTFS not initialized: path={}", abs_path);
-            return Err(VfsFsError::FsInnerError);
+            return Err(VfsFsError::IO);
         }
     };
     let mut fs_guard = rootfs.fs.lock();
@@ -399,7 +417,7 @@ pub fn vfs_open(path: &str, mut flags: OpenFlags) -> Result<OpenResult, VfsFsErr
         Some(f) => f,
         None => {
             error!("vfs_open: ext4 fs not mounted: path={}", abs_path);
-            return Err(VfsFsError::FsInnerError);
+            return Err(VfsFsError::IO);
         }
     };
 
@@ -411,7 +429,7 @@ pub fn vfs_open(path: &str, mut flags: OpenFlags) -> Result<OpenResult, VfsFsErr
                 "vfs_open: ext4_open failed: path={} create={} read={} write={} truncate={} append={}",
                 abs_path, flags.create, flags.read, flags.write, flags.truncate, flags.append
             );
-            return Err(VfsFsError::FsInnerError);
+            return Err(VfsFsError::IO);
         }
     };
 
@@ -420,11 +438,11 @@ pub fn vfs_open(path: &str, mut flags: OpenFlags) -> Result<OpenResult, VfsFsErr
         if flags.write {
             if ext4_truncate(dev, fs_inner, &abs_path, 0).is_err() {
                 error!("vfs_open: ext4_truncate failed: path={}", abs_path);
-                return Err(VfsFsError::FsInnerError);
+                return Err(VfsFsError::IO);
             }
         } else {
             error!("vfs_open: truncate requested without write permission: path={}", abs_path);
-            return Err(VfsFsError::FsInnerError);
+            return Err(VfsFsError::IO);
         }
     }
 
@@ -477,14 +495,14 @@ pub fn vfs_mkdir(path: &str) -> Result<(), VfsFsError> {
         return Ok(());
     }
     let mut rootfs_guard = ROOTFS.lock();
-    let rootfs = rootfs_guard.as_mut().ok_or(VfsFsError::FsInnerError)?;
+    let rootfs = rootfs_guard.as_mut().ok_or(VfsFsError::IO)?;
     let mut fs_guard = rootfs.fs.lock();
     let Ext4Fs { dev, fs } = &mut *fs_guard;
-    let fs_inner = fs.as_mut().ok_or(VfsFsError::FsInnerError)?;
+    let fs_inner = fs.as_mut().ok_or(VfsFsError::IO)?;
 
     let res = ext4_mkdir(dev, fs_inner, &abs);
     if res.is_none() {
-        return Err(VfsFsError::FsInnerError);
+        return Err(VfsFsError::IO);
     }
     Ok(())
 }
@@ -493,17 +511,17 @@ pub fn vfs_mkdir(path: &str) -> Result<(), VfsFsError> {
 pub fn vfs_mkfile(path: &str) -> Result<(), VfsFsError> {
     let abs = normalize_path(path)?;
     if abs == "/" {
-        return Err(VfsFsError::FsInnerError);
+        return Err(VfsFsError::Invalid);
     }
     let mut rootfs_guard = ROOTFS.lock();
-    let rootfs = rootfs_guard.as_mut().ok_or(VfsFsError::FsInnerError)?;
+    let rootfs = rootfs_guard.as_mut().ok_or(VfsFsError::IO)?;
     let mut fs_guard = rootfs.fs.lock();
     let Ext4Fs { dev, fs } = &mut *fs_guard;
-    let fs_inner = fs.as_mut().ok_or(VfsFsError::FsInnerError)?;
+    let fs_inner = fs.as_mut().ok_or(VfsFsError::IO)?;
 
     let res = ext4_mkfile(dev, fs_inner, &abs, None, None);
     if res.is_none() {
-        return Err(VfsFsError::FsInnerError);
+        return Err(VfsFsError::IO);
     }
     Ok(())
 }
@@ -513,18 +531,18 @@ pub fn vfs_mv(src: &str, dest: &str) -> Result<(), VfsFsError> {
     let src_abs = normalize_path(src)?;
     let dest_abs = normalize_path(dest)?;
     let mut rootfs_guard = ROOTFS.lock();
-    let rootfs = rootfs_guard.as_mut().ok_or(VfsFsError::FsInnerError)?;
+    let rootfs = rootfs_guard.as_mut().ok_or(VfsFsError::IO)?;
     let mut fs_guard = rootfs.fs.lock();
     let Ext4Fs { dev, fs } = &mut *fs_guard;
-    let fs_inner = fs.as_mut().ok_or(VfsFsError::FsInnerError)?;
-    ext4_mv(fs_inner, dev, &src_abs, &dest_abs).map_err(|_| VfsFsError::FsInnerError)
+    let fs_inner = fs.as_mut().ok_or(VfsFsError::IO)?;
+    ext4_mv(fs_inner, dev, &src_abs, &dest_abs).map_err(|_| VfsFsError::IO)
 }
 
 /// rename：仅改变同一父目录下的名字（语义上等价于 mv 的子集）
 pub fn vfs_rename(path: &str, new_name: &str) -> Result<(), VfsFsError> {
     let abs = normalize_path(path)?;
     if abs == "/" {
-        return Err(VfsFsError::FsInnerError);
+        return Err(VfsFsError::Invalid);
     }
     let new_path = if let Some(pos) = abs.rfind('/') {
         let parent = &abs[..pos];
@@ -538,45 +556,45 @@ pub fn vfs_rename(path: &str, new_name: &str) -> Result<(), VfsFsError> {
     };
 
     let mut rootfs_guard = ROOTFS.lock();
-    let rootfs = rootfs_guard.as_mut().ok_or(VfsFsError::FsInnerError)?;
+    let rootfs = rootfs_guard.as_mut().ok_or(VfsFsError::IO)?;
     let mut fs_guard = rootfs.fs.lock();
     let Ext4Fs { dev, fs } = &mut *fs_guard;
-    let fs_inner = fs.as_mut().ok_or(VfsFsError::FsInnerError)?;
-    ext4_rename(dev, fs_inner, &abs, &new_path).map_err(|_| VfsFsError::FsInnerError)
+    let fs_inner = fs.as_mut().ok_or(VfsFsError::IO)?;
+    ext4_rename(dev, fs_inner, &abs, &new_path).map_err(|_| VfsFsError::IO)
 }
 
 pub fn vfs_truncate(path: &str, size: u64) -> Result<(), VfsFsError> {
     let abs = normalize_path(path)?;
     if abs == "/" {
-        return Err(VfsFsError::FsInnerError);
+        return Err(VfsFsError::Invalid);
     }
     let mut rootfs_guard = ROOTFS.lock();
-    let rootfs = rootfs_guard.as_mut().ok_or(VfsFsError::FsInnerError)?;
+    let rootfs = rootfs_guard.as_mut().ok_or(VfsFsError::IO)?;
     let mut fs_guard = rootfs.fs.lock();
     let Ext4Fs { dev, fs } = &mut *fs_guard;
-    let fs_inner = fs.as_mut().ok_or(VfsFsError::FsInnerError)?;
-    ext4_truncate(dev, fs_inner, &abs, size).map_err(|_| VfsFsError::FsInnerError)
+    let fs_inner = fs.as_mut().ok_or(VfsFsError::IO)?;
+    ext4_truncate(dev, fs_inner, &abs, size).map_err(|_| VfsFsError::IO)
 }
 
 /// unlink：删除文件（不删除目录）
 pub fn vfs_unlink(path: &str) -> Result<(), VfsFsError> {
     let abs = normalize_path(path)?;
     if abs == "/" {
-        return Err(VfsFsError::FsInnerError);
+        return Err(VfsFsError::Invalid);
     }
 
     let mut rootfs_guard = ROOTFS.lock();
-    let rootfs = rootfs_guard.as_mut().ok_or(VfsFsError::FsInnerError)?;
+    let rootfs = rootfs_guard.as_mut().ok_or(VfsFsError::IO)?;
     let mut fs_guard = rootfs.fs.lock();
     let Ext4Fs { dev, fs } = &mut *fs_guard;
-    let fs_inner = fs.as_mut().ok_or(VfsFsError::FsInnerError)?;
+    let fs_inner = fs.as_mut().ok_or(VfsFsError::IO)?;
 
     let got = get_inode_with_num(fs_inner, dev, &abs)
-        .map_err(|_| VfsFsError::FsInnerError)?
-        .ok_or(VfsFsError::FsInnerError)?;
+        .map_err(|_| VfsFsError::IO)?
+        .ok_or(VfsFsError::NotFound)?;
     let (_ino, inode) = got;
     if inode.is_dir() {
-        return Err(VfsFsError::FsInnerError);
+        return Err(VfsFsError::IsDir);
     }
 
     ext4_unlink(fs_inner, dev, &abs);
@@ -588,14 +606,14 @@ pub fn vfs_stat(path: &str) -> Result<VfsStat, VfsFsError> {
     let abs = normalize_path(path)?;
 
     let mut rootfs_guard = ROOTFS.lock();
-    let rootfs = rootfs_guard.as_mut().ok_or(VfsFsError::FsInnerError)?;
+    let rootfs = rootfs_guard.as_mut().ok_or(VfsFsError::IO)?;
     let mut fs_guard = rootfs.fs.lock();
     let Ext4Fs { dev, fs } = &mut *fs_guard;
-    let fs_inner = fs.as_mut().ok_or(VfsFsError::FsInnerError)?;
+    let fs_inner = fs.as_mut().ok_or(VfsFsError::IO)?;
 
     let got = get_inode_with_num(fs_inner, dev, &abs)
-        .map_err(|_| VfsFsError::FsInnerError)?
-        .ok_or(VfsFsError::FsInnerError)?;
+        .map_err(|_| VfsFsError::IO)?
+        .ok_or(VfsFsError::NotFound)?;
     let (ino, inode) = got;
 
     let file_type = if inode.is_dir() {
@@ -629,28 +647,28 @@ pub fn vfs_getdents64(fd: &Arc<FileDescriptor>, max_len: usize) -> Result<Vec<u8
 
     // 目录必须可读
     if !fd.flags.read {
-        return Err(VfsFsError::FsInnerError);
+        return Err(VfsFsError::PermissionDenied);
     }
 
     let mut rootfs_guard = ROOTFS.lock();
-    let rootfs = rootfs_guard.as_mut().ok_or(VfsFsError::FsInnerError)?;
+    let rootfs = rootfs_guard.as_mut().ok_or(VfsFsError::IO)?;
     let mut fs_guard = rootfs.fs.lock();
     let Ext4Fs { dev, fs } = &mut *fs_guard;
-    let fs_inner = fs.as_mut().ok_or(VfsFsError::FsInnerError)?;
+    let fs_inner = fs.as_mut().ok_or(VfsFsError::IO)?;
 
     let (dir_path, stream_off) = fd.dir_path_and_offset()?;
 
     let got = get_inode_with_num(fs_inner, dev, &dir_path)
-        .map_err(|_| VfsFsError::FsInnerError)?
-        .ok_or(VfsFsError::FsInnerError)?;
+        .map_err(|_| VfsFsError::IO)?
+        .ok_or(VfsFsError::NotFound)?;
     let (_dir_ino, mut dir_inode) = got;
     if !dir_inode.is_dir() {
-        return Err(VfsFsError::FsInnerError);
+        return Err(VfsFsError::NotDir);
     }
 
     // 把整个目录编码成一个连续的 dirent64 流，然后依据 OpenFile.offset 做分页返回。
     let blocks = resolve_inode_block_allextend(fs_inner, dev, &mut dir_inode)
-        .map_err(|_| VfsFsError::FsInnerError)?;
+        .map_err(|_| VfsFsError::IO)?;
 
     let mut stream: Vec<u8> = Vec::new();
     let mut cur_off: u64 = 0;
@@ -660,7 +678,7 @@ pub fn vfs_getdents64(fd: &Arc<FileDescriptor>, max_len: usize) -> Result<Vec<u8
         let cached = fs_inner
             .datablock_cache
             .get_or_load(dev, phys)
-            .map_err(|_| VfsFsError::FsInnerError)?;
+            .map_err(|_| VfsFsError::IO)?;
         let data = &cached.data[..BLOCK_SIZE];
         let iter = DirEntryIterator::new(data);
         for (entry, _) in iter {
@@ -672,6 +690,7 @@ pub fn vfs_getdents64(fd: &Arc<FileDescriptor>, max_len: usize) -> Result<Vec<u8
             if entry.name == b"." || entry.name == b".." {
                 continue;
             }
+           // error!("Name :{:?} type:{:?}",entry.name,entry.file_type);
 
             let dtype = match entry.file_type {
                 1 => VFS_DT_REG,
@@ -724,7 +743,7 @@ pub fn vfs_remove(path: &str) -> Result<(), VfsFsError> {
 
     // 不允许删除根目录
     if abs == "/" {
-        return Err(VfsFsError::FsInnerError);
+        return Err(VfsFsError::Invalid);
     }
 
     #[cfg(feature = "ext4")]
@@ -734,11 +753,11 @@ pub fn vfs_remove(path: &str) -> Result<(), VfsFsError> {
         use rsext4::ext4_backend::file::{delete_dir, delete_file};
 
         let mut rootfs_guard = ROOTFS.lock();
-        let rootfs = rootfs_guard.as_mut().ok_or(VfsFsError::FsInnerError)?;
+        let rootfs = rootfs_guard.as_mut().ok_or(VfsFsError::IO)?;
 
         let mut fs_guard = rootfs.fs.lock();
         let Ext4Fs { dev, fs } = &mut *fs_guard;
-        let fs_inner = fs.as_mut().ok_or(VfsFsError::FsInnerError)?;
+        let fs_inner = fs.as_mut().ok_or(VfsFsError::IO)?;
 
         match get_inode_with_num(fs_inner, dev, &abs) {
             Ok(Some((_ino, inode))) => {
@@ -749,13 +768,13 @@ pub fn vfs_remove(path: &str) -> Result<(), VfsFsError> {
                 }
                 Ok(())
             }
-            _ => Err(VfsFsError::FsInnerError),
+            _ => Err(VfsFsError::NotFound),
         }
     }
 
     #[cfg(not(feature = "ext4"))]
     {
         let _ = path;
-        Err(VfsFsError::FsInnerError)
+        Err(VfsFsError::NotSupported)
     }
 }

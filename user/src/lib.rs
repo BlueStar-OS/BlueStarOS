@@ -9,6 +9,7 @@ pub use alloc::string::String;
 use alloc::vec::Vec;
 use buddy_system_allocator::LockedHeap;
 use core::arch::global_asm;
+use crate::alloc::string::ToString;
 ///BlueStarOS标准用户库
 const USER_HEAP_SIZE:usize=40960;
 static mut USER_HEAP_SPACE:[usize;USER_HEAP_SIZE]=[0;USER_HEAP_SIZE];
@@ -108,6 +109,20 @@ pub fn map(start:usize,len:usize)->isize{
 
 pub fn unmap(start:usize,len:usize)->isize{
   syscall::sys_unmap(start, len)
+}
+
+pub fn chdir(path: &str) -> isize {
+    syscall::sys_chdir(path)
+}
+
+pub fn getcwd() -> Option<String> {
+    let mut buf: [u8; 256] = [0u8; 256];
+    let ret = syscall::sys_getcwd(buf.as_mut_ptr() as usize, buf.len());
+    if ret <= 0 {
+        return None;
+    }
+    let end = buf.iter().position(|&b| b == 0).unwrap_or(buf.len());
+    Some(String::from_utf8_lossy(&buf[..end]).to_string())
 }
 
 

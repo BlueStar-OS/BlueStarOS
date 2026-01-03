@@ -6,6 +6,7 @@ TARGET := riscv64gc-unknown-none-elf
 BUILD_DIR := target/$(TARGET)/release
 BINS := $(patsubst src/bin/%.rs,%,$(wildcard src/bin/*.rs))
 KERNEL_IMG := ../kernel/disk.img
+OSCOMP_ELF_DIR := ../kernel/testsuits-for-oskernel/riscv-syscalls-testing/user/build/riscv64
 
 .PHONY: all build img makeimg clean
 
@@ -38,6 +39,20 @@ img: build
 		sudo cp $(BUILD_DIR)/$$b $$TMPDIR/test/ ; \
 		sudo chmod +x $$TMPDIR/test/$$b ; \
 	done ; \
+	if [ -d "$(OSCOMP_ELF_DIR)" ]; then \
+		echo "Copying oscomp test ELFs from $(OSCOMP_ELF_DIR)..." ; \
+		sudo mkdir -p $$TMPDIR/oscomp ; \
+		for f in $(OSCOMP_ELF_DIR)/* ; do \
+			if [ -f "$$f" ]; then \
+				name=$$(basename $$f) ; \
+				echo "  Copying oscomp $$name..." ; \
+				sudo cp "$$f" "$$TMPDIR/oscomp/$$name" ; \
+				sudo chmod +x "$$TMPDIR/oscomp/$$name" ; \
+			fi ; \
+		done ; \
+	else \
+		echo "Skip oscomp copy: $(OSCOMP_ELF_DIR) not found (build oscomp user first)." ; \
+	fi ; \
 	sync ; \
 	sudo umount $$TMPDIR ; \
 	rmdir $$TMPDIR

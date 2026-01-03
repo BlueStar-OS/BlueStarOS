@@ -28,6 +28,7 @@ mod console {
 
     static mut COMMAND_BUFFER: Option<Vec<String>> = None;
     static mut HISTORY_CURSOR: usize = 0;
+    static mut TAB_TRIGGERED: bool = false;
 
     fn ensure_history() {
         unsafe {
@@ -103,6 +104,18 @@ mod console {
         c == 8u8 || c == 127u8
     }
 
+    fn is_tab(c: u8) -> bool {
+        c == b'\t'
+    }
+
+    pub fn take_tab_triggered() -> bool {
+        unsafe {
+            let v = TAB_TRIGGERED;
+            TAB_TRIGGERED = false;
+            v
+        }
+    }
+
     fn clear_current_input(len: usize) {
         for _ in 0..len {
             print!("\x08 \x08");
@@ -126,6 +139,12 @@ mod console {
         let mut line = String::new();
         loop {
             let c = getchar() as u8;
+            if is_tab(c) {
+                unsafe {
+                    TAB_TRIGGERED = true;
+                }
+                break;
+            }
             if let Some(code) = try_read_arrow(c) {
                 if code == b'A' {
                     if let Some(sel) = history_select_prev() {
@@ -167,9 +186,8 @@ mod console {
 }
 
 mod command {
-    use user_lib::{String, println, print, sys_exec_args, sys_exit, sys_fork, sys_wait};
+    use user_lib::{String, println, print, sys_exec_args, sys_exit, sys_fork, sys_wait, chdir, getcwd};
     use alloc::vec::Vec;
-
     fn clear_screen() {
         // ANSI: clear screen + move cursor to home
         print!("\x1b[2J\x1b[H");
@@ -180,6 +198,8 @@ mod command {
         println!("  help        Show this help");
         println!("  clear       Clear the screen");
         println!("  echo <msg>  Print <msg>");
+        println!("  cd <path>   Change current directory (init built-in)");
+        println!("  pwd         Print current directory");
         println!("  ls          Run /test/ls");
         println!("  mkdir       Run /test/mkdir");
         println!("  rm          Run /test/rm");
@@ -187,13 +207,12 @@ mod command {
         println!("  exit        Exit init");
     }
 
-    fn run_test_bin(name: &str, args: &[&str]) {
-        let mut path = String::from("/test/");
-        path.push_str(name);
+    fn run_bin(path: &str, argv0: &str, args: &[&str]) {
+        let mut path = String::from(path);
         path.push('\0');
 
         let mut arg_strings: Vec<String> = Vec::new();
-        arg_strings.push(String::from(name));
+        arg_strings.push(String::from(argv0));
         for a in args.iter() {
             arg_strings.push(String::from(*a));
         }
@@ -220,6 +239,12 @@ mod command {
         if waited < 0 {
             println!("wait failed, ret={}", waited);
         }
+    }
+
+    fn run_test_bin(name: &str, args: &[&str]) {
+        let mut path = String::from("/test/");
+        path.push_str(name);
+        run_bin(&path, name, args);
     }
 
     pub fn handle_line(line: String) {
@@ -272,6 +297,26 @@ mod command {
             return;
         }
 
+        if cmd == "cd" {
+            if rest.len() != 1 {
+                println!("usage: cd <path>");
+                return;
+            }
+            let ret = chdir(rest[0]);
+            if ret < 0 {
+                println!("cd failed, ret={}", ret);
+            }
+            return;
+        }
+
+        if cmd == "pwd" {
+            match getcwd() {
+                Some(s) => println!("{}", s),
+                None => println!("pwd failed"),
+            }
+            return;
+        }
+
         if cmd == "exit" {
             sys_exit(0);
             panic!("_start UnReachBle!");
@@ -282,10 +327,28 @@ mod command {
                 println!("Invalid command: {}", line);
                 return;
             }
-            run_test_bin(prog, &rest);
+            let cwd = match getcwd() {
+                Some(s) => s,
+                None => {
+                    println!("getcwd failed");
+                    return;
+                }
+            };
+            let mut path = cwd;
+            if !path.ends_with('/') {
+                path.push('/');
+            }
+            path.push_str(prog);
+            run_bin(&path, prog, &rest);
             return;
         }
-        println!("Command module not implemented: {}", line);
+
+        run_test_bin(cmd, &rest);
+    }
+
+    pub fn handle_tab(_line: String) {
+        //ls获取当前目录获取所有条目然后分割成vec
+        //分割当前已经输入的命令，以最后一个为准，使用withprefix匹配条目并且补全。如果有多个匹配就选取最后一个
     }
 }
 
@@ -296,6 +359,10 @@ pub fn main(){
     loop {
         ui::prompt();
         let line = console::read_line();
+        if console::take_tab_triggered() {
+            command::handle_tab(line);
+            continue;
+        }
         console::history_push(line.clone());
         command::handle_line(line);
     }

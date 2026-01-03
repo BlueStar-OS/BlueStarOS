@@ -1,6 +1,6 @@
 //! Global logger
 
-use log::{Level, LevelFilter, Log, Metadata, Record, debug, trace};
+use log::{Level, LevelFilter, Log, Metadata, Record, debug};
 use crate::{config::*, time::get_time_ms};
 
 /// a simple logger
@@ -21,7 +21,7 @@ impl Log for SimpleLogger {
             Level::Debug => 32, // Green
             Level::Trace => 90, // BrightBlack
         };
-        println!(
+        crate::kprintln!(
             "\u{1B}[{}m[{}][{:>5}] {}\u{1B}[0m",
             color,
             get_time_ms(),      

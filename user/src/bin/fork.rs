@@ -12,7 +12,7 @@ pub fn main() -> usize {
     let pids = sys_fork();
     println!("fork ret = {}", pids);
     if pids == 0 {
-        let ret = sys_exec("/test/printf\0");
+        let ret = sys_exec("/test/printf");
         println!("exec failed, ret={}", ret);
         return 1;
     } else if pids > 0 {
