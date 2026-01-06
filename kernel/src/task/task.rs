@@ -17,13 +17,13 @@ use riscv::register::sstatus::SPP;
 use rsext4::OpenFile;
 use crate::__kernel_refume;
 use crate::config::*;
-use crate::fs::vfs::FileDescriptor;
+use crate::fs::vfs::File;
 use crate::fs::vfs::OpenFlags;
 use crate::memory::*;
 use crate::sbi::shutdown;
 use crate::task::file_loader;
 use log::debug;
-use crate::fs::component::stdio::stdio::{stdin_fd, stdout_fd, stderr_fd};
+use crate::fs::component::stdio::stdio::{stdin_file, stdout_file, stderr_file};
 use crate::trap::{app_entry_point, kernel_trap_handler};
 ///init进程PID
 pub const INIT_PID:usize=1;
@@ -73,7 +73,7 @@ pub struct TaskControlBlock{
         pass:usize,                                     //行程
         stride:usize,                                   //步长
         ticket:usize,                                   //权重
-        pub file_descriptor:Vec<Option<Arc<FileDescriptor>>>,       //文件描述符表
+        pub file_descriptor:Vec<Option<Arc<dyn File>>>,       //文件描述符表
         cwd:String,         //进程工作的路径 默认/
         pub parent:Option<Weak<UPSafeCell<TaskControlBlock>>>,                  //父进程弱引用
         pub childrens:Vec<Arc<UPSafeCell<TaskControlBlock>>>            //子进程强引用
@@ -266,10 +266,10 @@ impl TaskControlBlock {
         let new_user_sp = Self::push_args_to_user_stack(user_satp, user_sp.0, &argv);
         
         // 初始化文件描述符表：0=stdin, 1=stdout, 2=stderr
-        let mut file_descriptor_table: Vec<Option<Arc<FileDescriptor>>> = Vec::new();
-        file_descriptor_table.push(Some(stdin_fd()));
-        file_descriptor_table.push(Some(stdout_fd()));
-        file_descriptor_table.push(Some(stderr_fd()));
+        let mut file_descriptor_table: Vec<Option<Arc<dyn File>>> = Vec::new();
+        file_descriptor_table.push(Some(stdin_file()));
+        file_descriptor_table.push(Some(stdout_file()));
+        file_descriptor_table.push(Some(stderr_file()));
         
         let task_control_block = TaskControlBlock {
             pid:ProcessId_ALLOCTOR.lock().alloc_id().expect("No Process ID Can use"),
@@ -748,7 +748,7 @@ impl TaskManager {//全局唯一
     }
 
     ///获取当前任务的文件描述符
-    pub fn get_current_fd(&self, fd: usize) -> Option<Option<Arc<FileDescriptor>>> {
+    pub fn get_current_fd(&self, fd: usize) -> Option<Option<Arc<dyn File>>> {
         let inner = self.task_que_inner.lock();
         let current_task = inner.current;
         let result = {
@@ -783,7 +783,7 @@ impl TaskManager {//全局唯一
         drop(inner);
     }
 
-    pub fn alloc_fd_for_current(&self, new_fd: Arc<FileDescriptor>) -> i32 {
+    pub fn alloc_fd_for_current(&self, new_fd: Arc<dyn File>) -> i32 {
         let inner = self.task_que_inner.lock();
         let current_task = inner.current;
         let mut task = inner.task_queen[current_task].lock();
@@ -822,7 +822,8 @@ impl TaskManager {//全局唯一
 
     ///kail当前任务，内核有权调用 调用栈顶必须为TrapHandler! 调用它的地方考虑是否直接return
     pub fn kail_current_task_and_run_next(&self){
-        self.remove_current_task();//删除对应任务块
+        self.reparent_current_children_to_init();
+        self.mark_current_zombie(-1);
         self.suspend_and_run_task();//调度下一个stride最小的任务
         error!("Task Kailed!");
     }

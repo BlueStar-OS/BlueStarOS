@@ -8,7 +8,7 @@ use user_lib::{
     sys_mkdir,
     sys_stat,
     sys_unlink,
-    VfsStat,
+    KStat,
 };
 
 #[inline]
@@ -21,8 +21,8 @@ fn ft_name(ft: u32) -> &'static str {
 }
 
 fn do_stat(path: &str) -> isize {
-    let mut st = VfsStat::default();
-    let ret = sys_stat(path, &mut st as *mut VfsStat);
+    let mut st = KStat::default();
+    let ret = sys_stat(path, &mut st as *mut KStat);
     if ret < 0 {
         println!("[stat] {} -> failed ret={}", path, ret);
         return ret;
@@ -30,9 +30,9 @@ fn do_stat(path: &str) -> isize {
     println!(
         "[stat] {} -> inode={} size={} type={}",
         path,
-        st.inode,
-        st.size,
-        ft_name(st.file_type)
+        st.st_ino,
+        st.st_size,
+        ft_name(st.st_mode as u32)
     );
     0
 }

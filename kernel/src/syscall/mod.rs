@@ -72,6 +72,8 @@ pub fn syscall_handler(id:usize,arg:[usize;6]) -> isize {
         // newfstatat(dirfd, pathname, statbuf, flags)
         // For now we ignore dirfd/flags and reuse the existing path-based sys_stat.
         SYS_NEWFSTATAT => sys_stat(arg[1], arg[2]),
+        // fstat(fd, statbuf)
+        SYS_FSTAT => sys_fstat(arg[0], arg[1]),
         SYS_CLONE => sys_fork(),
         SYS_EXECVE => sys_exec(arg[0], arg[1], arg[2]),
         SYS_WAIT4 => sys_wait(arg[1]),
@@ -89,10 +91,16 @@ pub fn syscall_handler(id:usize,arg:[usize;6]) -> isize {
         SYS_CHDIR => sys_chdir(arg[0]),
         SYS_GETCWD => sys_getcwd(arg[0], arg[1]),
 
+        SYS_UNAME => sys_uname(arg[0]),
+
+        SYS_MMAP => sys_mmap(arg[0], arg[1], arg[2], arg[3], arg[4] as i32, arg[5]),
+        SYS_MUNMAP => sys_munmap(arg[0], arg[1]),
+
+        SYS_MOUNT => sys_mount(arg[0], arg[1], arg[2], arg[3], arg[4]),
+        SYS_UMOUNT2 => sys_umount2(arg[0], arg[1]),
+
         // Not implemented yet in this kernel:
-        SYS_FSTAT | SYS_MMAP | SYS_MUNMAP |
-        SYS_GETTIMEOFDAY | SYS_TIMES | SYS_UNAME | SYS_NANOSLEEP | SYS_SETPRIORITY | SYS_LINKAT |
-        SYS_MOUNT | SYS_UMOUNT2 => {
+        SYS_GETTIMEOFDAY | SYS_TIMES | SYS_NANOSLEEP | SYS_SETPRIORITY | SYS_LINKAT => {
             error!("Unimplemented syscall id={}", id);
             -1
         }

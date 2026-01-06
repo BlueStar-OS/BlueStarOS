@@ -38,10 +38,10 @@ pub fn PageFaultHandler(faultVAddr:VirAddr){
     let current=inner.current;
     drop(inner);
     let  inner=TASK_MANAER.task_que_inner.lock();
-    //有areacontain并且都是mmap类型的area
+    // 必须有 area 包含该 vpn，且该 area 是 mmap 区域（memset.areas 中 MapArea.mmap.is_some()）。
     let will_kill :bool={
-        let  memset=&mut inner.task_queen[current].lock().memory_set;
-        !memset.AallArea_Iscontain_thisVpn(contain_vpn) || !memset.AllArea_NoDefaultType(VirNumRange(contain_vpn,contain_vpn))
+        let memset=&mut inner.task_queen[current].lock().memory_set;
+        !memset.is_mmap_vpn(contain_vpn)
     }; 
     if will_kill {
         //没有area包含mmap的地址，杀掉
@@ -51,18 +51,18 @@ pub fn PageFaultHandler(faultVAddr:VirAddr){
         return;
     }
     
-    debug!("ligel!");
+    debug!("[PageFaultHandler]:ligel!");
 
     
     {
-    //重新拿锁
-    let memset=&mut inner.task_queen[current].lock().memory_set;
+        //重新拿锁
+        let memset=&mut inner.task_queen[current].lock().memory_set;
 
-    //合法，然后
-    //2.分配物理页帧挂载到对应的maparea下面
-    //3.设置合法页表项
-    //一部到位
-    memset.findarea_allocFrame_and_setPte(contain_vpn);
+        //合法，然后
+        //2.分配物理页帧挂载到对应的maparea下面
+        //3.设置合法页表项
+        //一部到位
+        memset.findarea_allocFrame_and_setPte(contain_vpn);
     }
 
     

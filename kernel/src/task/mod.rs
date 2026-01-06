@@ -10,7 +10,7 @@ pub fn file_loader(file_path: &str) -> Vec<u8> {
     debug!("Eter in loader");
     let fd =match vfs_open(file_path, OpenFlags::RDONLY){
         Ok(res)=>{
-            res.fd
+            res
         }
         Err(_)=>{
             warn!("Open Application faild,can't open it");

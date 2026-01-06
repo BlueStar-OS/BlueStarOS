@@ -1,8 +1,7 @@
 use core::fmt::{self, Write};
-use alloc::boxed::Box;
 use alloc::sync::Arc;
 use crate::{sbi, task::TASK_MANAER};
-use crate::fs::vfs::{FileDescriptor, FileDescriptorTrait, OpenFlags, VfsFsError};
+use crate::fs::vfs::{File, OpenFlags, VfsFsError};
 
 
 pub const FD_TYPE_STDIN: usize = 0;
@@ -33,12 +32,12 @@ impl Stdin {
     }
 }
 
-impl FileDescriptorTrait for Stdout {
-    fn read(&mut self, _buf: &mut [u8]) -> Result<usize, VfsFsError> {
+impl File for Stdout {
+    fn read(&self, _buf: &mut [u8]) -> Result<usize, VfsFsError> {
         Err(VfsFsError::NotSupported)
     }
 
-    fn write(&mut self, buf: &[u8]) -> Result<usize, VfsFsError> {
+    fn write(&self, buf: &[u8]) -> Result<usize, VfsFsError> {
         for &byte in buf {
             sbi::putc(byte as usize);
         }
@@ -46,8 +45,8 @@ impl FileDescriptorTrait for Stdout {
     }
 }
 
-impl FileDescriptorTrait for Stdin {
-    fn read(&mut self, buf: &mut [u8]) -> Result<usize, VfsFsError> {
+impl File for Stdin {
+    fn read(&self, buf: &mut [u8]) -> Result<usize, VfsFsError> {
         let mut read_count = 0usize;
         buf.iter_mut().for_each(|b| *b = 0);
 
@@ -66,17 +65,17 @@ impl FileDescriptorTrait for Stdin {
         Ok(read_count)
     }
 
-    fn write(&mut self, _buf: &[u8]) -> Result<usize, VfsFsError> {
+    fn write(&self, _buf: &[u8]) -> Result<usize, VfsFsError> {
         Err(VfsFsError::NotSupported)
     }
 }
 
-impl FileDescriptorTrait for Stderr {
-    fn read(&mut self, _buf: &mut [u8]) -> Result<usize, VfsFsError> {
+impl File for Stderr {
+    fn read(&self, _buf: &mut [u8]) -> Result<usize, VfsFsError> {
         Err(VfsFsError::NotSupported)
     }
 
-    fn write(&mut self, buf: &[u8]) -> Result<usize, VfsFsError> {
+    fn write(&self, buf: &[u8]) -> Result<usize, VfsFsError> {
         for &b in b"<3>" {
             sbi::putc(b as usize);
         }
@@ -102,14 +101,17 @@ pub fn print(fmt: fmt::Arguments) {
     stdout.write_fmt(fmt).unwrap()
 }
 
-pub fn stdin_fd() -> Arc<FileDescriptor> {
-    Arc::new(FileDescriptor::new_from_inner(OpenFlags::RDONLY, false, Box::new(Stdin)))
+pub fn stdin_file() -> Arc<dyn File> {
+    let _ = OpenFlags::RDONLY;
+    Arc::new(Stdin)
 }
 
-pub fn stdout_fd() -> Arc<FileDescriptor> {
-    Arc::new(FileDescriptor::new_from_inner(OpenFlags::WRONLY, true, Box::new(Stdout)))
+pub fn stdout_file() -> Arc<dyn File> {
+    let _ = OpenFlags::WRONLY;
+    Arc::new(Stdout)
 }
 
-pub fn stderr_fd() -> Arc<FileDescriptor> {
-    Arc::new(FileDescriptor::new_from_inner(OpenFlags::WRONLY, true, Box::new(Stderr)))
+pub fn stderr_file() -> Arc<dyn File> {
+    let _ = OpenFlags::WRONLY;
+    Arc::new(Stderr)
 }

@@ -1,3 +1,4 @@
+use riscv::interrupt::Mutex;
 use virtio_drivers::{Hal, VirtIOBlk, VirtIOHeader};
 use lazy_static::*;
 use alloc::{sync::Arc, vec::Vec};
@@ -20,16 +21,19 @@ pub struct VirtBlk(pub UPSafeCell<VirtIOBlk<'static,VirtioHal>>, u64);
 
 
 impl VirtBlk {
+    /// TODO:扫描mmio遍历设备
+    /// 添加到全局块设备里面
     pub fn new()->Self{
         unsafe {
             let header = &mut *(VIRTIO0 as *mut VirtIOHeader);
             let capacity_in_sectors = core::ptr::read_volatile(header.config_space() as *const u64);
-            VirtBlk(
+            let blk = VirtBlk(
                 UPSafeCell::new(
                     VirtIOBlk::new(header).expect("failed new blk device")
                 ),
                 capacity_in_sectors,
-            )
+            );
+            blk
         }
     }
 

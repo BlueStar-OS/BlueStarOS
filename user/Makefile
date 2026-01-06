@@ -1,12 +1,14 @@
 # Makefile for user workspace
 # - builds all binaries in src/bin into ELF (release, target: riscv64gc-unknown-none-elf)
-# - make img: create 100MB image at ../kernel/disk.img, mkfs.ext4, mount and copy binaries to /test
+# - make img: create ../kernel/disk.img (MBR 4 partitions), format p1 ext4 / p2 FAT16 / p3 FAT32 / p4 VFAT, then mount p1 and copy binaries to /test
 
 TARGET := riscv64gc-unknown-none-elf
 BUILD_DIR := target/$(TARGET)/release
 BINS := $(patsubst src/bin/%.rs,%,$(wildcard src/bin/*.rs))
 KERNEL_IMG := ../kernel/disk.img
 OSCOMP_ELF_DIR := ../kernel/testsuits-for-oskernel/riscv-syscalls-testing/user/build/riscv64
+
+.ONESHELL:
 
 .PHONY: all build img makeimg clean
 
@@ -17,47 +19,59 @@ build:
 
 img: build
 	@echo "Creating $(KERNEL_IMG)..."
+	# 1) 创建一个 100MiB 的原始镜像文件：这里仅生成“裸磁盘”，不包含分区/文件系统
 	dd if=/dev/zero of=$(KERNEL_IMG) bs=1M count=100
-	# If the image is currently mounted or has a loop device, try to unmount/detach first
-	@if mount | grep -q "$(KERNEL_IMG)" ; then \
-		echo "Found existing mount for $(KERNEL_IMG); attempting to unmount..." ; \
-		sudo umount $(KERNEL_IMG) || true ; \
-	fi ; \
-	# Detach any loop device associated with the image
-	LOOPDEV=$$(losetup -j $(KERNEL_IMG) | cut -d: -f1) ; \
-	if [ -n "$$LOOPDEV" ]; then \
-		echo "Detaching loop device $$LOOPDEV" ; \
-		sudo losetup -d $$LOOPDEV || true ; \
-	fi ; \
-	sudo mkfs.ext4 -O ^flex_bg,^metadata_csum -F $(KERNEL_IMG)
-	TMPDIR=$$(mktemp -d) ; \
-	echo "Mounting $(KERNEL_IMG) at $$TMPDIR" ; \
-	sudo mount -o loop $(KERNEL_IMG) $$TMPDIR ; \
-	sudo mkdir -p $$TMPDIR/test ; \
-	for b in $(BINS); do \
-		echo "Copying $$b..." ; \
-		sudo cp $(BUILD_DIR)/$$b $$TMPDIR/test/ ; \
-		sudo chmod +x $$TMPDIR/test/$$b ; \
-	done ; \
-	if [ -d "$(OSCOMP_ELF_DIR)" ]; then \
-		echo "Copying oscomp test ELFs from $(OSCOMP_ELF_DIR)..." ; \
-		sudo mkdir -p $$TMPDIR/oscomp ; \
-		for f in $(OSCOMP_ELF_DIR)/* ; do \
-			if [ -f "$$f" ]; then \
-				name=$$(basename $$f) ; \
-				echo "  Copying oscomp $$name..." ; \
-				sudo cp "$$f" "$$TMPDIR/oscomp/$$name" ; \
-				sudo chmod +x "$$TMPDIR/oscomp/$$name" ; \
-			fi ; \
-		done ; \
-	else \
-		echo "Skip oscomp copy: $(OSCOMP_ELF_DIR) not found (build oscomp user first)." ; \
-	fi ; \
-	sync ; \
-	sudo umount $$TMPDIR ; \
+	# 2) 如果该镜像曾经被 losetup 绑定过，需要先 detach，否则后续分区扫描/格式化会用到旧映射
+	LOOPDEV=$$(losetup -j $(KERNEL_IMG) | cut -d: -f1)
+	if [ -n "$$LOOPDEV" ]; then
+		echo "Detaching loop device $$LOOPDEV"
+		sudo losetup -d $$LOOPDEV || true
+	fi
+	# 3) 写入 MBR(dos) 分区表（使用扇区单位的旧式 sfdisk 输入格式，兼容性更好）
+	printf '%s\n' \
+		'2048,122880,83,*' \
+		'124928,20480,0e' \
+		'145408,30720,0c' \
+		'176128,28672,0c' \
+	| sudo sfdisk $(KERNEL_IMG)
+	# 4) 把镜像绑定为 loop 设备，并让内核扫描分区（-P 会创建 /dev/loopXp1..p4）
+	LOOPDEV=$$(sudo losetup -Pf --show $(KERNEL_IMG))
+	echo "Using loop device: $$LOOPDEV"
+	# 5) 对每个分区单独 mkfs（mkfs 作用在分区范围上，而不是整盘）
+	sudo mkfs.ext4 -O ^flex_bg,^metadata_csum -F $${LOOPDEV}p1
+	sudo mkfs.vfat -F 16 $${LOOPDEV}p2
+	sudo mkfs.vfat -F 32 $${LOOPDEV}p3
+	sudo mkfs.vfat -F 32 $${LOOPDEV}p4
+	# 6) 只挂载第一个分区，把编译好的用户程序拷贝进去
+	TMPDIR=$$(mktemp -d)
+	echo "Mounting $${LOOPDEV}p1 at $$TMPDIR"
+	sudo mount $${LOOPDEV}p1 $$TMPDIR
+	sudo mkdir -p $$TMPDIR/test
+	for b in $(BINS); do
+		echo "Copying $$b..."
+		sudo cp $(BUILD_DIR)/$$b $$TMPDIR/test/
+		sudo chmod +x $$TMPDIR/test/$$b
+	done
+	if [ -d "$(OSCOMP_ELF_DIR)" ]; then
+		echo "Copying oscomp test ELFs from $(OSCOMP_ELF_DIR)..."
+		sudo mkdir -p $$TMPDIR/oscomp
+		for f in $(OSCOMP_ELF_DIR)/* ; do
+			if [ -f "$$f" ]; then
+				name=$$(basename $$f)
+				echo "  Copying oscomp $$name..."
+				sudo cp "$$f" "$$TMPDIR/oscomp/$$name"
+				sudo chmod +x "$$TMPDIR/oscomp/$$name"
+			fi
+		done
+	else
+		echo "Skip oscomp copy: $(OSCOMP_ELF_DIR) not found (build oscomp user first)."
+	fi
+	sync
+	sudo umount $$TMPDIR
 	rmdir $$TMPDIR
-	
+	# 7) 收尾：detach loop 设备，避免影响下一次 make img
+	sudo losetup -d $$LOOPDEV
+
 clean:
 	cargo clean
 	rm -f $(KERNEL_IMG)
-

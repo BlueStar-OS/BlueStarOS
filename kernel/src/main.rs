@@ -8,7 +8,6 @@
 #![feature(panic_info_message,alloc,panic_internals,const_trait_impl)]
 use core::arch::global_asm;
 #[cfg(feature = "ext4")]
-use crate::fs::fs_backend::ext4test::*;
 use crate::sbi::putc;
 
 mod sbi;
@@ -64,7 +63,7 @@ pub fn blue_main() -> ! {//永远不会返回
     rather_global_interrupt();//愿意处理全局中断使能
     enable_timer_interupt();//开启全局时间中断使能
     set_next_timeInterupt();//第一次开启时钟中断
-    warn!("All right,kernel Will end\n");
+    
     debug!("stext {:#x}",__kernel_trap as usize);
     debug!("traper {:#x}",straper as usize);
     debug!("trap refume virtualaddr:{:#x}",__kernel_refume as usize - __kernel_trap as usize + TRAP_BOTTOM_ADDR);
@@ -72,6 +71,7 @@ pub fn blue_main() -> ! {//永远不会返回
     RootFs::init_rootfs();
     
     run_first_task();
+    warn!("All right,kernel Will end\n");
     panic!("Kernel End");
 
 }

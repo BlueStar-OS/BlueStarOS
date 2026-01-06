@@ -1,7 +1,7 @@
 use alloc::sync::{Arc, Weak};
 
 use crate::sync::UPSafeCell;
-use crate::fs::vfs::{FileDescriptorTrait, VfsFsError};
+use crate::fs::vfs::{File, VfsFsError};
 use crate::task::TASK_MANAER;
 
 pub const RINGBUFFERSIZE:usize = 512;
@@ -208,13 +208,13 @@ impl PipeHandle {
     }
 }
 
-impl FileDescriptorTrait for PipeHandle {
-    fn read(&mut self, buf: &mut [u8]) -> Result<usize, VfsFsError> {
+impl File for PipeHandle {
+    fn read(&self, buf: &mut [u8]) -> Result<usize, VfsFsError> {
         let pipe = self.end.lock();
         pipe.read(buf)
     }
 
-    fn write(&mut self, buf: &[u8]) -> Result<usize, VfsFsError> {
+    fn write(&self, buf: &[u8]) -> Result<usize, VfsFsError> {
         let pipe = self.end.lock();
         pipe.write(buf)
     }

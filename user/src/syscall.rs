@@ -1,5 +1,6 @@
-use crate::print;
+use crate::{UtsName, print};
 use alloc::string::String;
+use bitflags::bitflags;
 
 // Linux riscv64 syscall numbers (subset)
 pub const SYS_GETCWD: usize = 17;
@@ -56,8 +57,73 @@ pub fn sys_call(id: usize, args: [usize; 6]) -> isize {
     ret
 }
 
+
+pub fn sys_uname(buf: &mut UtsName) -> isize {
+    sys_call(SYS_UNAME, [buf as *mut _ as usize, 0, 0, 0, 0, 0])
+}
+
+pub fn sys_mount(source: &str, target: &str, fstype: &str, flags: usize, data: &str) -> isize {
+    let mut s_source = String::from(source);
+    s_source.push('\0');
+    let mut s_target = String::from(target);
+    s_target.push('\0');
+    let mut s_fstype = String::from(fstype);
+    s_fstype.push('\0');
+    let mut s_data = String::from(data);
+    s_data.push('\0');
+    sys_call(
+        SYS_MOUNT,
+        [
+            s_source.as_ptr() as usize,
+            s_target.as_ptr() as usize,
+            s_fstype.as_ptr() as usize,
+            flags,
+            s_data.as_ptr() as usize,
+            0,
+        ],
+    )
+}
+
+pub fn sys_umount2(target: &str, flags: usize) -> isize {
+    let mut s_target = String::from(target);
+    s_target.push('\0');
+    sys_call(SYS_UMOUNT2, [s_target.as_ptr() as usize, flags, 0, 0, 0, 0])
+}
+
+bitflags! {
+    pub struct MmapProt: usize {
+        const READ = 0x1;
+        const WRITE = 0x2;
+        const EXEC = 0x4;
+    }
+}
+
+bitflags! {
+    pub struct MmapFlags: usize {
+        const SHARED = 0x01;
+        const PRIVATE = 0x02;
+        const FIXED = 0x10;
+        const ANONYMOUS = 0x20;
+    }
+}
+
+pub fn sys_mmap(addr: usize, len: usize, prot: usize, flags: usize, fd: isize, offset: usize) -> isize {
+    sys_call(
+        SYS_MMAP,
+        [addr, len, prot, flags, fd as usize, offset],
+    )
+}
+
 pub fn sys_map(startAddr:usize,len:usize)->isize{
-    sys_call(SYS_MMAP,[startAddr,len,0,0,0,0])
+    // Keep compatibility with old tests: anonymous private RW mapping at fixed hint address.
+    sys_mmap(
+        startAddr,
+        len,
+        (MmapProt::READ | MmapProt::WRITE).bits(),
+        (MmapFlags::PRIVATE | MmapFlags::ANONYMOUS).bits(),
+        -1,
+        0,
+    )
 }
 
 pub fn sys_unmap(startAddr:usize,len:usize)->isize{
@@ -152,14 +218,29 @@ pub fn sys_unlink(path: &str) -> isize {
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default)]
-pub struct VfsStat {
-    pub inode: u32,
-    pub size: u64,
-    pub mode: u32,
-    pub file_type: u32,
+pub struct KStat {
+    pub st_dev: u64,
+    pub st_ino: u64,
+    pub st_mode: u32,
+    pub st_nlink: u32,
+    pub st_uid: u32,
+    pub st_gid: u32,
+    pub st_rdev: u64,
+    pub __pad: u64,
+    pub st_size: i64,
+    pub st_blksize: u32,
+    pub __pad2: i32,
+    pub st_blocks: u64,
+    pub st_atime_sec: i64,
+    pub st_atime_nsec: i64,
+    pub st_mtime_sec: i64,
+    pub st_mtime_nsec: i64,
+    pub st_ctime_sec: i64,
+    pub st_ctime_nsec: i64,
+    pub __unused: [u32; 2],
 }
 
-pub fn sys_stat(path: &str, stat_buf: *mut VfsStat) -> isize {
+pub fn sys_stat(path: &str, stat_buf: *mut KStat) -> isize {
     let mut st = String::from(path);
     st.push('\0');
     // Use newfstatat(AT_FDCWD, path, stat_buf, flags=0) so we can stat by path.
@@ -175,6 +256,10 @@ pub fn sys_stat(path: &str, stat_buf: *mut VfsStat) -> isize {
         ],
     )
     
+}
+
+pub fn sys_fstat(fd: usize, stat_buf: *mut KStat) -> isize {
+    sys_call(SYS_FSTAT, [fd, stat_buf as usize, 0, 0, 0, 0])
 }
 
 pub fn sys_getdents64(fd: usize, buf_ptr: usize, buf_len: usize) -> isize {

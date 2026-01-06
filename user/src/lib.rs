@@ -3,13 +3,33 @@
 #![feature(linkage,panic_info_message,)]
 extern crate alloc;
 mod panic;
-mod syscall;
+pub mod syscall;
 mod console;
 pub use alloc::string::String;
 use alloc::vec::Vec;
 use buddy_system_allocator::LockedHeap;
 use core::arch::global_asm;
 use crate::alloc::string::ToString;
+
+///用户/kernel结构体
+pub const utsname_field_len:usize = 65;//byte
+#[repr(C)]
+#[derive(Debug)]
+pub struct UtsName{
+    pub sysname:[u8;utsname_field_len], //当前操作系统名
+    pub nodename:[u8;utsname_field_len], //主机名hostname
+    pub release:[u8;utsname_field_len], //当前发布级别
+    pub version:[u8;utsname_field_len], //内核版本字符串
+    pub machine:[u8;utsname_field_len], //当前硬件结构
+    pub domainname:[u8;utsname_field_len], //NIS DOMAIN name
+}
+impl UtsName {
+    pub fn new()->Self{
+        Self { sysname: [0;utsname_field_len], nodename: [0;utsname_field_len], release: [0;utsname_field_len], version: [0;utsname_field_len],
+             machine: [0;utsname_field_len], domainname: [0;utsname_field_len] }
+    }
+}
+
 ///BlueStarOS标准用户库
 const USER_HEAP_SIZE:usize=40960;
 static mut USER_HEAP_SPACE:[usize;USER_HEAP_SIZE]=[0;USER_HEAP_SIZE];

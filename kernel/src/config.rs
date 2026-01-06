@@ -48,7 +48,8 @@ pub const USERLIB_START_RETURN_HIGNADDR:usize=TRAP_CONTEXT_ADDR-PAGE_SIZE;
 pub const HIGNADDRESS_MASK:usize=0xFFFFFFE000000000;//0xFFFFFFFFFFFFF000 hb *0xfffffffffffff070
 ///每秒多少次时钟中断
 pub const TIME_FREQUENT:usize=100;
-
+///扇区大小
+pub const SECTOR_SIZE:usize=512;//512 bytes
 
 ///任务初始ticket(优先级)
 pub const TASK_TICKET:usize=100;

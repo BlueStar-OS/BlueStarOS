@@ -1,5 +1,5 @@
 use buddy_system_allocator::LockedHeap;
-use log::trace;
+use log::{trace, warn};
 use crate::{config::{KERNEL_HEADP, KERNEL_HEAP_SIZE, MB, PAGE_SIZE}, memory::address::*,sync::UPSafeCell};
 use core::cell::UnsafeCell;
 #[allow(static_mut_refs)]
@@ -65,12 +65,18 @@ impl FrameAllocatorTrait for FrameAlloctor{
     ///回收物理页帧
     fn dealloc(&mut self,ppn:usize) {
         //页号合法性检查
-        if ppn<self.origin || ppn>= self.start || ppn>self.end || self.recycle.contains(&ppn){
+        if ppn<self.origin || ppn>= self.start || ppn>self.end {
             panic!("frame ppn:{} is not valid! orign:{} start:{} end:{} ",ppn,self.origin,self.start,self.end);
         }
-        //trace!("Frame ppn: {} was recycled!",ppn);
-        //回收物理页帧
-        self.recycle.push(ppn);
+        if self.recycle.contains(&ppn) {
+            //双重释放
+            panic!("Please note this, if this not a share cause double free please check");
+        }else {
+            trace!("Frame ppn: {} was recycled!",ppn);
+            //回收物理页帧
+            self.recycle.push(ppn);
+        }
+        
     }
 
 }
