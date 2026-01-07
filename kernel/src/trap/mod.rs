@@ -115,7 +115,7 @@ pub fn set_kernel_forbid(){
 
 /// 第一次进入用户态的入口点
 /// __switch 会跳转到这里，设置好 trap 环境后跳转到用户态
-#[unsafe(no_mangle)]
+#[no_mangle]
 pub extern "C" fn app_entry_point() {
     set_kernel_trap_handler();
     let user_satp = TASK_MANAER.get_current_stap();

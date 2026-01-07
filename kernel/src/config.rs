@@ -1,5 +1,5 @@
 use crate::{task::TaskContext, trap::TrapContext};
-unsafe extern "C"{
+ extern "C"{
         pub fn kernel_stack_lower_bound();
         pub fn kernel_stack_top();
         pub fn kernel_trap_stack_top();

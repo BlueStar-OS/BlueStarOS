@@ -573,7 +573,8 @@ pub fn sys_getpid() -> isize {
         let inner = TASK_MANAER.task_que_inner.lock();
         inner.task_queen[inner.current].clone()
     };
-    current_task.lock().pid.0 as isize
+    let re = current_task.lock().pid.0;
+    re as isize
 }
 
 pub fn sys_getppid() -> isize {

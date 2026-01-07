@@ -5,7 +5,7 @@
 //#![deny(warnings)]
 #![no_std]
 #![no_main]
-#![feature(panic_info_message,alloc,panic_internals,const_trait_impl)]
+#![feature(panic_info_message,alloc,panic_internals,const_trait_impl,error_in_core)]
 use core::arch::global_asm;
 #[cfg(feature = "ext4")]
 use crate::sbi::putc;
@@ -41,7 +41,7 @@ use crate::memory::MapSet;
 global_asm!(include_str!("entry.asm"));
 /// clear BSS segment
 pub fn clear_bss() {
-    unsafe extern "C" {
+    extern "C" {
         pub fn sbss();
         pub fn ebss();
     }
@@ -55,7 +55,7 @@ pub fn kernel_init(){
     init_frame_allocator(ekernel as usize,ekernel as usize +MEMORY_SIZE);//物理内存页分配器初始化
 }
 /// the rust entry-point of os
-#[unsafe(no_mangle)]
+#[no_mangle]
 pub fn blue_main() -> ! {//永远不会返回
     kernel_init(); //bss，日志，分配器初始化
     set_kernel_trap_handler();//初始化陷阱入口，应该在地址空间激活前开启
