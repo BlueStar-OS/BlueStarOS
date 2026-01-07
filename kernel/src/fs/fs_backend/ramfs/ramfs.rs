@@ -296,7 +296,7 @@ impl RamFile {
 
 impl File for RamFile {
     fn read(&self, buf: &mut [u8]) -> Result<usize, VfsFsError> {
-        if !self.flags.read {
+        if !self.flags.readable() {
             return Err(VfsFsError::PermissionDenied);
         }
         let off = *self.offset.lock() as usize;
@@ -306,11 +306,11 @@ impl File for RamFile {
     }
 
     fn write(&self, buf: &[u8]) -> Result<usize, VfsFsError> {
-        if !self.flags.write {
+        if !self.flags.writable() {
             return Err(VfsFsError::PermissionDenied);
         }
         let mut off = *self.offset.lock() as usize;
-        if self.flags.append {
+        if self.flags.contains(OpenFlags::APPEND) {
             let end = self.with_fs(|fs| {
                 let st = fs.stat_inode(self.inode)?;
                 Ok(st.size as usize)
@@ -405,7 +405,7 @@ impl VfsFs for RamFs {
     fn open(&mut self, mount_fs: MountFs, path: &str, flags: OpenFlags) -> Result<Arc<dyn File>, VfsFsError> {
         let ino = match self.lookup_path(path) {
             Ok(ino) => ino,
-            Err(VfsFsError::NotFound) if flags.create => {
+            Err(VfsFsError::NotFound) if flags.contains(OpenFlags::CREAT) => {
                 self.mkfile(path)?;
                 self.lookup_path(path)?
             }
@@ -421,8 +421,8 @@ impl VfsFs for RamFs {
                 flags,
             })),
             NodeKind::File { .. } => {
-                if flags.truncate {
-                    if !flags.write {
+                if flags.contains(OpenFlags::TRUNC) {
+                    if !flags.writable() {
                         return Err(VfsFsError::PermissionDenied);
                     }
                     self.file_truncate(ino, 0)?;
@@ -435,7 +435,7 @@ impl VfsFs for RamFs {
                 }))
             }
             NodeKind::Device { file } => {
-                if flags.truncate {
+                if flags.contains(OpenFlags::TRUNC) {
                     return Err(VfsFsError::NotSupported);
                 }
                 Ok(file.clone())

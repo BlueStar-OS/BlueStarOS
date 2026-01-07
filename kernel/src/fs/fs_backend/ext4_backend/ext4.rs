@@ -36,13 +36,15 @@ fn align_up(x: usize, align: usize) -> usize {
 pub struct Ext4File {
     mount: MountFs,
     of: spin::Mutex<OpenFile>,
+    flags: OpenFlags,
 }
 
 impl Ext4File {
-    pub fn new(mount: MountFs, of: OpenFile) -> Self {
+    pub fn new(mount: MountFs, of: OpenFile,flags: OpenFlags) -> Self {
         Self {
             mount,
             of: spin::Mutex::new(of),
+            flags,
         }
     }
 
@@ -58,6 +60,9 @@ impl Ext4File {
 
 impl File for Ext4File {
     fn read(&self, buf: &mut [u8]) -> Result<usize, VfsFsError> {
+        if !self.flags.readable() {
+            return Err(VfsFsError::PermissionDenied);
+        }
         let data = self.with_ext4_mut(|ext4| {
             let fs_inner = ext4.fs.as_mut().ok_or(VfsFsError::IO)?;
             let mut of = self.of.lock();
@@ -69,15 +74,25 @@ impl File for Ext4File {
     }
 
     fn write(&self, buf: &[u8]) -> Result<usize, VfsFsError> {
+        if !self.flags.writable() {
+            return Err(VfsFsError::PermissionDenied);
+        }
         self.with_ext4_mut(|ext4| {
             let fs_inner = ext4.fs.as_mut().ok_or(VfsFsError::IO)?;
             let mut of = self.of.lock();
+            if self.flags.contains(OpenFlags::APPEND) {
+                let end = of.inode.size() as u64;
+                ext4_lseek(&mut *of, end);
+            }
             ext4_write_at(&mut ext4.dev, fs_inner, &mut *of, buf).map_err(|_| VfsFsError::IO)?;
             Ok(buf.len())
         })
     }
 
     fn read_at(&self, offset: usize, buf: &mut [u8]) -> Result<usize, VfsFsError> {
+        if !self.flags.readable() {
+            return Err(VfsFsError::PermissionDenied);
+        }
         let data = self.with_ext4_mut(|ext4| {
             let fs_inner = ext4.fs.as_mut().ok_or(VfsFsError::IO)?;
             let mut of = self.of.lock();
@@ -90,6 +105,9 @@ impl File for Ext4File {
     }
 
     fn write_at(&self, offset: usize, buf: &[u8]) -> Result<usize, VfsFsError> {
+        if !self.flags.writable() {
+            return Err(VfsFsError::PermissionDenied);
+        }
         self.with_ext4_mut(|ext4| {
             let fs_inner = ext4.fs.as_mut().ok_or(VfsFsError::IO)?;
             let mut of = self.of.lock();
@@ -137,7 +155,7 @@ impl File for Ext4File {
     }
 
     fn getdents64(&self, max_len: usize) -> Result<Vec<u8>, VfsFsError> {
-        if max_len == 0 {
+             if max_len == 0 {
             return Ok(Vec::new());
         }
 
@@ -214,7 +232,7 @@ impl File for Ext4File {
 
                 let name_base = base + hdr_len;
                 stream[name_base..name_base + name_len].copy_from_slice(entry.name);
-                stream[name_base + name_len] = 0;
+                stream[name_base + name_len] = 0; // cString push 0
             }
         }
 
@@ -251,19 +269,28 @@ impl VfsFs for Ext4Fs {
 
     fn open(&mut self, mount_fs: MountFs, path: &str, flags: OpenFlags) -> Result<Arc<dyn File>, VfsFsError> {
         let fs_inner = self.fs.as_mut().ok_or(VfsFsError::IO)?;
-        let mut of = ext4_open(&mut self.dev, fs_inner, path, flags.create).map_err(|_| VfsFsError::IO)?;
-        if flags.append {
+        if flags.contains(OpenFlags::APPEND) && !flags.writable() {
+            return Err(VfsFsError::PermissionDenied);
+        }
+        let mut of = ext4_open(
+            &mut self.dev,
+            fs_inner,
+            path,
+            flags.contains(OpenFlags::CREAT),
+        )
+        .map_err(|_| VfsFsError::IO)?;
+        if flags.contains(OpenFlags::APPEND) {
             let end = of.inode.size() as u64;
             ext4_lseek(&mut of, end);
         }
-        if flags.truncate {
-            if flags.write {
+        if flags.contains(OpenFlags::TRUNC) {
+            if flags.writable() {
                 ext4_truncate(&mut self.dev, fs_inner, path, 0).map_err(|_| VfsFsError::IO)?;
             } else {
                 return Err(VfsFsError::PermissionDenied);
             }
         }
-        Ok(Arc::new(Ext4File::new(mount_fs, of)))
+        Ok(Arc::new(Ext4File::new(mount_fs, of, flags)))
     }
 
     fn name(&self) -> Result<alloc::string::String, VfsFsError> {

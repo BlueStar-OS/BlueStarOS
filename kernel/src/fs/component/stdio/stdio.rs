@@ -102,7 +102,7 @@ pub fn print(fmt: fmt::Arguments) {
 }
 
 pub fn stdin_file() -> Arc<dyn File> {
-    let _ = OpenFlags::RDONLY;
+    let _ = OpenFlags::empty();
     Arc::new(Stdin)
 }
 

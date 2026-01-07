@@ -74,7 +74,7 @@ pub struct TaskControlBlock{
         stride:usize,                                   //步长
         ticket:usize,                                   //权重
         pub file_descriptor:Vec<Option<Arc<dyn File>>>,       //文件描述符表
-        cwd:String,         //进程工作的路径 默认/
+        pub cwd:String,         //进程工作的路径 默认/
         pub parent:Option<Weak<UPSafeCell<TaskControlBlock>>>,                  //父进程弱引用
         pub childrens:Vec<Arc<UPSafeCell<TaskControlBlock>>>            //子进程强引用
 }
@@ -214,8 +214,18 @@ impl TaskControlBlock {
             //加载错误,直接返回
             return false;
         }
+        self.new_exec_task_with_elf(path, argv, argc, &elf_data)
+    }
+
+    pub fn new_exec_task_with_elf(
+        &mut self,
+        path: &str,
+        argv: Vec<String>,
+        argc: usize,
+        elf_data: &[u8],
+    ) -> bool {
         debug!("Load success");
-        let (mut memset, elf_entry, user_sp, kernel_sp) = MapSet::from_elf(&elf_data);
+        let (mut memset, elf_entry, user_sp, kernel_sp) = MapSet::from_elf(elf_data);
         let task_cx = TaskContext::return_trap_new(kernel_sp);
         let kernel_satp = KERNEL_SPACE.lock().table.satp_token();
         let user_satp = memset.table.satp_token();
@@ -815,8 +825,13 @@ impl TaskManager {//全局唯一
         if task.file_descriptor[fd].is_none() {
             return -1;
         }
-        task.file_descriptor[fd] = None;
-        0
+        task.file_descriptor[fd].take();
+        if task.file_descriptor[fd].is_none() {
+            return 0;
+        }else {
+            error!("Close fd :{} failed!",fd);
+            return -1;    
+        }
     }
 
 

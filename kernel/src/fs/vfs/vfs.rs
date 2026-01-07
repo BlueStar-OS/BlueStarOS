@@ -2,6 +2,7 @@ use alloc::string::String;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::any::Any;
+use bitflags::bitflags;
 use spin::Mutex;
 use crate::fs::vfs::vfserror::{VfsFsError};
 
@@ -12,39 +13,32 @@ pub enum EntryType {
     Dir
 }
 
-#[derive(Debug, Clone, Copy)]
-pub struct OpenFlags {
-    pub read: bool,
-    pub write: bool,
-    pub append: bool,
-    pub create: bool,
-    pub truncate: bool,
+bitflags! {
+    pub struct OpenFlags: usize {
+        const RONLY = 0;
+        const WRONLY = 1 << 0;
+        const RDWR = 1 << 1;
+        const CREAT = 1 << 6;
+        const TRUNC = 1 << 9;
+        const APPEND = 1 << 10;
+        const DIRECTORY = 1 << 21;
+    }
 }
 
 impl OpenFlags {
-    pub const RDONLY: Self = Self {
-        read: true,
-        write: false,
-        append: false,
-        create: false,
-        truncate: false,
-    };
+    pub const ACCMODE_MASK: usize = 0x3;
 
-    pub const WRONLY: Self = Self {
-        read: false,
-        write: true,
-        append: false,
-        create: false,
-        truncate: false,
-    };
+    pub fn accmode(self) -> usize {
+        self.bits() & Self::ACCMODE_MASK
+    }
 
-    pub const RDWR: Self = Self {
-        read: true,
-        write: true,
-        append: false,
-        create: false,
-        truncate: false,
-    };
+    pub fn readable(self) -> bool {
+        self.accmode() != 0x001
+    }
+
+    pub fn writable(self) -> bool {
+        matches!(self.accmode(), 0x001 | 0x002)
+    }
 }
 
 #[repr(C)]
@@ -68,6 +62,7 @@ pub struct LinuxDirent64 {
     pub d_off: u64,
     pub d_reclen: u16,
     pub d_type: u8,
+    // ..filename
 }
 
 pub trait File: Send + Sync {

@@ -30,8 +30,8 @@ img: build
 	# 3) 写入 MBR(dos) 分区表（使用扇区单位的旧式 sfdisk 输入格式，兼容性更好）
 	printf '%s\n' \
 		'2048,122880,83,*' \
-		'124928,20480,0e' \
-		'145408,30720,0c' \
+		'124928,20480,0c' \
+		'145408,30720,83' \
 		'176128,28672,0c' \
 	| sudo sfdisk $(KERNEL_IMG)
 	# 4) 把镜像绑定为 loop 设备，并让内核扫描分区（-P 会创建 /dev/loopXp1..p4）
@@ -39,8 +39,8 @@ img: build
 	echo "Using loop device: $$LOOPDEV"
 	# 5) 对每个分区单独 mkfs（mkfs 作用在分区范围上，而不是整盘）
 	sudo mkfs.ext4 -O ^flex_bg,^metadata_csum -F $${LOOPDEV}p1
-	sudo mkfs.vfat -F 16 $${LOOPDEV}p2
-	sudo mkfs.vfat -F 32 $${LOOPDEV}p3
+	sudo mkfs.vfat -F 32 $${LOOPDEV}p2
+	sudo mkfs.ext4 -O ^flex_bg,^metadata_csum -F $${LOOPDEV}p3
 	sudo mkfs.vfat -F 32 $${LOOPDEV}p4
 	# 6) 只挂载第一个分区，把编译好的用户程序拷贝进去
 	TMPDIR=$$(mktemp -d)

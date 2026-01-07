@@ -168,7 +168,7 @@ pub fn vfs_stat(path: &str) -> Result<VfsStat, VfsFsError> {
     guard.stat(&sub)
 }
 
-/// remove：删除给定路径的文件或目录
+/// remove：删除给定路径的文件
 pub fn vfs_remove(path: &str) -> Result<(), VfsFsError> {
     let (mnt, abs, sub) = resolve_mount(path)?;
 

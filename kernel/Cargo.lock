@@ -163,7 +163,6 @@ dependencies = [
 [[package]]
 name = "rsext4"
 version = "0.1.0"
-source = "git+https://github.com/Starry-OS/rsext4#42847fe184691ff75a21f2b1bdf564f75945f797"
 dependencies = [
  "bitflags 2.10.0",
  "lazy_static",

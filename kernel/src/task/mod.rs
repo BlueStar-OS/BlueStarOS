@@ -8,7 +8,7 @@ use log::{debug, error, info, warn};
 /// app_id 从 0 开始
 pub fn file_loader(file_path: &str) -> Vec<u8> {
     debug!("Eter in loader");
-    let fd =match vfs_open(file_path, OpenFlags::RDONLY){
+    let fd =match vfs_open(file_path, OpenFlags::empty()){
         Ok(res)=>{
             res
         }

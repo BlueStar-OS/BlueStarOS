@@ -158,9 +158,11 @@ pub fn sys_getppid() -> isize {
 pub const O_RDONLY: usize = 0;
 pub const O_WRONLY: usize = 1;
 pub const O_RDWR: usize = 2;
-pub const O_CREAT: usize = 1 << 6;
+pub const O_CREAT: usize = 0x40;
+pub const O_CREATE: usize = O_CREAT;
 pub const O_TRUNC: usize = 1 << 9;
 pub const O_APPEND: usize = 1 << 10;
+pub const O_DIRECTORY: usize = 0x0200000;
 
 pub const SEEK_SET: usize = 0;
 pub const SEEK_CUR: usize = 1;
@@ -277,21 +279,25 @@ pub fn sys_lseek(fd: usize, offset: isize, whence: usize) -> isize {
 pub fn sys_fork()->isize{
     sys_call(SYS_CLONE, [0, 0, 0, 0, 0, 0])
 }
+
+pub fn sys_clone(flags: usize, stack: usize, ptid: usize, tls: usize, ctid: usize) -> isize {
+    sys_call(SYS_CLONE, [flags, stack, ptid, tls, ctid, 0])
+}
 pub fn sys_exec(path:&str)->isize{
-    let mut st = String::from(path);
-    st.push('\0');
-    sys_call(SYS_EXECVE, [st.as_ptr() as usize, 0, 0, 0, 0, 0])
+    sys_execve(path, core::ptr::null(), core::ptr::null())
 }
 
-pub fn sys_exec_args(path: &str, argv_ptrs: *const usize, argc: usize) -> isize {
+pub fn sys_execve(path: &str, argv_ptrs: *const usize, envp_ptrs: *const usize) -> isize {
     let mut st = String::from(path);
     st.push('\0');
-    // NOTE: kernel currently treats SYS_EXECVE as sys_exec(path, argv, argc).
-    // Pass argc in a2 to keep existing argv parsing working.
     sys_call(
         SYS_EXECVE,
-        [st.as_ptr() as usize, argv_ptrs as usize, argc, 0, 0, 0],
+        [st.as_ptr() as usize, argv_ptrs as usize, envp_ptrs as usize, 0, 0, 0],
     )
+}
+
+pub fn sys_exec_args(path: &str, argv_ptrs: *const usize) -> isize {
+    sys_execve(path, argv_ptrs, core::ptr::null())
 }
 
 pub fn sys_pipe(fds_ptr: *mut i32) -> isize {

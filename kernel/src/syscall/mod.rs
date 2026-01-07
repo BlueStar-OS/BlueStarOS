@@ -74,9 +74,12 @@ pub fn syscall_handler(id:usize,arg:[usize;6]) -> isize {
         SYS_NEWFSTATAT => sys_stat(arg[1], arg[2]),
         // fstat(fd, statbuf)
         SYS_FSTAT => sys_fstat(arg[0], arg[1]),
-        SYS_CLONE => sys_fork(),
-        SYS_EXECVE => sys_exec(arg[0], arg[1], arg[2]),
-        SYS_WAIT4 => sys_wait(arg[1]),
+        SYS_CLONE => sys_clone(arg[0], arg[1], arg[2], arg[3], arg[4]),
+        SYS_EXECVE => sys_execve(arg[0], arg[1], arg[2]),
+        SYS_WAIT4 => sys_wait4(arg[0], arg[1], arg[2]),
+
+        SYS_GETTIMEOFDAY => sys_gettimeofday(arg[0], arg[1]),
+        SYS_TIMES => sys_times(arg[0]),
 
         // mkdirat(dirfd, pathname, mode)
         // oscomp user/lib/syscall.c implements mkdir() via mkdirat(AT_FDCWD,...,mode)
@@ -100,7 +103,7 @@ pub fn syscall_handler(id:usize,arg:[usize;6]) -> isize {
         SYS_UMOUNT2 => sys_umount2(arg[0], arg[1]),
 
         // Not implemented yet in this kernel:
-        SYS_GETTIMEOFDAY | SYS_TIMES | SYS_NANOSLEEP | SYS_SETPRIORITY | SYS_LINKAT => {
+        SYS_NANOSLEEP | SYS_SETPRIORITY | SYS_LINKAT => {
             error!("Unimplemented syscall id={}", id);
             -1
         }

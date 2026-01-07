@@ -223,10 +223,11 @@ mod command {
         for s in arg_strings.iter() {
             argv_ptrs.push(s.as_ptr() as usize);
         }
+        argv_ptrs.push(0);
 
         let pid = sys_fork();
         if pid == 0 {
-            let ret = sys_exec_args(&path, argv_ptrs.as_ptr(), argv_ptrs.len());
+            let ret = sys_exec_args(&path, argv_ptrs.as_ptr());
             println!("exec failed, ret={};", ret);
             sys_exit(1);
         }
