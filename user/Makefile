@@ -6,11 +6,12 @@ TARGET := riscv64gc-unknown-none-elf
 BUILD_DIR := target/$(TARGET)/release
 BINS := $(patsubst src/bin/%.rs,%,$(wildcard src/bin/*.rs))
 KERNEL_IMG := ../kernel/disk.img
+SDCARD_IMG := ../kernel/sdcard.img
 OSCOMP_ELF_DIR := ../kernel/testsuits-for-oskernel/riscv-syscalls-testing/user/build/riscv64
 
 .ONESHELL:
 
-.PHONY: all build img makeimg clean
+.PHONY: all build img consent_img makeimg clean
 
 all: build
 
@@ -44,8 +45,11 @@ img: build
 	sudo mkfs.vfat -F 32 $${LOOPDEV}p4
 	# 6) 只挂载第一个分区，把编译好的用户程序拷贝进去
 	TMPDIR=$$(mktemp -d)
+	TMPDIR2=$$(mktemp -d)
 	echo "Mounting $${LOOPDEV}p1 at $$TMPDIR"
 	sudo mount $${LOOPDEV}p1 $$TMPDIR
+	sudo mount $${LOOPDEV}p2 $$TMPDIR2
+	sudo sh -c 'printf "%s\n" hellofat32 > "'$$TMPDIR2'/fat32.txt"'
 	sudo mkdir -p $$TMPDIR/test
 	for b in $(BINS); do
 		echo "Copying $$b..."
@@ -55,12 +59,51 @@ img: build
 	if [ -d "$(OSCOMP_ELF_DIR)" ]; then
 		echo "Copying oscomp test ELFs from $(OSCOMP_ELF_DIR)..."
 		sudo mkdir -p $$TMPDIR/oscomp
+		sudo mkdir -p $$TMPDIR2/oscomp
+
 		for f in $(OSCOMP_ELF_DIR)/* ; do
 			if [ -f "$$f" ]; then
 				name=$$(basename $$f)
 				echo "  Copying oscomp $$name..."
 				sudo cp "$$f" "$$TMPDIR/oscomp/$$name"
+				sudo cp "$$f" "$$TMPDIR2/oscomp/$$name"
 				sudo chmod +x "$$TMPDIR/oscomp/$$name"
+				sudo chmod +x "$$TMPDIR2/oscomp/$$name"
+			fi
+		done
+	else
+		echo "Skip oscomp copy: $(OSCOMP_ELF_DIR) not found (build oscomp user first)."
+	fi
+	sync
+	sudo umount $$TMPDIR
+	sudo umount $$TMPDIR2
+	rmdir $$TMPDIR
+	rmdir $$TMPDIR2
+	# 7) 收尾：detach loop 设备，避免影响下一次 make img
+	sudo losetup -d $$LOOPDEV
+
+consent_img: build
+	@echo "Creating $(SDCARD_IMG) (raw FAT32, no partition table)..."
+	dd if=/dev/zero of=$(SDCARD_IMG) bs=1M count=128
+	LOOPDEV=$$(losetup -j $(SDCARD_IMG) | cut -d: -f1)
+	if [ -n "$$LOOPDEV" ]; then
+		echo "Detaching loop device $$LOOPDEV"
+		sudo losetup -d $$LOOPDEV || true
+	fi
+	LOOPDEV=$$(sudo losetup -f --show $(SDCARD_IMG))
+	echo "Using loop device: $$LOOPDEV"
+	sudo mkfs.vfat -F 32 $$LOOPDEV
+	TMPDIR=$$(mktemp -d)
+	echo "Mounting $$LOOPDEV at $$TMPDIR"
+	sudo mount $$LOOPDEV $$TMPDIR
+	if [ -d "$(OSCOMP_ELF_DIR)" ]; then
+		echo "Copying oscomp test ELFs from $(OSCOMP_ELF_DIR) to FAT32 root..."
+		for f in $(OSCOMP_ELF_DIR)/* ; do
+			if [ -f "$$f" ]; then
+				name=$$(basename $$f)
+				echo "  Copying $$name..."
+				sudo cp "$$f" "$$TMPDIR/$$name"
+				sudo chmod +x "$$TMPDIR/$$name"
 			fi
 		done
 	else
@@ -69,9 +112,9 @@ img: build
 	sync
 	sudo umount $$TMPDIR
 	rmdir $$TMPDIR
-	# 7) 收尾：detach loop 设备，避免影响下一次 make img
 	sudo losetup -d $$LOOPDEV
 
 clean:
 	cargo clean
 	rm -f $(KERNEL_IMG)
+	rm -f $(SDCARD_IMG)

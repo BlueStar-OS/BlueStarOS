@@ -323,6 +323,20 @@ impl File for RamFile {
         Ok(n)
     }
 
+    fn read_at(&self, offset: usize, buf: &mut [u8]) -> Result<usize, VfsFsError> {
+        if !self.flags.readable() {
+            return Err(VfsFsError::PermissionDenied);
+        }
+        self.with_fs(|fs| fs.file_read_at(self.inode, offset, buf))
+    }
+
+    fn write_at(&self, offset: usize, buf: &[u8]) -> Result<usize, VfsFsError> {
+        if !self.flags.writable() {
+            return Err(VfsFsError::PermissionDenied);
+        }
+        self.with_fs_mut(|fs| fs.file_write_at(self.inode, offset, buf))
+    }
+
     fn lseek(&self, offset: isize, whence: usize) -> Result<usize, VfsFsError> {
         let cur = *self.offset.lock() as i64;
         let end = self.with_fs(|fs| {

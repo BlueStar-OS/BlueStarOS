@@ -62,6 +62,7 @@ pub fn PageFaultHandler(faultVAddr:VirAddr){
         //2.分配物理页帧挂载到对应的maparea下面
         //3.设置合法页表项
         //一部到位
+        
         memset.findarea_allocFrame_and_setPte(contain_vpn);
     }
 

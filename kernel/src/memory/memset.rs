@@ -7,8 +7,10 @@ use log::warn;
 use log::{debug, error, trace};
 use riscv::paging::PTE;
 use core::arch::asm;
+use core::cell::RefMut;
     use riscv::register::satp;
     use crate::fs::vfs::File;
+    use crate::task::TaskManagerInner;
     use crate::task::getapp_kernel_sapce;
     use crate::task::{TASK_MANAER, file_loader};
 
@@ -312,6 +314,40 @@ impl MapArea {
     
     
 }
+
+bitflags! {
+    pub struct CloneFlags:usize{
+        const CSIGNAL            = 0x000000ffusize; // 低 8 位：子进程退出/停止时向父进程发送的信号（如 SIGCHLD）
+
+        const CLONE_VM           = 0x00000100usize; // 共享内存地址空间（线程语义；不共享则类似 fork 的独立地址空间）
+        const CLONE_FS           = 0x00000200usize; // 共享文件系统信息（cwd/root/umask 等）
+        const CLONE_FILES        = 0x00000400usize; // 共享打开文件表（fd table）
+        const CLONE_SIGHAND      = 0x00000800usize; // 共享信号处理器（signal handlers）
+        const CLONE_PIDFD        = 0x00001000usize; // 返回 pidfd（较新内核特性）
+        const CLONE_PTRACE       = 0x00002000usize; // 让新进程继承被 ptrace 跟踪的状态
+        const CLONE_VFORK        = 0x00004000usize; // vfork 语义：父进程阻塞直到子进程 exec/exit
+        const CLONE_PARENT       = 0x00008000usize; // 新进程的父进程设为当前进程的父进程（"兄弟" 关系）
+        const CLONE_THREAD       = 0x00010000usize; // 同一线程组（共享 TGID；通常需要配合 VM/FILES/SIGHAND）
+        const CLONE_NEWNS        = 0x00020000usize; // 新的 mount namespace（挂载命名空间）
+        const CLONE_SYSVSEM      = 0x00040000usize; // 共享 System V semaphore undo 列表
+        const CLONE_SETTLS       = 0x00080000usize; // 设置 TLS（线程本地存储，如 %fs/%gs 基址）
+        const CLONE_PARENT_SETTID= 0x00100000usize; // 在父进程地址空间写入子线程 TID（parent_tidptr）
+        const CLONE_CHILD_CLEARTID=0x00200000usize; // 在线程退出时清零 child_tidptr 并做 futex 唤醒
+        const CLONE_DETACHED     = 0x00400000usize; // 旧标志：分离线程（历史遗留，现代内核基本忽略）
+        const CLONE_UNTRACED     = 0x00800000usize; // 新进程不可被 ptrace 跟踪（或不继承跟踪）
+        const CLONE_CHILD_SETTID = 0x01000000usize; // 在子进程地址空间写入自身 TID（child_tidptr）
+        const CLONE_NEWCGROUP    = 0x02000000usize; // 新的 cgroup namespace
+        const CLONE_NEWUTS       = 0x04000000usize; // 新的 UTS namespace（hostname/domainname）
+        const CLONE_NEWIPC       = 0x08000000usize; // 新的 IPC namespace（System V IPC/消息队列等）
+        const CLONE_NEWUSER      = 0x10000000usize; // 新的 user namespace（uid/gid 映射）
+        const CLONE_NEWPID       = 0x20000000usize; // 新的 PID namespace
+        const CLONE_NEWNET       = 0x40000000usize; // 新的 network namespace
+        const CLONE_IO           = 0x80000000usize; // 共享 I/O 上下文（ioprio 等）
+
+        const CLONE_CLEAR_SIGHAND= 0x1_0000_0000usize; // 清除共享信号处理器（配合特定 clone 场景，较新/少用）
+    }
+}
+
 impl MapSet {
 
     pub fn is_mmap_vpn(&self, vpn: VirNumber) -> bool {
@@ -319,13 +355,16 @@ impl MapSet {
     }
 
     ///复制Mapset 解析每一个maparea的页表，申请新页然后将数据搬过去
-    pub fn clone_mapset(&mut self)->Self{
+    /// `is_holeshare` : 共享所有除了pid，还是不共享所有
+    pub fn clone_mapset(&mut self,is_holeshare:bool)->Option<Self>{
         // 目标：为 fork 复制一份“独立”的地址空间。
         // - DEFAULT + MAPED：逐页分配新物理页帧，建立相同的页表映射，并复制页内容
         // - DEFAULT + INDENTICAL：建立相同的恒等映射（不分配新页帧）
         // - MMAP：只复制虚拟地址空间的“预留信息”（MapArea 元数据），不建立页表项、不分配物理页
         //
         // 注意：当前实现是“全量拷贝”（不是 COW），所以父子进程互不影响。
+
+        
 
         // 1) 创建一个空的 MapSet，先把 trap 映射补齐（trap 映射不是通过 MapArea 管理的）
         let mut new_set = MapSet::new_bare();
@@ -386,7 +425,7 @@ impl MapSet {
             new_set.areas.push(new_area);
         }
 
-        new_set
+        Some(new_set)
     }
     
 
@@ -912,13 +951,21 @@ impl MapSet {
 
     ///从elf解析数据创建应用地址空间 Mapset entry user_stack,kernel_sp
     /// elf_data: ELF 文件数据（可以从文件系统读取）
-    pub fn from_elf(elf_data:&[u8])->(Self,usize,VirAddr,usize){ 
+    pub fn from_elf(elf_data:&[u8])->Option<(Self,usize,VirAddr,usize)>{ 
         let mut memory_set = Self::new_bare();
         // map program headers of elf, with U flag
-        let elf = xmas_elf::ElfFile::new(elf_data).unwrap();
+        let re = xmas_elf::ElfFile::new(elf_data);
+        if re.is_err(){
+            warn!("Can't parsing this raw data to elf");
+            return None;
+        }
+        let elf = re.expect("Kernel error");
         let elf_header = elf.header;
         let magic = elf_header.pt1.magic;
-        assert_eq!(magic, [0x7f, 0x45, 0x4c, 0x46], "invalid elf!");
+        if magic != [0x7f, 0x45, 0x4c, 0x46]{
+            warn!("not a elf file");
+            return None;
+        }
         let ph_count = elf_header.pt2.ph_count();
         let mut max_end_vpn = VirNumber(0);//为elf结尾所在段+1
         let entry_point = elf.header.pt2.entry_point();
@@ -987,12 +1034,14 @@ impl MapSet {
 
         // 分配并映射内核栈（使用全局分配器，不再依赖 appid）
         let kernel_stack_top = Self::alloc_kernel_stack();
+        Some(
         (
             memory_set,
             entry_point as usize,
             user_sp,
             kernel_stack_top
         )
+         )
     }
 
     pub(crate) fn alloc_kernel_stack() -> usize {

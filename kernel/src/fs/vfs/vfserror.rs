@@ -19,6 +19,7 @@ pub enum VfsFsError {
     NotSupported,
     Busy,
     NoSpace,
+    NoDevice,
 }
 
 
@@ -42,6 +43,7 @@ impl Display for VfsFsError {
             Self::NotSupported => write!(f, "NotSupported"),
             Self::Busy => write!(f, "Busy"),
             Self::NoSpace => write!(f, "NoSpace"),
+            Self::NoDevice => write!(f, "NoDevice"),
         }
     }
 }

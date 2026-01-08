@@ -189,10 +189,12 @@ pub extern "C" fn kernel_trap_handler(){//内核专属trap（目前不应该被�
             PageFaultHandler(VirAddr(stval_val));
         }
         Trap::Interrupt(Interrupt::SupervisorTimer)=>{
-           // print!("time");
+
+            // 处理进程信号
+            TASK_MANAER.resolve_current_task_signal();
+           
             set_next_timeInterupt();
-            //error!("timer interrupt");
-             //print!("time");
+
             TASK_MANAER.suspend_and_run_task();
         }
         Trap::Interrupt(Interrupt::SupervisorExternal)=>{
@@ -203,14 +205,14 @@ pub extern "C" fn kernel_trap_handler(){//内核专属trap（目前不应该被�
             panic!("Unknown trap from user: {:?}", scauses.cause())
         }
     }
-app_entry_point();//传入特定参数，返回回去
+    app_entry_point();//传入特定参数，返回回去
 }
 
 pub fn no_return_start()->!{
 panic("Start Function you ret ,WTF????");
 }
 
-pub extern "C" fn kernel_traped_forbid(){//内核专属trap目前只支持时钟设置
+pub extern "C" fn kernel_traped_forbid(){
     let scauses = scause::read();
     let sepc_val = sepc::read();
     let stval_val = stval::read();

@@ -30,14 +30,18 @@ use crate::{task::TaskContext, trap::TrapContext};
         ///内核的trap独立运行栈 栈底
         pub fn kernel_trap_run_stack_bottom();
 }
+
+/// consent mode
+pub static mut CONSENT:bool = false;
+
 ///MB的简单封装
 pub const  MB:usize=1024*1024;
 pub const  PAGE_SIZE:usize=4096;//每个页面大小4kb
-pub const KERNEL_HEAP_SIZE:usize=10*MB;//内核堆大小，10mb足以了，后期可以调整，主要是init程序加载时的vec比较大。
+pub const KERNEL_HEAP_SIZE:usize=30*MB;//内核堆大小，30mb足以了，后期可以调整，主要是init程序加载时的vec比较大。
 pub const KERNEL_STACK_SIZE:usize=PAGE_SIZE*4;//应用内核栈有四个页面的大小
 pub static mut KERNEL_HEADP:[u8;KERNEL_HEAP_SIZE]=[0;KERNEL_HEAP_SIZE];//内核堆实例
 pub const  PAGE_SIZE_BITS:usize=12;//2^12=4096 4kb
-pub const MEMORY_SIZE:usize=40*MB;//总可用空闲物理内存大小
+pub const MEMORY_SIZE:usize=128*MB;//总可用空闲物理内存大小
 pub const CPU_CIRCLE:usize=12_500_000;
 ///使用虚拟高地址并且刚好留够一个页面,代表开始的第一个地址
 pub const TRAP_BOTTOM_ADDR:usize=usize::MAX-PAGE_SIZE+1;

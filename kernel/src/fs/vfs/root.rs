@@ -5,7 +5,7 @@ use alloc::collections::btree_map::BTreeMap;
 use alloc::{string::String, sync::Arc};
 use rsext4::mkfs;
 use spin::Mutex;
-use crate::config::MB;
+use crate::config::{CONSENT, MB};
 use crate::fs::vfs::{MountFs, OpenFlags, VfsFsError, vfs_open};
 #[cfg(feature = "ext4")]
 use crate::driver::VirtBlk;
@@ -13,6 +13,7 @@ use crate::driver::VirtBlk;
 use crate::fs::fs_backend::{Ext4BlockDevice, Ext4Fs};
 #[cfg(feature = "ext4")]
 use crate::fs::fs_backend::RamFs;
+use crate::fs::fs_backend::*;
 #[cfg(feature = "ext4")]
 use crate::fs::partition::{DevicePartition};
 #[cfg(feature = "ext4")]
@@ -24,8 +25,11 @@ use crate::config::SECTOR_SIZE;
 use crate::sync::UPSafeCell;
 use crate::fs::vfs::vfs::VfsFs;
 use lazy_static::lazy_static;
-use log::error;
+use log::{error, warn};
 use crate::alloc::string::ToString;
+use crate::fs::vfs::{LinuxDirent64, VFS_DT_REG};
+use crate::fs::fs_backend::fat32::Fat32Fs;
+use crate::fs::vfs::{vfs_getdents64, vfs_mkdir, vfs_open as api_vfs_open, vfs_read_at, vfs_stat, vfs_write};
 /// 全局根文件系统
 lazy_static!{
 pub static ref ROOTFS: UPSafeCell<Option<RootFs>> = UPSafeCell::new(None);
@@ -180,6 +184,10 @@ impl RootFs {
                 .map_err(|_| VfsFsError::IO)?;
 
             let parts = parsing_mbr_partition(mbr).map_err(|_| VfsFsError::Invalid)?;
+            if parts.len() == 0{
+                // No partition
+                return Err(VfsFsError::Invalid);
+            }
             for (idx, entry) in parts.into_iter().enumerate() {
                 let dev = Arc::new(VBLOCK::new(blk.clone(), DevicePartition::MBR(entry)))
                     as Arc<dyn crate::fs::vfs::File>;
@@ -199,8 +207,8 @@ impl RootFs {
     pub fn init_rootfs(){
         // 挂载ramfs
         let mut mount_point:BTreeMap<MountPath,MountFs> =BTreeMap::new(); 
-        // WARN: 1MB RamFs
-        let ramfs = RamFs::new(1*MB);
+        // WARN: 5MB RamFs
+        let ramfs = RamFs::new(5*MB);
         let mount_fs:MountFs = Arc::new(Mutex::new(ramfs));
         // Mount to /
         mount_point.insert(MountPath("/".to_string()), mount_fs);
@@ -213,7 +221,64 @@ impl RootFs {
         *(ROOTFS.lock()) =Some(vfs_root); 
 
         // build vblock
-        Self::scan_and_build_vblock_device().expect("Vblock build failed!");
+        if Self::scan_and_build_vblock_device().is_err(){
+
+            // verbose
+            
+            unsafe {
+                CONSENT = true;
+            }
+
+            // 比赛fat32 sdcard环境
+            warn!("Entern consent mode!");
+            // 1) 将整盘 /vda (raw，无分区表) 挂载为 FAT32 到 /sd
+            let vda = match vfs_open("/vda", OpenFlags::empty()) {
+                Ok(f) => f,
+                Err(e) => {
+                    error!("consent mode: open /vda failed: {}", e);
+                    return;
+                }
+            };
+
+            let fat32 = match Fat32Fs::new(vda) {
+                Ok(fs) => fs,
+                Err(e) => {
+                    error!("consent mode: Fat32Fs::new failed: {}", e);
+                    return;
+                }
+            };
+            let fat32_mnt: MountFs = Arc::new(Mutex::new(fat32));
+            if fat32_mnt.lock().mount().is_err() {
+                error!("consent mode: fat32 mount failed");
+                return;
+            }
+
+            {
+                let mut rootfs_guard = ROOTFS.lock();
+                let root_mount_point = &mut rootfs_guard.as_mut().expect("root vfs not init").mount_poinr;
+                root_mount_point.insert(MountPath("/sd".to_string()), fat32_mnt);
+            }
+
+            let _ = vfs_mkdir("/bin");
+            let _ = vfs_mkdir("/mnt");
+            let _ = vfs_mkdir("/dev");
+
+            if let Ok(src) = vfs_open("/vda", OpenFlags::empty()) {
+                let rootfs_guard = ROOTFS.lock();
+                let root = rootfs_guard.as_ref().expect("root vfs not init");
+                if let Ok(Some((fs, sub))) = root.resolve_mount_point("/") {
+                    let _ = sub;
+                    let mut fs_guard = fs.lock();
+                    if let Some(ramfs) = fs_guard.as_any_mut().downcast_mut::<RamFs>() {
+                        let _ = ramfs.mkdev("/dev/vda", src.clone());
+                        let _ = ramfs.mkdev("/dev/vda2", src);
+                    }
+                }
+            }
+
+            // 比赛环境下保持根为 ramfs，并通过 /sd 直接访问官方提供的 sdcard 文件
+            return;
+        }
 
         // select first vblock use this fs and init mainfs,mount to /,umount ramfs and remount to /dev
         let vda1 = vfs_open("/vda1", OpenFlags::RDWR).expect("Can't find any vblock device");

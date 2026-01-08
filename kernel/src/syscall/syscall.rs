@@ -12,7 +12,7 @@ use crate::task::{INIT_PID, ProcessId, TaskControlBlock, TaskStatus};
 use crate::time::get_time_tick;
 use crate::{config::PAGE_SIZE, memory::{PageTable, VirAddr, VirNumber}, task::TASK_MANAER, time::{TimeVal, get_time_ms}};
 use alloc::vec;
-use crate::memory::MapSet;
+use crate::memory::{CloneFlags, MapSet};
 use crate::fs::vfs::{self, VfsFsError, normalize_path};
 use crate::fs::vfs::{vfs_fstat_kstat, vfs_getdents64, vfs_mkdir, vfs_open, vfs_stat, vfs_unlink, KStat, OpenFlags, VfsStat, VFS_DT_DIR};
 use crate::fs::vfs::File;
@@ -32,6 +32,13 @@ use crate::task::file_loader;
 #[cfg(feature = "ext4")]
 use crate::fs::fs_backend::{Ext4BlockDevice, Ext4Fs};
 
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default)]
+struct Timespec {
+    tv_sec: i64,
+    tv_nsec: i64,
+}
+
 ///SYS_UNAME系统调用
 /// 传入新旧文件name
 /// utsname结构体
@@ -45,6 +52,49 @@ struct utsname{
     version:[u8;utname_field_len], //内核版本字符串
     machine:[u8;utname_field_len], //当前硬件结构
     domainname:[u8;utname_field_len], //NIS DOMAIN name
+}
+
+pub fn sys_nanosleep(req_ptr: usize, rem_ptr: usize) -> isize {
+    if req_ptr == 0 {
+        return -1;
+    }
+
+    let user_satp = TASK_MANAER.get_current_stap();
+    let mut tb = PageTable::crate_table_from_satp(user_satp);
+    let req_pa = tb.translate(VirAddr(req_ptr));
+    if req_pa.is_none() {
+        return -1;
+    }
+    let req = unsafe { &*(req_pa.unwrap().0 as *const Timespec) };
+
+    if req.tv_sec < 0 || req.tv_nsec < 0 {
+        return -1;
+    }
+
+    let ns_total = (req.tv_sec as i128)
+        .saturating_mul(1_000_000_000i128)
+        .saturating_add(req.tv_nsec as i128);
+    let ms = if ns_total <= 0 {
+        0usize
+    } else {
+        ((ns_total + 999_999i128) / 1_000_000i128) as usize
+    };
+    let start = get_time_ms();
+    let target = start.saturating_add(ms);
+
+    while get_time_ms() < target {
+        TASK_MANAER.suspend_and_run_task();
+    }
+
+    if rem_ptr != 0 {
+        let rem_pa = tb.translate(VirAddr(rem_ptr));
+        if let Some(pa) = rem_pa {
+            unsafe {
+                *(pa.0 as *mut Timespec) = Timespec { tv_sec: 0, tv_nsec: 0 };
+            }
+        }
+    }
+    0
 }
 
 #[repr(C)]
@@ -74,10 +124,12 @@ pub fn sys_clone(flags: usize, stack: usize, ptid: usize, tls: usize, ctid: usiz
     if stack != 0 || ptid != 0 || tls != 0 || ctid != 0 {
         //error!("ptid stack tls ctid must be zero!");
         //return -1;
-
     }
+    
+    // 没传信号处理
+    sys_fork(CloneFlags::from_bits_truncate(upper),stack,ptid,tls,ctid)
 
-    sys_fork()
+    
 }
 
 pub fn sys_gettimeofday(tv_ptr: usize, _tz_ptr: usize) -> isize {
@@ -1075,8 +1127,8 @@ pub fn sys_lseek(fd: usize, offset: isize, whence: usize) -> isize {
 
 
 ///SYS_FORK系统调用
-pub fn sys_fork()->isize{
-    warn!("forlk");
+pub fn sys_fork(mode:CloneFlags,stack: usize, ptid: usize, tls: usize, ctid: usize)->isize{
+    //warn!("forlk");
     let mut inner = TASK_MANAER.task_que_inner.lock();
     let current_index = inner.current;
     let current_task = &mut inner.task_queen[current_index];
@@ -1085,7 +1137,7 @@ pub fn sys_fork()->isize{
     // clone_mapset 目前签名是 &mut self，所以这里需要拿到父进程的可变 guard。
     let new_memset = {
         let mut parent = current_task.lock();
-        parent.memory_set.clone_mapset()
+        parent.memory_set.clone_mapset(false)
     };
 
 
@@ -1104,7 +1156,11 @@ pub fn sys_fork()->isize{
     debug!("Parent:pid {} child:{}", parent_pid, child_pid);
     let shallow = core::mem::replace(&mut bad_task.memory_set, MapSet::new_bare());
     core::mem::forget(shallow);
-    bad_task.memory_set = new_memset;
+    if new_memset.is_none(){
+        error!("Process Memset clone failed!");
+        return -1;
+    }
+    bad_task.memory_set = new_memset.expect("Memset should be some");
 
     // 为子进程分配独立的内核栈，并同步到 TaskContext/TrapContext
     let child_kernel_sp = MapSet::alloc_kernel_stack();
@@ -1394,11 +1450,11 @@ pub fn sys_exit(exit_code:usize)->isize{
             pid
         }
     };
-    if current_pid == INIT_PID {
-        warn!("Init exiting (pid={}), shutting down", current_pid);
-        kprintln!("Bye");
-        shutdown();
-    }
+    //if current_pid == INIT_PID {
+      //  warn!("Init exiting (pid={}), shutting down", current_pid);
+       // kprintln!("Bye");
+        //shutdown();
+    //}
 
     // Linux 语义：exit 后任务进入 Zombie，保留 pid/exit_code，等待父进程 wait() 回收(reap)。
     // 父进程退出时，其子进程会被过继给 init(pid=1)。

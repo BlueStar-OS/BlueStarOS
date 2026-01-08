@@ -15,12 +15,18 @@ use log::warn;
 use riscv::register::sstatus;
 use riscv::register::sstatus::SPP;
 use rsext4::OpenFile;
+use rsext4::ext4_backend::datablock_cache;
 use crate::__kernel_refume;
 use crate::config::*;
 use crate::fs::vfs::File;
+use crate::fs::vfs::LinuxDirent64;
 use crate::fs::vfs::OpenFlags;
+use crate::fs::vfs::vfs_getdents64;
+use crate::fs::vfs::vfs_open;
+use crate::fs::vfs::VFS_DT_REG;
 use crate::memory::*;
 use crate::sbi::shutdown;
+use crate::task::Signal;
 use crate::task::file_loader;
 use log::debug;
 use crate::fs::component::stdio::stdio::{stdin_file, stdout_file, stderr_file};
@@ -64,6 +70,7 @@ pub struct ProcessIdAlloctor{
 
 #[derive(Clone)]
 pub struct TaskControlBlock{
+        pub signal:Vec<Signal>,
         pub pid:ProcessId,                              //进程id
         pub memory_set:MapSet,                          //程序地址空间
         pub task_statut:TaskStatus,                         //程序运行状态
@@ -225,7 +232,12 @@ impl TaskControlBlock {
         elf_data: &[u8],
     ) -> bool {
         debug!("Load success");
-        let (mut memset, elf_entry, user_sp, kernel_sp) = MapSet::from_elf(elf_data);
+        let re = MapSet::from_elf(elf_data);
+        if re.is_none() {
+            warn!("Can't create elf file");
+            return false;
+        }
+        let (mut memset, elf_entry, user_sp, kernel_sp) = re.expect("Kernel error");
         let task_cx = TaskContext::return_trap_new(kernel_sp);
         let kernel_satp = KERNEL_SPACE.lock().table.satp_token();
         let user_satp = memset.table.satp_token();
@@ -260,11 +272,16 @@ impl TaskControlBlock {
     
 
     /// 创建新任务
-    fn new(app_path: &str, _kernel_stack_id: usize,father:Option<Weak<UPSafeCell<TaskControlBlock>>>) -> Self {
+    fn new(app_path: &str, _kernel_stack_id: usize,father:Option<Weak<UPSafeCell<TaskControlBlock>>>) -> Option<Self> {
         debug!("Creating task for app_path: {}, kernel_stack_id: {}", app_path, _kernel_stack_id);
         
         let elf_data = file_loader(app_path);
-        let (mut memset, elf_entry, user_sp, kernel_sp) = MapSet::from_elf(&elf_data);
+        let re = MapSet::from_elf(&elf_data);
+        if re.is_none() {
+            warn!("Can't create elf file");
+            return None;
+        }
+        let (mut memset, elf_entry, user_sp, kernel_sp) = re.expect("Kernel error");
         let task_cx = TaskContext::return_trap_new(kernel_sp);
         let kernel_satp = KERNEL_SPACE.lock().table.satp_token();
         let user_satp = memset.table.satp_token();
@@ -282,6 +299,7 @@ impl TaskControlBlock {
         file_descriptor_table.push(Some(stderr_file()));
         
         let task_control_block = TaskControlBlock {
+            signal:Vec::new(),
             pid:ProcessId_ALLOCTOR.lock().alloc_id().expect("No Process ID Can use"),
             memory_set: memset,
             task_statut: TaskStatus::Ready,
@@ -310,7 +328,7 @@ impl TaskControlBlock {
         }
         
         debug!("Task created successfully: entry={:#x}, user_sp={:#x}", elf_entry, user_sp.0);
-        task_control_block
+        Some(task_control_block)
     }
 }
 
@@ -326,6 +344,40 @@ impl Drop for TaskControlBlock {
 
 
 impl TaskManager {//全局唯一
+
+
+    /// 处理当前task的signal 返回是否超过
+    pub fn resolve_current_task_signal(&self){
+        let inner = self.task_que_inner.lock();
+        if inner.task_queen.is_empty() {
+            drop(inner);
+            return;
+        }
+        let current = inner.current;
+        if current >= inner.task_queen.len() {
+            drop(inner);
+            return;
+        }
+        let current_task = inner.task_queen[current].clone();
+        drop(inner);
+        let signal = &mut current_task.lock().signal;
+        if signal.is_empty() {
+            return;
+        }
+
+        for sig in signal.drain(..) {
+            match sig{
+                Signal::SIGKILL=>{
+                    TASK_MANAER.kail_current_task_and_run_next();
+                }
+                _=>{
+                    //空操作
+                    warn!("Unsupport signal!");
+                }
+            }
+        }
+        debug!("Process pid:{} signal resolved",current_task.lock().pid.0);
+    }
 
     pub fn mark_current_zombie(&self, exit_code: isize) {
         let inner = self.task_que_inner.lock();
@@ -606,7 +658,7 @@ impl TaskManager {//全局唯一
         let task_index = match selected {
             Some((idx, _)) => idx,
             None => {
-                error!("No task can select");
+                warn!("No task can select");
                 shutdown();
             }
         };
@@ -672,6 +724,7 @@ impl TaskManager {//全局唯一
         debug!("task queen empty?:{}",result);
         result
     }
+
 
 
     ///运行第一个任务
@@ -868,21 +921,83 @@ lazy_static! {
 
         let mut task_deque = VecDeque::new();
         
-        // 加载init应用程序
-            debug!("Loading init lication {}...", 0);
-            // app_id 从 0 开始，kernel_stack_id 从 1 开始
-            let task = TaskControlBlock::new("/test/init",1,None);
-            //task.task_statut=TaskStatus::Ready; 在new已经设置为ready
-            task_deque.push_back(Arc::new(UPSafeCell::new(task)));
-            debug!("Application init {} loaded successfully", 0);
+        if CONSENT {
+            let dir = vfs_open("/sd", OpenFlags::DIRECTORY).expect("open /sd error");
+            let mut names: Vec<String> = Vec::new();
+
+            loop {
+                let bytes = match vfs_getdents64(&dir, 4096) {
+                    Ok(v) => v,
+                    Err(_) => break,
+                };
+                if bytes.is_empty() {
+                    break;
+                }
+
+                let mut off: usize = 0;
+                while off < bytes.len() {
+                    if off + core::mem::size_of::<LinuxDirent64>() > bytes.len() {
+                        break;
+                    }
+                    let hdr = unsafe { *(bytes.as_ptr().add(off) as *const LinuxDirent64) };
+                    let reclen = hdr.d_reclen as usize;
+                    if reclen == 0 || off + reclen > bytes.len() {
+                        break;
+                    }
+
+                    let name_off = off + core::mem::size_of::<LinuxDirent64>();
+                    let name_end = off + reclen;
+                    let mut z = name_off;
+                    while z < name_end && bytes[z] != 0 {
+                        z += 1;
+                    }
+                    let name = core::str::from_utf8(&bytes[name_off..z]).unwrap_or("");
+                    off += reclen;
+
+                    if name.is_empty() || name == "." || name == ".." {
+                        continue;
+                    }
+                    if hdr.d_type as u32 != VFS_DT_REG {
+                        continue;
+                    }
+                    names.push(String::from(name));
+                }
+            }
+
+            names.sort();
+            let mut kid: usize = 1;
+            for name in names {
+                let path = alloc::format!("/sd/{}", name);
+                if let Some(task) = TaskControlBlock::new(&path, kid, None) {
+                    task_deque.push_back(Arc::new(UPSafeCell::new(task)));
+                    kid += 1;
+                }
+            }
+            TaskManager {
+                task_que_inner: UPSafeCell::new(TaskManagerInner {
+                    task_queen: task_deque,
+                    current: 0  // 初始化为第一个任务
+                })
+            }
+            
+            
+        }else {
+            // 加载init应用程序
+                debug!("Loading init lication {}...", 0);
+                // app_id 从 0 开始，kernel_stack_id 从 1 开始
+                let task = TaskControlBlock::new("/test/init",1,None).expect("Can't load init elf");
+                //task.task_statut=TaskStatus::Ready; 在new已经设置为ready
+                task_deque.push_back(Arc::new(UPSafeCell::new(task)));
+                debug!("Application init {} loaded successfully", 0);
+            
         
-    
-        
-        TaskManager {
-            task_que_inner: UPSafeCell::new(TaskManagerInner {
-                task_queen: task_deque,
-                current: 0  // 初始化为第一个任务
-            })
+            
+            TaskManager {
+                task_que_inner: UPSafeCell::new(TaskManagerInner {
+                    task_queen: task_deque,
+                    current: 0  // 初始化为第一个任务
+                })
+            }
         }
     };
 }

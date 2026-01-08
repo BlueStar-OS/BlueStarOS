@@ -46,6 +46,8 @@ pub fn syscall_handler(id:usize,arg:[usize;6]) -> isize {
         SYS_EXIT => sys_exit(arg[0]),
         SYS_SCHED_YIELD => sys_yield(),
 
+        SYS_NANOSLEEP => sys_nanosleep(arg[0], arg[1]),
+
         SYS_GETPID => sys_getpid(),
         SYS_GETPPID => sys_getppid(),
 
@@ -103,7 +105,7 @@ pub fn syscall_handler(id:usize,arg:[usize;6]) -> isize {
         SYS_UMOUNT2 => sys_umount2(arg[0], arg[1]),
 
         // Not implemented yet in this kernel:
-        SYS_NANOSLEEP | SYS_SETPRIORITY | SYS_LINKAT => {
+        SYS_SETPRIORITY | SYS_LINKAT => {
             error!("Unimplemented syscall id={}", id);
             -1
         }

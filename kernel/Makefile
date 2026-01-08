@@ -34,6 +34,9 @@ build: user-makeimg
 user-makeimg:
 	$(MAKE) -C $(USER_DIR) img
 
+user-consent-img:
+	$(MAKE) -C $(USER_DIR) consent_img
+
 env:
 	(rustup target list | grep "riscv64gc-unknown-none-elf (installed)") || rustup target add $(TARGET)
 	cargo install cargo-binutils
@@ -51,6 +54,8 @@ clean:
 
 run: run-inner
 
+run_consent: run-consent-inner
+
 run-inner: build
 	@qemu-system-riscv64 \
 		-machine virt \
@@ -61,6 +66,20 @@ run-inner: build
 		-drive file=disk.img,format=raw,if=none,id=x0 \
 		-net none \
 		-device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0 \
+
+run-consent-inner: user-consent-img
+	@cargo build --target $(TARGET) $(MODE_ARG)
+	@qemu-system-riscv64 \
+		-machine virt \
+		-kernel $(KERNEL_ELF) \
+		-m 128M \
+		-nographic \
+		-smp 2 \
+		-bios $(BOOTLOADER) \
+		-drive file=sdcard.img,if=none,format=raw,id=x0 \
+		-device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0 \
+		-device virtio-net-device,netdev=net \
+		-netdev user,id=net
 
 debug: build
 	@tmux new-session -d \
@@ -74,4 +93,4 @@ gdbserver: build
 gdbclient:
 	@riscv64-unknown-elf-gdb -ex 'file $(KERNEL_ELF)' -ex 'set arch riscv:rv64' -ex 'target remote localhost:1234'
 
-.PHONY: build env kernel clean user user-apps disasm disasm-vim run-inner gdbserver gdbclient list-apps regen-asm
+.PHONY: build env kernel clean user user-apps disasm disasm-vim run-inner run-consent-inner run_consent gdbserver gdbclient list-apps regen-asm
