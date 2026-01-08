@@ -5,6 +5,7 @@ use alloc::vec::{Vec};
 use alloc::vec;
 use log::{debug, error, info, warn};
 use bitflags::bitflags;
+use crate::config::{app_end, app_start};
 
 bitflags!{
     /// 信号结构体 posix
@@ -47,6 +48,15 @@ bitflags!{
 /// app_id 从 0 开始
 pub fn file_loader(file_path: &str) -> Vec<u8> {
     debug!("Eter in loader");
+    if file_path == "/cinit" {
+        let start = app_start as usize;
+        let end = app_end as usize;
+        if end <= start {
+            return vec![];
+        }
+        let bytes = unsafe { core::slice::from_raw_parts(start as *const u8, end - start) };
+        return bytes.to_vec();
+    }
     let fd =match vfs_open(file_path, OpenFlags::empty()){
         Ok(res)=>{
             res

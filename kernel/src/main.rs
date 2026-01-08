@@ -39,6 +39,7 @@ use crate::{config::*, logger::kernel_info_debug, memory::allocator_init};
 use crate::memory::init_frame_allocator;
 use crate::memory::MapSet;
 global_asm!(include_str!("entry.asm"));
+global_asm!(include_str!("app.asm"));
 /// clear BSS segment
 pub fn clear_bss() {
     extern "C" {

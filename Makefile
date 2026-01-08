@@ -15,7 +15,11 @@ SBI_LOAD_ADDR := 0x80000000
 
 all: $(SBI_QEMU) $(KERNEL_QEMU)
 
-$(KERNEL_QEMU): FORCE
+.PHONY: user_build
+user_build:
+	@$(MAKE) -C user build
+
+$(KERNEL_QEMU): user_build FORCE
 	@$(MAKE) -C $(KERNEL_DIR) \
 		TARGET=$(TARGET) MODE=$(MODE) \
 		build

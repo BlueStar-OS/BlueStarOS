@@ -922,6 +922,17 @@ lazy_static! {
         let mut task_deque = VecDeque::new();
         
         if CONSENT {
+            let init_task = TaskControlBlock::new("/cinit", 1, None);
+            if init_task.is_some() {
+                let task = init_task.expect("Kernel error");
+                task_deque.push_back(Arc::new(UPSafeCell::new(task)));
+                return TaskManager {
+                    task_que_inner: UPSafeCell::new(TaskManagerInner {
+                        task_queen: task_deque,
+                        current: 0
+                    })
+                };
+            }
             let dir = vfs_open("/sd", OpenFlags::DIRECTORY).expect("open /sd error");
             let mut names: Vec<String> = Vec::new();
 
