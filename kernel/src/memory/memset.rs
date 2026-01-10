@@ -2,12 +2,13 @@ use alloc::collections::btree_map::BTreeMap;
 use bitflags::bitflags;
 use alloc::vec::Vec;
 use alloc::sync::Arc;
+use crate::memory::memset::satp::Satp;
 use alloc::sync::Weak;
 use log::warn;
 use log::{debug, error, trace};
-use riscv::paging::PTE;
 use core::arch::asm;
 use core::cell::RefMut;
+use core::hint;
     use riscv::register::satp;
     use crate::fs::vfs::File;
     use crate::task::TaskManagerInner;
@@ -45,6 +46,7 @@ use crate::trap::TrapFunction;
 #[derive(Debug,Clone, Copy)]
 pub struct VirNumRange(pub VirNumber,pub VirNumber);
 bitflags! {//MapAreaFlags 和 PTEFlags 起始全为0
+    #[derive(Debug,Clone, Copy)]
     pub struct MapAreaFlags: usize {
         ///Readable
         const R = 1 << 1;
@@ -58,6 +60,8 @@ bitflags! {//MapAreaFlags 和 PTEFlags 起始全为0
 }
 
 bitflags! {
+    #[derive(Debug,Clone, Copy)]
+
     pub struct MmapProt: usize {
         const READ = 0x1;
         const WRITE = 0x2;
@@ -66,6 +70,7 @@ bitflags! {
 }
 
 bitflags! {
+    #[derive(Debug,Clone, Copy)]
     pub struct MmapFlags: usize {
         const SHARED = 0x01;
         const PRIVATE = 0x02;
@@ -230,6 +235,12 @@ pub struct MapSet{
     pub brk:VirAddr, //进程brk点
 }
 impl MapArea {
+    
+
+
+
+
+
     ///range,闭区间
     pub fn new(range:VirNumRange,flags:MapAreaFlags,map_type:MapType)->Self{
         MapArea{
@@ -242,22 +253,33 @@ impl MapArea {
     }
     
 
-    pub fn map_one(&mut self,vpn:VirNumber,page_table:&mut PageTable){//带自动分配物理页帧的
+    /// `first_vpn_ppn` 补丁： 是否已经映射过这个vpn，如果有，请把那个vpn对应的ppnclone一份
+    pub fn map_one(&mut self,vpn:VirNumber,page_table:&mut PageTable,first_vpn_ppn:Option<Arc<FramTracker>>){//带自动分配物理页帧的
         //可能是恒等和普通映射
         let ppn:PhysiNumber;
-        if page_table.is_maped(vpn){return;}//如果映射过了就跳过,防止多个一个vpn对应多个ppn，但是只有最后的ppn有效
+        let is_maped = page_table.is_maped(vpn); // 如果这个vpn已经映射并且合法，应该让它指向相同的ppn并且权限合并
         match self.map_type{
             MapType::Indentical=>{
                // trace!("Identical map");
                 ppn =PhysiNumber(vpn.0) //内核特权高大上，恒等映射 内核映射所有物理帧，但是不能占用和分配对应Framtracer，需要构建一个特殊页表
             }
             MapType::Maped=>{
-               let frame= alloc_frame().expect("Memory Alloc Failed By map_one");
-                ppn=frame.ppn;
-                self.frames.insert(vpn, Arc::new(frame) ); //管理最终pte对应的frametracer，分工明确 巧妙！！！！
-                trace!("map vpn:{}->ppn:{}",vpn.0,ppn.0)
+
+                if !is_maped {
+                    let frame= alloc_frame().expect("Memory Alloc Failed By map_one");
+                    ppn=frame.ppn;
+                    self.frames.insert(vpn, Arc::new(frame) ); //管理最终pte对应的frametracer，分工明确 巧妙！！！！
+                    trace!("map vpn:{}->ppn:{}",vpn.0,ppn.0)
+                }else {
+                    let last = first_vpn_ppn.expect("Please give last vpn's ppn");
+                    // 寻找已经映射的vpn的那个ppn是多少，不能重复分配，但是执行同一个ppn号，也要防止doublefree.这里Arc可以保证
+                    ppn = last.ppn;
+                    self.frames.insert(vpn, last);
+                }
+                
             }
         };
+        // 权限合并
         page_table.map(vpn, ppn, self.flags.into());
         //debug!("Map Aread map vpn:{} -> ppn:{}",vpn.0,ppn.0);
     }
@@ -272,12 +294,12 @@ impl MapArea {
     }
 
     ///映射分割和挂载MapArea所有段,闭区间全部映射
-    pub fn map_all(&mut self,page_table:&mut PageTable){
+    pub fn map_all(&mut self,page_table:&mut PageTable,first_vpn_ppn:Option<Arc<FramTracker>>){
         let start=self.range.0;
         let end=self.range.1;
         let mut current=start;
         while current.0<=end.0 {
-            self.map_one(current, page_table);
+            self.map_one(current, page_table,first_vpn_ppn.clone());
             current.0+=1;
         }
 
@@ -295,20 +317,47 @@ impl MapArea {
 
 
     ///复制MAPED映射的数据到物理页帧,maped方式才调用它(不包含判断)  必须按照elf格式的顺序复制,传入的data需要自行截断，有栈等映射不需要复制数据
-    pub fn copy_data(&mut self,data:Option<&[u8]>,table:&mut PageTable){
-        let mut start: usize = 0;
+    pub fn copy_data(&mut self, data: Option<(usize, &[u8])>, table: &mut PageTable) {
+        if data.is_none() { return; }
+        
+        // 解构出：页内偏移量(如0x40) 和 源数据切片
+        let (mut page_offset, src_data) = data.unwrap();
+        
         let mut current_vpn = self.range.0;
-        if let None =data{return;}//不需要复制数据的话就返回了
-        let len = data.expect("No data").len();
+        let mut current_src_idx = 0; // 记录源数据已经拷贝了多少字节
+        let total_len = src_data.len();
+
         loop {
-            let src = &data.expect("No data")[start..len.min(start + PAGE_SIZE)];
-            let dst =&mut table.get_mut_byte(current_vpn).expect("Cant get mut slice")[..src.len()];
+            // 1. 计算这一页还剩多少空间可以写 (4096 - offset)
+            let available_in_page = PAGE_SIZE - page_offset;
+            
+            // 2. 计算还剩多少源数据没拷
+            let remaining_src = total_len - current_src_idx;
+            
+            // 3. 决定本次拷贝的长度：取最小值
+            let copy_len = available_in_page.min(remaining_src);
+
+            // 如果没数据可拷了，退出
+            if copy_len == 0 { break; }
+
+            // 4. 获取目标物理页（整个4096字节）
+            let dst_page = table.get_mut_byte(current_vpn).expect("Cant get mut slice");
+
+            // 5. 【关键】源数据：从 current_src_idx 往后取 copy_len 个
+            let src = &src_data[current_src_idx .. current_src_idx + copy_len];
+            
+            // 6. 【关键】目标数据：从 page_offset 往后写 copy_len 个
+            let dst = &mut dst_page[page_offset .. page_offset + copy_len];
+            
+            // 执行拷贝
             dst.copy_from_slice(src);
-            start += PAGE_SIZE;
-            if start >= len {
-                break;
-            }
+
+            // 更新游标
+            current_src_idx += copy_len;
             current_vpn.step();
+            
+            // 重点！除了第一页可能有偏移量，后续所有页都必须从 0 开始写
+            page_offset = 0; 
         }
     }
     
@@ -350,13 +399,50 @@ bitflags! {
 
 impl MapSet {
 
+    /// 打印mapset每个area的范围和权限
+    /// 打印对应页表权限
+    pub fn print_area_information(&self){
+
+        let satp = self.table.satp_token();
+        let mut tb = PageTable::crate_table_from_satp(satp);
+
+        self.areas.iter().for_each(|area|{
+            warn!("Area Viraddr {:#x}-{:#x}
+                 \nFlags {:?}",area.range.left_point().0*PAGE_SIZE,area.range.right_point().0*PAGE_SIZE+PAGE_SIZE,area.flags);
+            warn!("Every pte:\n");
+            for vpn in area.range {
+                if let Some(pte) = tb.find_pte_vpn(vpn){
+                    warn!("Virnum:{} PTEflags:{:?}",vpn.0,pte.flags());
+                }else {
+                    warn!("Virnum:{} not exist",vpn.0,);
+                };
+            }
+        });
+    }
+
+     /// 如果已经映射这个vpn，就返回这个的frametracker的clonearc
+    pub fn find_thisvpn_frame(&self,vpn:VirNumber)->Option<Arc<FramTracker>>{
+            //查找已经vpn映射过的ppn 以range.0为目标
+            let target = vpn;
+
+            let mut find_re:Option<Arc<FramTracker>> = None;
+
+            self.areas.iter().for_each(|area|{
+                let re = area.frames.get_key_value(&target);
+                if re.is_some(){
+                    find_re = Some(re.unwrap().1.clone())
+                }
+                
+            });
+            find_re
+    }
+
     pub fn is_mmap_vpn(&self, vpn: VirNumber) -> bool {
         self.areas.iter().any(|area| area.mmap.is_some() && area.range.is_contain_thisvpn(vpn))
     }
 
     ///复制Mapset 解析每一个maparea的页表，申请新页然后将数据搬过去
-    /// `is_holeshare` : 共享所有除了pid，还是不共享所有
-    pub fn clone_mapset(&mut self,is_holeshare:bool)->Option<Self>{
+    pub fn clone_mapset(&mut self)->Option<Self>{
         // 目标：为 fork 复制一份“独立”的地址空间。
         // - DEFAULT + MAPED：逐页分配新物理页帧，建立相同的页表映射，并复制页内容
         // - DEFAULT + INDENTICAL：建立相同的恒等映射（不分配新页帧）
@@ -404,9 +490,11 @@ impl MapSet {
                                     continue;
                                 }
 
+
+                                let re =new_set.find_thisvpn_frame(start);
                                 // 2.1 在新地址空间中分配页帧并建立页表项
                                 // new_area.map_one 会：alloc_frame + new_area.frames.insert + new_set.table.map
-                                new_area.map_one(vpn, &mut new_set.table);
+                                new_area.map_one(vpn, &mut new_set.table,re);
 
                                 // 2.2 拷贝父进程该页的内容到子进程
                                 // 这里直接按 PAGE_SIZE 全页拷贝（ELF 段尾的空洞也会被拷贝为 0/原值）
@@ -440,6 +528,8 @@ impl MapSet {
         let index = self.areas.iter().position(|area|{
             area.range.is_contain_thisvpn(vpn)
         }).expect("Logim ");
+        let statr = self.areas[index].range.left_point();
+        let re =self.find_thisvpn_frame(statr);
         let area=&mut self.areas[index];
         debug!("Find Map Area! vpn:{} ",vpn.0);
 
@@ -569,10 +659,12 @@ impl MapSet {
             }
         }
 
+         
+
         // Fallback:
         // - Anonymous MAP_PRIVATE mmap (or any other mmap area not handled above): allocate a fresh frame.
         // - Non-mmap areas: should usually already be mapped; but if we get here, keep old behavior.
-        area.map_one(vpn, &mut self.table);
+        area.map_one(vpn, &mut self.table,re);
     }
 
 
@@ -615,8 +707,6 @@ impl MapSet {
     ///mmap系统调用，创建一个有vpnrange的maparea，没有实际映射条目和物理页帧的maparea 
     /// Linux/POSIX: mmap(addr, len, prot, flags, fd, offset)
     /// 返回：成功返回映射起始地址；失败返回 -1
-    /// TODO FD映射 
-    /// TODO close fd 时应该先检查map
     pub fn mmap(&mut self, addr: VirAddr, len: usize, prot: usize, flags: usize, fd: i32, offset: usize, fd_backing: Option<Arc<dyn File>>) -> isize {
         //warn!("enter memset mmap");
         if len == 0 {
@@ -753,6 +843,7 @@ impl MapSet {
             },
             offset,
         };
+
 
         self.add_area(range, MapType::Maped, mapflags, None, Some(info));
         
@@ -990,13 +1081,15 @@ impl MapSet {
                 debug!("  [{}] Mapping segment: [{:#x}, {:#x}), perm: {:?}", 
                        i, start_va.0, end_va.0, map_perm);
                 
+      
                 max_end_vpn=end_va.floor_up();
+
                 memory_set.add_area(
-                    VirNumRange::new(start_va, end_va),
+                    VirNumRange::new(start_va, end_va), // bug!!!!!! 范围range权限覆盖
                     MapType::Maped,
                     map_perm,
-                    Some(&elf.input[ph.offset() as usize..(ph.offset() + ph.file_size()) as usize]),
-                    None,
+                    Some((start_va.0%PAGE_SIZE,&elf.input[ph.offset() as usize..(ph.offset() + ph.file_size()) as usize])),
+                    None
                 );//应用area默认default
             }
         }
@@ -1017,6 +1110,7 @@ impl MapSet {
             MapAreaFlags::W | MapAreaFlags::R | MapAreaFlags::U,
             None,
             None,
+            
         );
         //映射用户堆 初始0 通过brk生长---------------------------------------------+0
         let userheap_start_end_vpn = VirNumber(userstack_end_vpn.0+1);//无需guardpage，堆不会向下溢出
@@ -1034,6 +1128,11 @@ impl MapSet {
 
         // 分配并映射内核栈（使用全局分配器，不再依赖 appid）
         let kernel_stack_top = Self::alloc_kernel_stack();
+
+
+        //打印权限信息
+        //memory_set.print_area_information();
+
         Some(
         (
             memory_set,
@@ -1141,16 +1240,26 @@ impl MapSet {
     }
 
     ///输入range，maptype和flags 自动处理maparea的映射和物理帧挂载以及对应memset的pagetable映射,处理数据的复制映射   但是映射用户栈不需要数据
-    /// area_type优先级更高 其次map_type
-    pub fn add_area(&mut self,range:VirNumRange,map_type :MapType,flags:MapAreaFlags,data:Option<&[u8]>,mmap:Option<MmapInfo>){
+    pub fn add_area(&mut self,range:VirNumRange,map_type :MapType,flags:MapAreaFlags,data:Option<(usize,&[u8])>,mmap:Option<MmapInfo>){
         let mut area=MapArea::new(range, flags, map_type);
         area.mmap = mmap;
         if area.mmap.is_none() {
-            area.map_all(&mut self.table);//映射area,处理物理页帧分配逻辑
+
+            //查找已经vpn映射过的ppn 以range.0为目标
+            let target = range.left_point();
+
+            let mut find_re:Option<Arc<FramTracker>> = None;
+
+            find_re=self.find_thisvpn_frame(target);
+
+
+            // 一个area只能有一个重叠目标
+            area.map_all(&mut self.table,find_re);//映射area,处理物理页帧分配逻辑
             if let MapType::Maped = map_type{//maped方式要复制数据
                 area.copy_data(data, &mut self.table);
             }
         }
+
         self.areas.push(area);
     }
  

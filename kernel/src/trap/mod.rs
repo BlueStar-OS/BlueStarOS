@@ -168,25 +168,27 @@ pub extern "C" fn kernel_trap_handler(){//内核专属trap（目前不应该被�
             // 注意：sys_exec 可能会替换地址空间并重建 TrapContext，不能持有旧 trapcx 引用跨 syscall。
             let ret = syscall_handler(sys_id, sys_args);
             {
-                let current_trapcx = TASK_MANAER.get_current_trapcx();
+                let current_trapcx: &mut TrapContext = TASK_MANAER.get_current_trapcx();
                 debug!("lat sepc:{:#x}",current_trapcx.sepc_entry_point);
                 current_trapcx.x[10] = ret as usize;
             }
         }
         Trap::Exception(Exception::IllegalInstruction)=>{
-            panic!("User IllegalInstruction at {:#x}", sepc_val)
+            error!("User IllegalInstruction at {:#x}", sepc_val);
+            TASK_MANAER.kail_current_task_and_run_next();
+            //panic!("User IllegalInstruction at {:#x}", sepc_val)
         }
         Trap::Exception(Exception::InstructionPageFault)=>{
             error!("User InstructionPageFault at {:#x}, accessing {:#x}", sepc_val, stval_val);
-            PageFaultHandler(VirAddr(stval_val));
+            PageFaultHandler(VirAddr(stval_val),scauses);
         }
         Trap::Exception(Exception::LoadPageFault)=>{
             warn!("User LoadPageFault at {:#x}, accessing {:#x}", sepc_val, stval_val);
-            PageFaultHandler(VirAddr(stval_val));
+            PageFaultHandler(VirAddr(stval_val),scauses);
         }
         Trap::Exception(Exception::StorePageFault)=>{
             error!("User StorePageFault at {:#x}, accessing {:#x}", sepc_val, stval_val);
-            PageFaultHandler(VirAddr(stval_val));
+            PageFaultHandler(VirAddr(stval_val),scauses);
         }
         Trap::Interrupt(Interrupt::SupervisorTimer)=>{
 

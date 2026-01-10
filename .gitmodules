@@ -1,3 +1,0 @@
-[submodule "kernel/arceos"]
-	path = kernel/arceos
-	url = git@github.com:arceos-org/arceos.git

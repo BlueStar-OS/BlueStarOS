@@ -78,7 +78,7 @@ pub fn syscall_handler(id:usize,arg:[usize;6]) -> isize {
         SYS_FSTAT => sys_fstat(arg[0], arg[1]),
         SYS_CLONE => sys_clone(arg[0], arg[1], arg[2], arg[3], arg[4]),
         SYS_EXECVE => sys_execve(arg[0], arg[1], arg[2]),
-        SYS_WAIT4 => sys_wait4(arg[0], arg[1], arg[2]),
+        SYS_WAIT4 => sys_wait4(arg[0] as i32, arg[1], arg[2] as i32),
 
         SYS_GETTIMEOFDAY => sys_gettimeofday(arg[0], arg[1]),
         SYS_TIMES => sys_times(arg[0]),

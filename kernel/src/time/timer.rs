@@ -5,9 +5,11 @@ use crate::config::{CPU_CIRCLE, TIME_FREQUENT};
 use log::debug;
 
 
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default)]
 pub struct TimeVal{
     pub sec:usize,
-    pub ms:usize,
+    pub usec:usize,
 }
 
 

@@ -14,6 +14,8 @@ pub enum EntryType {
 }
 
 bitflags! {
+    #[derive(Debug,Clone, Copy)]
+
     pub struct OpenFlags: usize {
         const RONLY = 0;
         const WRONLY = 1 << 0;

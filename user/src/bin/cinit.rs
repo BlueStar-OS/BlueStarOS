@@ -15,12 +15,12 @@ const DT_REG: u8 = 8;
 fn parse_dirent_names(dir_path: &str) -> Vec<String> {
     let fd = sys_open(dir_path, O_RDONLY | O_DIRECTORY);
     if fd < 0 {
-       // println!("[consent_init] open dir failed path={} fd={}", dir_path, fd);
+        //println!("[consent_init] open dir failed path={} fd={}", dir_path, fd);
         return Vec::new();
     }
 
     let mut out: Vec<String> = Vec::new();
-    let mut buf: Vec<u8> = alloc::vec![0; 8192];
+    let mut buf: Vec<u8> = alloc::vec![0; 4096];
 
     loop {
         let n = sys_getdents64(fd as usize, buf.as_mut_ptr() as usize, buf.len());
@@ -115,22 +115,29 @@ fn run_one(bin_name: &str) {
 
     let pid = sys_fork();
     if pid == 0 {
+        //println!("Fork suc will exec");
         let ret = sys_exec_args(&p, argv_ptrs.as_ptr());
+        //println!("[consent_init] exec {} failed ret={}", path, ret);
        // println!("[consent_init] exec {} failed ret={}", path, ret);
         user_lib::syscall::sys_exit(127);
     }
     if pid < 0 {
+        //println!("[consent_init] fork failed for {} pid={}", path, pid);
         //println!("[consent_init] fork failed for {} pid={}", path, pid);
         return;
     }
 
     let mut code: isize = 0;
     let waited = sys_wait(&mut code as *mut isize);
+    //println!("[consent_init] done {} waited={} code={}", path, waited, code);
    // println!("[consent_init] done {} waited={} code={}", path, waited, code);
 }
 
 #[no_mangle]
 pub fn main() -> usize {
+
+    
+
     copy_sd_root_to_ramfs_root();
 
     let _ = chdir("/");
@@ -139,6 +146,7 @@ pub fn main() -> usize {
 
     let mut names = parse_dirent_names("/");
     names.sort();
+    //println!("all program:{:?} \n",names);
 
     for name in names.iter() {
         if name.is_empty() || name == "." || name == ".." {

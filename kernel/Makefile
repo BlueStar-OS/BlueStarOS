@@ -28,7 +28,7 @@ DISASM ?= -x
 
 # 总是重新构建：每次 build 都跑 cargo build 和 objcopy
 build: user-makeimg
-	cargo build --target $(TARGET) $(MODE_ARG)
+	cargo build --target $(TARGET) $(MODE_ARG) --offline
 	$(OBJCOPY) $(KERNEL_ELF) --strip-all -O binary $(KERNEL_BIN)
 
 user-makeimg:
@@ -68,7 +68,7 @@ run-inner: build
 		-device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0 \
 
 run-consent-inner: user-consent-img
-	@cargo build --target $(TARGET) $(MODE_ARG)
+	@cargo build --target $(TARGET) $(MODE_ARG) --offline
 	@qemu-system-riscv64 \
 		-machine virt \
 		-kernel $(KERNEL_ELF) \

@@ -32,7 +32,9 @@ use log::debug;
 use crate::fs::component::stdio::stdio::{stdin_file, stdout_file, stderr_file};
 use crate::trap::{app_entry_point, kernel_trap_handler};
 ///init进程PID
-pub const INIT_PID:usize=1;
+pub const INIT_PID:i32=1;
+/// TASK_MANAGER是否初始化，防止死循环
+pub static mut TASK_MANAGER_INIT:bool = false;
 
 ///任务上下文
 use crate::{ sync::UPSafeCell, trap::TrapContext};
@@ -59,12 +61,12 @@ pub enum TaskStatus {
 
 ///进程id 需要实现回收 rail自动分配
 #[derive(Clone)]
-pub struct  ProcessId(pub usize);
+pub struct  ProcessId(pub i32);
 
 ///进程id分配器 需要实现分配 [start,end)
 pub struct ProcessIdAlloctor{
-    current:usize,//当前的pid
-    end:usize,//最高限制的pid，可选
+    current:i32,//当前的pid
+    end:i32,//最高限制的pid，可选
     id_pool:Vec<ProcessId>
 }
 
@@ -106,7 +108,7 @@ pub struct TaskManager{//单核环境目前无竞争
 
 impl  ProcessIdAlloctor{
     ///初始化进程id分配器 start:起始分配pid end:限制最大的pid
-    pub fn initial_processid_alloctor(start:usize,end:usize)->Self{
+    pub fn initial_processid_alloctor(start:i32,end:i32)->Self{
         let id_pool :Vec<ProcessId>= Vec::new();
             ProcessIdAlloctor { current: start, end ,id_pool:id_pool}
     }
@@ -443,7 +445,7 @@ impl TaskManager {//全局唯一
         }
     }
 
-    pub fn reap_zombie_child(&self, child_pid: usize) -> Option<isize> {
+    pub fn reap_zombie_child(&self, child_pid: i32) -> Option<isize> {
         let mut inner = self.task_que_inner.lock();
         let current = inner.current;
         if inner.task_queen.is_empty() || current >= inner.task_queen.len() {
@@ -704,7 +706,6 @@ impl TaskManager {//全局唯一
         let need_swap_in = {
             let mut next = inner.task_queen[task_index].lock();
             next.task_statut = TaskStatus::Runing;
-            next.pass += next.stride;
             &mut next.task_context as *mut TaskContext
         };
 
@@ -714,7 +715,11 @@ impl TaskManager {//全局唯一
             __switch(swaped_task_cx, need_swap_in);
         }
 
+
         //任务从这里返回
+
+
+        // 编译器序言  需要依赖sp恢复寄存器 clone需要特殊处理
     }
 
     pub fn task_queen_is_empty(&self)->bool{
@@ -984,6 +989,11 @@ lazy_static! {
                     kid += 1;
                 }
             }
+
+            unsafe {
+                TASK_MANAGER_INIT = true;
+            }
+
             TaskManager {
                 task_que_inner: UPSafeCell::new(TaskManagerInner {
                     task_queen: task_deque,
@@ -1001,7 +1011,9 @@ lazy_static! {
                 task_deque.push_back(Arc::new(UPSafeCell::new(task)));
                 debug!("Application init {} loaded successfully", 0);
             
-        
+            unsafe {
+                TASK_MANAGER_INIT = true;
+            }
             
             TaskManager {
                 task_que_inner: UPSafeCell::new(TaskManagerInner {

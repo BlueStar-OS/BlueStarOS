@@ -11,14 +11,14 @@ ext4 = ["rsext4"]
 
 [dependencies]
 log = "0.4"
-bitflags = "1.2.1"
+bitflags = "2.0.2"
 buddy_system_allocator = "0.6"
-lazy_static = { version = "1.4.0", features = ["spin_no_std"] }
-riscv = { git = "https://github.com/rcore-os/riscv", features = ["inline-asm"] }
+lazy_static = { version="1.4.0", features = ["spin_no_std"] }
+riscv = { path = "./dependencies/riscv", features = ["inline-asm"]}
 xmas-elf = "0.7.0"
 spin = "0.9"
-virtio-drivers = { git = "https://github.com/rcore-os/virtio-drivers", rev = "4ee80e5" }
-rsext4 = {path = "./rsext4", optional = true}
+virtio-drivers = { path = "./dependencies/virtio-drivers" }
+rsext4 = {path = "./dependencies/rsext4", optional = true}
 
 
 [build-dependencies]
@@ -26,5 +26,7 @@ cc = "1.0"
 
 [profile.release]
 debug = true
+panic = "abort"
 
-
+[profile.dev]
+panic = "abort"

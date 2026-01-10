@@ -4,7 +4,7 @@ use alloc::sync::Arc;
 use crate::alloc::string::ToString;
 use log::error;
 use spin::Mutex;
-use crate::task::TASK_MANAER;
+use crate::task::{TASK_MANAER, TASK_MANAGER_INIT};
 use crate::fs::vfs::{File, KStat, MountFs, OpenFlags, ROOTFS, VfsFs, VfsFsError, VfsStat};
 use alloc::format;
 use alloc::vec::Vec;
@@ -25,8 +25,17 @@ pub fn normalize_path(path: &str) -> Result<String, VfsFsError> {
     let combin = if path.starts_with('/') {
         path.to_string()
     } else {
-        let cwd = TASK_MANAER.get_current_cwd();
-        format!("{}/{}", cwd, path)
+        let tsmn_init:bool;
+        unsafe {
+             tsmn_init= TASK_MANAGER_INIT;
+        }
+        if tsmn_init {
+            let cwd = TASK_MANAER.get_current_cwd();
+            format!("{}/{}", cwd, path)
+        }else {
+            format!("/{}", path)
+        }
+        
     };
 
     let mut parts: Vec<&str> = Vec::new();

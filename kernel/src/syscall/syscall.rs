@@ -1,5 +1,6 @@
 
 use core::mem::size_of;
+use core::usize;
 use alloc::collections::vec_deque::VecDeque;
 use alloc::boxed::Box;
 use alloc::sync::Arc;
@@ -115,16 +116,6 @@ pub struct Tms {
 /// 3) 在支持的情况下，行为等价于 fork：父进程返回子 pid，子进程返回 0。
 pub fn sys_clone(flags: usize, stack: usize, ptid: usize, tls: usize, ctid: usize) -> isize {
     let upper = flags & !0xffusize;
-    if upper != 0 {
-        //error!("upper not zero");
-        //return -1;
-    }
-    let _sig = (flags & 0xff) as u8;
-
-    if stack != 0 || ptid != 0 || tls != 0 || ctid != 0 {
-        //error!("ptid stack tls ctid must be zero!");
-        //return -1;
-    }
     
     // 没传信号处理
     sys_fork(CloneFlags::from_bits_truncate(upper),stack,ptid,tls,ctid)
@@ -137,10 +128,9 @@ pub fn sys_gettimeofday(tv_ptr: usize, _tz_ptr: usize) -> isize {
         return -1;
     }
     let ms = get_time_ms();
-    let sec = ms/1000;
-    let time_val = TimeVal{
-        sec,ms
-    };
+    let sec = ms / 1000;
+    let usec = (ms % 1000) * 1000;
+    let time_val = TimeVal { sec, usec };
     let satp = TASK_MANAER.get_current_stap();
     let mut tb = PageTable::crate_table_from_satp(satp);
     let phyaddr = tb.translate(VirAddr(tv_ptr));
@@ -1137,13 +1127,17 @@ pub fn sys_fork(mode:CloneFlags,stack: usize, ptid: usize, tls: usize, ctid: usi
     // clone_mapset 目前签名是 &mut self，所以这里需要拿到父进程的可变 guard。
     let new_memset = {
         let mut parent = current_task.lock();
-        parent.memory_set.clone_mapset(false)
+        parent.memory_set.clone_mapset()
     };
 
 
     // 先把浅拷贝得到的 MapSet 用 mem::replace 取出来并 forget，避免 Drop。
     let parent_pid = { current_task.lock().pid.0 };
     let mut bad_task = current_task.lock().clone();//复制的是tbl本体不是arc
+
+
+    bad_task.parent = None;
+    bad_task.childrens.clear();
 
     let new_pid = ProcessId_ALLOCTOR
         .lock()
@@ -1167,6 +1161,8 @@ pub fn sys_fork(mode:CloneFlags,stack: usize, ptid: usize, tls: usize, ctid: usi
     // 子进程第一次被调度必须从 app_entry_point 起步，才能通过 __restore 使用 TrapContext 恢复用户态寄存器。
     // 只修改 sp 会让子进程继承父进程的内核执行流，导致 fork 返回值等寄存器语义错误。
     bad_task.task_context = TaskContext::return_trap_new(child_kernel_sp);
+
+
     bad_task.task_statut = TaskStatus::Ready;//设置任务准备被调度
     {
         let trap_cx_ppn = bad_task
@@ -1179,6 +1175,13 @@ pub fn sys_fork(mode:CloneFlags,stack: usize, ptid: usize, tls: usize, ctid: usi
         unsafe {
             (*trap_cx_point).kernel_sp = child_kernel_sp;
             (*trap_cx_point).x[10] = 0;
+
+            // TODO THREAD define
+            // stack
+            if stack!=0{
+                (*trap_cx_point).x[2] = stack;
+            }
+
             debug!(
                 "fork child init: pid={} trap_ppn={} child_a0={}",
                 child_pid,
@@ -1192,6 +1195,7 @@ pub fn sys_fork(mode:CloneFlags,stack: usize, ptid: usize, tls: usize, ctid: usi
     /* 建立父子关系 */
     //添加child
     current_task.lock().add_children( arc_task.clone());
+    //warn!("sys_fork: parent pid={} add child pid={} children_len={}", parent_pid, child_pid, current_task.lock().childrens.len());
     //链接父亲
     arc_task.lock().set_father(&*current_task);
     drop(inner);//释放TASK_MANAER锁
@@ -1343,7 +1347,7 @@ fn syscall_get_time(addr:*mut TimeVal){  //考虑是否跨页面
            time_val= &mut *((frame_pointer as *mut _ as usize+offset) as *mut TimeVal);
             *time_val=TimeVal{
                sec:get_time_ms()/1000,
-               ms:get_time_ms()
+               usec:get_time_ms()%1000
             }
          }
       }else { 
@@ -1459,7 +1463,7 @@ pub fn sys_exit(exit_code:usize)->isize{
     // Linux 语义：exit 后任务进入 Zombie，保留 pid/exit_code，等待父进程 wait() 回收(reap)。
     // 父进程退出时，其子进程会被过继给 init(pid=1)。
     if exit_code == 0 {
-        warn!("Program Exit Normaly With Code:{}", exit_code);
+        //warn!("Program Exit Normaly With Code:{}", exit_code);
     } else {
         warn!("Program Exit With Code:{}", exit_code);
     }
@@ -1477,7 +1481,7 @@ pub fn sys_exit(exit_code:usize)->isize{
 /// - 失败：-1（无子进程）
 pub fn sys_wait(exit_code_ptr: usize) -> isize {
     // wait4(pid=-1, wstatus, options=0)
-    sys_wait4(usize::MAX, exit_code_ptr, 0)
+    sys_wait4(-1, exit_code_ptr, 0)
 }
 
 /// TODO状态
@@ -1489,7 +1493,7 @@ pub fn sys_wait(exit_code_ptr: usize) -> isize {
 /// - options != 0 : 不支持，返回 -1 并输出 unsupport
 ///
 /// wstatus 写回遵循 Linux：退出码存放在高 8 bit（status = exit_code << 8）。
-pub fn sys_wait4(pid: usize, wstatus_ptr: usize, options: usize) -> isize {
+pub fn sys_wait4(pid: i32, wstatus_ptr: usize, options: i32) -> isize {
     if options != 0 {
         warn!("sys_wait4: unsupport options={}", options);
         return -1;
@@ -1501,7 +1505,7 @@ pub fn sys_wait4(pid: usize, wstatus_ptr: usize, options: usize) -> isize {
         return -1;
     }
 
-    let target_pid: Option<usize> = if pid_isize == -1 {
+    let target_pid: Option<i32> = if pid_isize == -1 {
         None
     } else {
         Some(pid)
@@ -1522,7 +1526,7 @@ pub fn sys_wait4(pid: usize, wstatus_ptr: usize, options: usize) -> isize {
         };
 
         if children.is_empty() {
-            debug!("sys_wait4: no children");
+            warn!("sys_wait4: no children for current process");
             return -1;
         }
 

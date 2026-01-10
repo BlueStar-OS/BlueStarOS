@@ -37,13 +37,19 @@ pub fn get_char()->isize{//非阻塞 -1没有字符，>=0ascii码
 ///关机的操作的副作用文件系统卸载
 pub fn shutdown()->!{
     //取消文件系统挂载
-    ROOTFS.lock().as_mut().unwrap().mount_poinr.iter().for_each(|fs|{
-        fs.1.lock().umount();
-    });
+    if let Some(rootfs) = ROOTFS.lock().as_mut() {
+        rootfs.mount_poinr.iter().for_each(|fs| {
+            fs.1.lock().umount();
+        });
+    }
         
 
     sbi_call(SHUTDOWN_CALLID, 0, 0, 0);
-    panic!("It should shutdown!");
+
+    
+    loop {
+        unsafe { asm!("wfi") };
+    }
 }
 ///设置下一次的时钟中断
 pub fn set_next_timetriger(timer:usize){

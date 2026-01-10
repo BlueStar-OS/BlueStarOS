@@ -9,6 +9,8 @@ use crate::config::{app_end, app_start};
 
 bitflags!{
     /// 信号结构体 posix
+    #[derive(Debug,Clone, Copy,PartialEq, Eq)]
+    
     pub struct Signal:usize{
         const SIGHUP    = 1usize << (1  - 1);  // 1  挂起（控制终端断开/会话结束）
         const SIGINT    = 1usize << (2  - 1);  // 2  中断（通常是 Ctrl+C）
@@ -44,10 +46,22 @@ bitflags!{
     }
 }
 
+
+pub fn have_elf_header(data:[u8;4])->bool{
+    if data!=[0x7f, b'E', b'L', b'F'] {
+        return false;
+    }else {
+        return true;
+    }
+}
+
 /// 文件加载器，根据 app_id 从文件系统 /test 目录加载对应的 ELF 文件
 /// app_id 从 0 开始
+/// 自动elf过滤
 pub fn file_loader(file_path: &str) -> Vec<u8> {
     debug!("Eter in loader");
+
+    // 比赛内联init
     if file_path == "/cinit" {
         let start = app_start as usize;
         let end = app_end as usize;
@@ -57,6 +71,7 @@ pub fn file_loader(file_path: &str) -> Vec<u8> {
         let bytes = unsafe { core::slice::from_raw_parts(start as *const u8, end - start) };
         return bytes.to_vec();
     }
+
     let fd =match vfs_open(file_path, OpenFlags::empty()){
         Ok(res)=>{
             res
@@ -69,7 +84,25 @@ pub fn file_loader(file_path: &str) -> Vec<u8> {
     debug!("open file success");
 
     let mut out: Vec<u8> = Vec::new();
+
+
+    // elf校验
     let mut tmp = [0u8; 512];
+    let n = match fd.read(&mut tmp) {
+            Ok(n) => n,
+            Err(e) => {
+                error!("file_loader: fd.read failed: path={} err={:?}", file_path, e);
+                return vec![];
+            }
+        };
+        
+    if !have_elf_header([tmp[0],tmp[1],tmp[2],tmp[3]]) {
+        warn!("Valid elf file");
+        return vec![]
+    }
+
+        out.extend_from_slice(&tmp[..n]);
+
     loop {
         let n = match fd.read(&mut tmp) {
             Ok(n) => n,

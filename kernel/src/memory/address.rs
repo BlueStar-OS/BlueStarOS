@@ -2,7 +2,6 @@ use core::ops::Add;
 use core::sync::atomic::{compiler_fence,Ordering};
 use bitflags::bitflags;
 use log::{debug, error, trace, warn};
-use riscv::addr;
 use riscv::register::satp;
 use crate::memory::MapArea;
 use crate::{config::*, memory::frame_allocator::*};
@@ -26,6 +25,7 @@ pub struct PageTable{
     entries:Vec<FramTracker>,
 }
 bitflags! {
+    #[derive(Debug)]
     pub struct PTEFlags: usize {
         /// Valid
         const V = 1 << 0;
@@ -137,15 +137,36 @@ impl PageTableEntry {
     pub fn flags(&self) -> PTEFlags {
         PTEFlags::from_bits_truncate(self.0 & 255) //目前跳过2位的rsw保留位
     }
+    pub fn set_flags(&mut self,flags:PTEFlags){
+        let pte = (self.0 & !(255)) |  flags.bits();
+        self.0 = pte;
+    }
     pub fn ppn(&self)->PhysiNumber{
          PhysiNumber((self.0 >> 10) & ((1 << 44) - 1))
     }
     pub fn is_valid(&self)->bool{
-        self.flags().contains(PTEFlags::V)
+        let re = self.flags().contains(PTEFlags::V);
+        // 刷新页表
+        unsafe { riscv::asm::sfence_vma_all(); }
+        return re;
     }
     ///设置页表项不合法
     pub fn set_inValid(&mut self){
         self.0=0 //全部置零 
+    }
+    // 设置脏 刷新页表
+    pub fn set_isdirty(&mut self){
+        let new_flag = PTEFlags::from_bits_truncate(self.0 & 255) | PTEFlags::D;
+        self.set_flags(new_flag);
+        // 刷新页表
+       // unsafe { riscv::asm::sfence_vma_all(); }
+    }
+    // 设置访问过 刷新页表
+    pub fn set_isaccess(&mut self){
+        let new_flag = PTEFlags::from_bits_truncate(self.0 & 255) | PTEFlags::A;
+        self.set_flags(new_flag);
+        // 刷新页表
+       // unsafe { riscv::asm::sfence_vma_all(); }
     }
 }
 
@@ -267,7 +288,7 @@ impl PageTable {
         unsafe{core::slice::from_raw_parts_mut(phyaddr.0 as  *mut PageTableEntry, 512).try_into().expect("GET_PET_ARRAY FAILED ,WHEN TRANSLATE A POINTER TO 512 SIZE")}
     }
     
-    ///查找但是不创建新页表项
+    ///查找但是不创建新页表项 需要检查pte合法
     pub fn find_pte_vpn(&mut self,VirNum:VirNumber)->Option<&mut PageTableEntry>{
         let mut current_ppn=self.root_ppn.0;
         let mut idx=VirNum.index();
@@ -296,19 +317,22 @@ impl PageTable {
         let pte=self.find_or_create_pte_vpn(vpn).expect("Failed When Map");
 
         if pte.is_valid(){
+
+            // 最小补丁，权限合并. 解决当程序段紧凑权限不能覆盖的情况
+            pte.set_flags(flags | pte.flags());
+
             //说明之前已经存在对应的映射了,给个警告级别的提示，因为可能有重叠的
-            warn!("MAP error! vpn:{}has maped before, pte exist ppn:{}",vpn.0,pte.ppn().0);
+            //warn!("MAP error! vpn:{}has maped before, pte exist ppn:{}",vpn.0,pte.ppn().0);
             return;//返回
         }
 
-        *pte=PageTableEntry::new(ppn.0,flags|PTEFlags::V); //否则创建映射
+        *pte=PageTableEntry::new(ppn.0,flags|PTEFlags::V); //合法
     }
 
     ///判断该vpn是否存在合法映射
     pub fn is_maped(&mut self,vpn:VirNumber)->bool{//判断对应vpn是否已经被映射过
         match self.find_pte_vpn(vpn){
             Some(pte)=>{
-               
                 pte.is_valid() //合法为true代表有有效映射
             }
             None=>{
@@ -345,6 +369,7 @@ impl PageTable {
             let entry=&mut pte_array[*index];
                         
                  if id==2{//最后一级
+                    
                     return Some(entry);
                 }
             if !entry.is_valid(){

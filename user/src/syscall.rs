@@ -260,6 +260,10 @@ pub fn sys_stat(path: &str, stat_buf: *mut KStat) -> isize {
     
 }
 
+pub fn sys_brl(new_addr:usize) -> isize{
+    sys_call(SYS_BRK, [new_addr,0,0,0,0,0])
+}
+
 pub fn sys_fstat(fd: usize, stat_buf: *mut KStat) -> isize {
     sys_call(SYS_FSTAT, [fd, stat_buf as usize, 0, 0, 0, 0])
 }

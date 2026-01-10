@@ -11,12 +11,14 @@ OSCOMP_ELF_DIR := ../kernel/testsuits-for-oskernel/riscv-syscalls-testing/user/b
 
 .ONESHELL:
 
-.PHONY: all build img consent_img makeimg clean
+.PHONY: all build img consent_img makeimg clean FORCE
 
 all: build
 
-build:
-	cargo build --release --target $(TARGET)
+build: FORCE
+	@mv carg .cargo
+	cargo build --release --target $(TARGET) --offline
+	@mv .cargo carg
 
 img: build
 	@echo "Creating $(KERNEL_IMG)..."

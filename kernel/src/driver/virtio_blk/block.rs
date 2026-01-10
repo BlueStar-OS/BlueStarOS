@@ -1,4 +1,4 @@
-use riscv::interrupt::Mutex;
+use spin::Mutex;
 use virtio_drivers::{Hal, VirtIOBlk, VirtIOHeader};
 use lazy_static::*;
 use alloc::{sync::Arc, vec::Vec};

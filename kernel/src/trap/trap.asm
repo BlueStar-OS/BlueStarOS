@@ -1,3 +1,19 @@
+######################################################
+# trapcontext 里面保存的是程序在·用户·态陷入内核的最后状态  
+#    ///32个寄存器完全保存
+#     pub x:[usize;32],
+#     ///陷入状态
+#     pub sstatus:Sstatus, //32*8(sp)
+#     ///返回地址
+#     pub sepc_entry_point:usize,//33*8(sp)
+#     ///内核地址空间satp
+#     pub kernel_satp:usize,//34*8(sp)
+#     ///内核栈指针
+#     pub kernel_sp:usize,//35*8(sp)
+#     ///陷阱处理程序
+#     pub trap_handler:usize,//36*8(sp)
+######################################################
+
 #针对内核trap处理，先不使用trapcontext的结构体
 #启用高级宏
 .altmacro
@@ -76,7 +92,7 @@ ld x3,3*8(sp)
     .set n,n+1
 .endr
 
-
+# sp = x2
 ld x2,2*8(sp) #最后恢复sp为user普通栈指针
 sret
 #回到触发异常的那条指令
