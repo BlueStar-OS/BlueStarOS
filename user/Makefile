@@ -3,6 +3,8 @@
 # - make img: create ../kernel/disk.img (MBR 4 partitions), format p1 ext4 / p2 FAT16 / p3 FAT32 / p4 VFAT, then mount p1 and copy binaries to /test
 
 TARGET := riscv64gc-unknown-none-elf
+RV_MUSL_GCC := riscv64-linux-musl-gcc
+CTEST := $(patsubst ctest/%.c,%,$(wildcard ctest/*.c))
 BUILD_DIR := target/$(TARGET)/release
 BINS := $(patsubst src/bin/%.rs,%,$(wildcard src/bin/*.rs))
 KERNEL_IMG := ../kernel/disk.img

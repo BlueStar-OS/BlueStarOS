@@ -1442,23 +1442,39 @@ pub fn sys_read(fd_target: usize, source_buffer: usize, buffer_len: usize) -> is
 ///注意：这个函数永不返回！要么切换到其他任务，要么关机
 pub fn sys_exit(exit_code:usize)->isize{
     // 若把 init 标记为 Zombie，会导致系统只剩 Zombie/无 Ready 任务，从而调度器报错。
-    let current_pid = {
+    let (current_pid,current_task) = {
         let inner = TASK_MANAER.task_que_inner.lock();
         if inner.task_queen.is_empty() {
             drop(inner);
-            0
+            (0,None)
         } else {
             let current = inner.current;
             let pid = inner.task_queen[current].lock().pid.0;
+            let ts = inner.task_queen[current].clone();
             drop(inner);
-            pid
+            (pid,Some(ts))
         }
     };
-    //if current_pid == INIT_PID {
-      //  warn!("Init exiting (pid={}), shutting down", current_pid);
-       // kprintln!("Bye");
-        //shutdown();
-    //}
+
+    //error!("pid :{} exit",current_pid);
+
+    match current_task{
+        Some(ts)=>{
+            let parent = &mut ts.lock().parent;
+            if parent.is_some(){
+                // try Wake father
+                let pa = parent.as_ref().expect("Kernel Error").upgrade().expect("Where is my father");
+                if pa.lock().task_statut == TaskStatus::Blocking {
+                    let pid = pa.lock().pid.0;
+                    TASK_MANAER.wake_task_from_blocking(pid);
+                }
+            }
+        }
+        None=>{
+
+        }
+    }
+    
 
     // Linux 语义：exit 后任务进入 Zombie，保留 pid/exit_code，等待父进程 wait() 回收(reap)。
     // 父进程退出时，其子进程会被过继给 init(pid=1)。
@@ -1480,8 +1496,8 @@ pub fn sys_exit(exit_code:usize)->isize{
 /// - 成功：返回已回收(reap)的 Zombie 子进程 pid
 /// - 失败：-1（无子进程）
 pub fn sys_wait(exit_code_ptr: usize) -> isize {
-    // wait4(pid=-1, wstatus, options=0)
-    sys_wait4(-1, exit_code_ptr, 0)
+    // wait4(pid=-1, wstatus, options=1)  WNOHANG == 1   
+    sys_wait4(-1, exit_code_ptr, 1)
 }
 
 /// TODO状态
@@ -1490,14 +1506,10 @@ pub fn sys_wait(exit_code_ptr: usize) -> isize {
 /// - pid == -1 : 等待任意子进程
 /// - pid > 0   : 等待指定 pid 子进程
 /// - pid == 0 或 pid < -1 : 不支持，返回 -1 并输出 unsupport
-/// - options != 0 : 不支持，返回 -1 并输出 unsupport
+/// - options != 0 : 不支持，返回 -1 并输出 unsupport   option == 1 WNOHANG,非阻塞等待
 ///
 /// wstatus 写回遵循 Linux：退出码存放在高 8 bit（status = exit_code << 8）。
 pub fn sys_wait4(pid: i32, wstatus_ptr: usize, options: i32) -> isize {
-    if options != 0 {
-        warn!("sys_wait4: unsupport options={}", options);
-        return -1;
-    }
 
     let pid_isize = pid as isize;
     if pid_isize == 0 || pid_isize < -1 {
@@ -1536,6 +1548,7 @@ pub fn sys_wait4(pid: i32, wstatus_ptr: usize, options: i32) -> isize {
                 let cpid = { child.lock().pid.0 };
                 if cpid == tp {
                     found = true;
+                    
                     let status = { child.lock().task_statut.clone() };
                     if matches!(status, TaskStatus::Zombie) {
                         let exit_code = match TASK_MANAER.reap_zombie_child(cpid) {
@@ -1569,12 +1582,31 @@ pub fn sys_wait4(pid: i32, wstatus_ptr: usize, options: i32) -> isize {
                         }
                         return cpid as isize;
                     }
+                    
                 }
             }
+
             if !found {
                 debug!("sys_wait4: target child not found pid={}", tp);
                 return -1;
             }
+
+            //error!("Found :{} hang:{}",found,options);
+            if options==0{ // found target , but it not zombie
+                warn!("Hang parent!");
+                // Block parent task,and runing next task
+                TASK_MANAER.blocking_current_task_and_run_next();
+
+                // 继续尝试收割
+                continue;
+            }
+
+            // 非阻塞，posix直接返回0
+            //warn!("Child was found but,it not zombies ,it is running(smp) or ready(signal core), when you exit your child will foster to init");
+
+            return 0;
+
+            
         } else {
             // pid == -1: find any zombie
             for child in children.iter() {
@@ -1613,9 +1645,28 @@ pub fn sys_wait4(pid: i32, wstatus_ptr: usize, options: i32) -> isize {
                     return cpid as isize;
                 }
             }
-        }
 
-        TASK_MANAER.suspend_and_run_task();
+            // 多核可用这个，单核只能单任务
+            // let has_child_run =children.iter().any(|cd|{
+            //     cd.lock().task_statut == TaskStatus::Runing
+            // });
+            
+            if options==0 {
+                //warn!("I'm, father,pid {} ",sys_getpid());
+                // Blocling current task
+                TASK_MANAER.blocking_current_task_and_run_next();
+                
+                // 父亲从这里苏醒 继续尝试回收
+                continue;
+                //warn!("I'm back! i'm father:{}",sys_getpid());
+            }
+
+            // 非阻塞，posix直接返回0
+            return 0;
+
+        }
+        // 不需要轮询
+        //TASK_MANAER.suspend_and_run_task();
     }
 }
 

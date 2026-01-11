@@ -3,8 +3,9 @@
 
 use core::usize;
 extern crate alloc;
-use user_lib::{String, getchar, print, println};
+use user_lib::{String, getchar, print, println,sys_waitpid};
 use crate::alloc::string::ToString;
+use user_lib::sys_wait;
 extern crate user_lib;
 
 
@@ -186,7 +187,7 @@ mod console {
 }
 
 mod command {
-    use user_lib::{String, println, print, sys_exec_args, sys_exit, sys_fork, sys_wait, chdir, getcwd};
+    use user_lib::{String, chdir, getcwd, print, println, sys_exec_args, sys_exit, sys_fork, sys_wait, sys_waitpid};
     use alloc::vec::Vec;
     fn clear_screen() {
         // ANSI: clear screen + move cursor to home
@@ -236,7 +237,9 @@ mod command {
             return;
         }
         let mut code: isize = 0;
-        let waited = sys_wait(&mut code as *mut isize);
+        //println!("I will wait ");
+        let waited = sys_waitpid(&mut code as *mut isize,pid as i32,0);
+        //println!("wait after");
         if waited < 0 {
             println!("wait failed, ret={}", waited);
         }
@@ -356,8 +359,12 @@ mod command {
 
 #[no_mangle]
 pub fn main(){
+    let mut exit_code = -1;
     ui::banner();
     loop {
+        // 回收fork后的遗孤 不要再现4小时修复僵尸错位的时序Bug了😭
+        sys_wait(&mut exit_code);
+        
         ui::prompt();
         let line = console::read_line();
         if console::take_tab_triggered() {

@@ -49,12 +49,12 @@ pub struct TaskContext{
      calleed_register:[usize;12]//offset 16-..
 }
 
-#[derive(Clone)]
+#[derive(Clone,PartialEq,Debug)]
 pub enum TaskStatus {
     //UnInit,
     Runing,
     Zombie,
-   // Blocking,
+    Blocking,
     Ready,
 }
 
@@ -96,7 +96,8 @@ pub struct TaskControlBlock{
 
 
 pub struct TaskManagerInner{
-    pub task_queen:VecDeque<Arc<UPSafeCell<TaskControlBlock>>>,//任务队列
+    pub task_queen:VecDeque<Arc<UPSafeCell<TaskControlBlock>>>,// Ready任务队列
+    pub task_blocking:VecDeque<Arc<UPSafeCell<TaskControlBlock>>>, // Blocking 任务队列，不参与调度
     pub current:usize//当前任务
 }
 
@@ -348,6 +349,82 @@ impl Drop for TaskControlBlock {
 impl TaskManager {//全局唯一
 
 
+    /// 把指定blocking的任务放进准备队列
+    pub fn wake_task_from_blocking(&self,pid:i32){
+        let mut inner = self.task_que_inner.lock();
+        if inner.task_queen.is_empty() {
+            return;
+        }
+        // 在blocing 队列找
+        let target_index = inner.task_blocking.iter().position(|task|{
+            task.lock().pid.0 == pid
+        });
+
+        match target_index{
+            Some(idx)=>{
+                let weak_task = inner.task_blocking.remove(idx);
+                if weak_task.is_none(){
+                    return;
+                }
+                let weak_task = weak_task.expect("Kernel Error");
+                if weak_task.lock().task_statut != TaskStatus::Blocking{
+                    return;
+                }
+                weak_task.lock().task_statut = TaskStatus::Ready;
+                inner.task_queen.push_back(weak_task);
+            }
+            None=>{
+                return;
+            }
+        }
+
+    }
+
+    /// 阻塞当前任务 调度下一个任务
+    pub fn blocking_current_task_and_run_next(&self){
+        let mut inner = self.task_que_inner.lock();
+        if inner.task_queen.is_empty() {
+            return;
+        }
+        let current = inner.current;
+        let task =  inner.task_queen.remove(current);
+        if task.is_none(){
+            return;
+        }
+        let task = task.expect("Kernel Error");
+        task.lock().task_statut = TaskStatus::Blocking;
+
+        let swap_out ={
+            let out = &mut task.lock().task_context;
+            out as *mut _ as *mut TaskContext
+        };
+
+        // 放进阻塞队列
+        inner.task_blocking.push_back(task.clone());
+        drop(inner);
+        let ts = self.stride_select_task();
+        if ts.is_none() {
+            return;
+        }
+        let mut inner = self.task_que_inner.lock(); 
+
+        let new_ts  =ts.expect("Kernel Error").0;
+        inner.current = new_ts;
+        let swap_in = {
+            let out = &mut inner.task_queen[new_ts].lock().task_context;
+            out  as *mut _ as  *mut TaskContext
+        };
+
+        
+        drop(inner);
+        // 调度下一个任务
+        unsafe {
+            __switch(swap_out, swap_in);
+        }
+
+    }
+
+
     /// 处理当前task的signal 返回是否超过
     pub fn resolve_current_task_signal(&self){
         let inner = self.task_que_inner.lock();
@@ -423,6 +500,7 @@ impl TaskManager {//全局唯一
             return;
         };
         if current_task.lock().pid.0 == INIT_PID {
+            warn!("Init are exit: pid {} ",INIT_PID);
             return;
         }
         let children = {
@@ -635,6 +713,7 @@ impl TaskManager {//全局唯一
                 panic!("Task Queen is empty!");
         }
 
+       
 
         let mut inner  =self.task_que_inner.lock();
         if inner.task_queen.is_empty() {
@@ -646,7 +725,11 @@ impl TaskManager {//全局唯一
             drop(inner);
             panic!("TaskManager current index out of range");
         }
-
+        // warn!("Current task queen :\nReady {:?}\nBlocking:{:?}",inner.task_queen.len(),inner.task_blocking.len());
+        // for t in inner.task_queen.iter().enumerate() {
+        //     let idx = t.1.lock().pid.0;
+        //     warn!("task queen,idx:{} pid:{} task_status:{:?}",t.0,idx,t.1.lock().task_statut);
+        // }
         {
             let mut cur = inner.task_queen[current].lock();
             if !matches!(cur.task_statut, TaskStatus::Zombie) {
@@ -664,6 +747,7 @@ impl TaskManager {//全局唯一
                 shutdown();
             }
         };
+        
         if task_index >= inner.task_queen.len() {
             drop(inner);
             panic!("Selected task index out of range");
@@ -673,7 +757,9 @@ impl TaskManager {//全局唯一
             {
                 let t = inner.task_queen[task_index].lock();
                 task_status= t.task_statut.clone();
+               // error!("Select pid:{} idx:{} status:{:?}",t.pid.0,task_index,task_status);
             }
+            
             match task_status {
                 TaskStatus::Ready => {}
                 _ => {
@@ -699,8 +785,8 @@ impl TaskManager {//全局唯一
         
         // 准备切换：先拿到上下文指针，更新状态，然后释放所有锁再 __switch
         let swaped_task_cx = {
-            let cur = inner.task_queen[current].lock();
-            &cur.task_context as *const TaskContext
+            let mut cur = inner.task_queen[current].lock();
+            &mut cur.task_context as *mut TaskContext
         };
 
         let need_swap_in = {
@@ -934,6 +1020,7 @@ lazy_static! {
                 return TaskManager {
                     task_que_inner: UPSafeCell::new(TaskManagerInner {
                         task_queen: task_deque,
+                        task_blocking: VecDeque::new(),
                         current: 0
                     })
                 };
@@ -997,6 +1084,7 @@ lazy_static! {
             TaskManager {
                 task_que_inner: UPSafeCell::new(TaskManagerInner {
                     task_queen: task_deque,
+                    task_blocking: VecDeque::new(),
                     current: 0  // 初始化为第一个任务
                 })
             }
@@ -1018,6 +1106,7 @@ lazy_static! {
             TaskManager {
                 task_que_inner: UPSafeCell::new(TaskManagerInner {
                     task_queen: task_deque,
+                    task_blocking: VecDeque::new(),
                     current: 0  // 初始化为第一个任务
                 })
             }

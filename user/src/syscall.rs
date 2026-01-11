@@ -39,6 +39,11 @@ pub const SYS_DUP3: usize = 24;
 
 pub const AT_FDCWD: isize = -100;
 
+
+// Not Hang parent option
+pub const WNOHANG:i32 = 1;
+
+
 /// syscall 封装：Linux ABI 版本（最多 6 个参数）
 pub fn sys_call(id: usize, args: [usize; 6]) -> isize {
     let mut ret: isize;
@@ -324,6 +329,11 @@ pub fn sys_getcwd(buf_ptr: usize, buf_len: usize) -> isize {
 pub fn sys_wait(exit_code_ptr: *mut isize)->isize{
     // wait4(pid=-1, wstatus, options=0, rusage=NULL)
     sys_call(SYS_WAIT4, [usize::MAX, exit_code_ptr as usize, 0, 0, 0, 0])
+}
+
+pub fn sys_waitpid(exit_code_ptr: *mut isize,pid:i32,option:i32)->isize{
+    // wait4(pid=-1, wstatus, options=0, rusage=NULL)
+    sys_call(SYS_WAIT4, [pid as usize, exit_code_ptr as usize, option as usize, 0, 0, 0])
 }
 
 ///永远不返回 里面有loop封装为！
