@@ -991,15 +991,6 @@ impl TaskManager {//全局唯一
 
 }
 
-
-impl TaskContext {
-    ///ra设置为trap refume地址，sp为用户栈指针，callee_register初始化0
-    pub fn trapnew_init(sp:usize)->Self{
-       TaskContext { ra: __kernel_refume as usize, sp: sp, calleed_register: [0;12] }
-    }
-}
-
-
 //全局进程id分配器
 lazy_static!{
     pub static ref ProcessId_ALLOCTOR:UPSafeCell<ProcessIdAlloctor>=UPSafeCell::new(ProcessIdAlloctor::initial_processid_alloctor(1, 10_000_000));

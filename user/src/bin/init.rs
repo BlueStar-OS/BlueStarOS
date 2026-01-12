@@ -363,7 +363,13 @@ pub fn main(){
     ui::banner();
     loop {
         // 回收fork后的遗孤 不要再现4小时修复僵尸错位的时序Bug了😭
-        sys_wait(&mut exit_code);
+        loop {
+            let re = sys_wait(&mut exit_code);
+            if re == -1{ // 如果程序返回-1，但是还是存在zombie就是自作自受了
+                break;
+            }
+        }
+        
         
         ui::prompt();
         let line = console::read_line();

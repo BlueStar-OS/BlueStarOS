@@ -333,7 +333,7 @@ pub fn sys_wait(exit_code_ptr: *mut isize)->isize{
 
 pub fn sys_waitpid(exit_code_ptr: *mut isize,pid:i32,option:i32)->isize{
     // wait4(pid=-1, wstatus, options=0, rusage=NULL)
-    sys_call(SYS_WAIT4, [pid as usize, exit_code_ptr as usize, option as usize, 0, 0, 0])
+    sys_call(SYS_WAIT4, [pid as usize, exit_code_ptr as usize, WNOHANG as usize, 0, 0, 0])
 }
 
 ///永远不返回 里面有loop封装为！

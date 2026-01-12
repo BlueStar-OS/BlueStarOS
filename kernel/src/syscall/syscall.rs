@@ -343,7 +343,6 @@ pub fn sys_mount(source_ptr: usize, target_ptr: usize, fstype_ptr: usize, _flags
             return -1;
         }
     };
-
     let new_fs: Arc<Mutex<dyn VfsFs>> = match req_fs {
         "ext4" => {
             #[cfg(feature = "ext4")]
@@ -369,7 +368,6 @@ pub fn sys_mount(source_ptr: usize, target_ptr: usize, fstype_ptr: usize, _flags
         }
         _ => return -1,
     };
-
     if let Err(e) = new_fs.lock().mount() {
         error!("sys_mount: fs.mount failed req_fs={} err={}", req_fs, e);
         return -1;
@@ -1156,12 +1154,16 @@ pub fn sys_fork(mode:CloneFlags,stack: usize, ptid: usize, tls: usize, ctid: usi
     }
     bad_task.memory_set = new_memset.expect("Memset should be some");
 
+
     // 为子进程分配独立的内核栈，并同步到 TaskContext/TrapContext
     let child_kernel_sp = MapSet::alloc_kernel_stack();
     // 子进程第一次被调度必须从 app_entry_point 起步，才能通过 __restore 使用 TrapContext 恢复用户态寄存器。
     // 只修改 sp 会让子进程继承父进程的内核执行流，导致 fork 返回值等寄存器语义错误。
     bad_task.task_context = TaskContext::return_trap_new(child_kernel_sp);
-
+    
+    // child内核栈释放信息
+    let child_kernel_range = MapSet::get_kernel_range_from_kernel_top(VirAddr(child_kernel_sp));
+    bad_task.memory_set.kernel_stack_range = Some(child_kernel_range);
 
     bad_task.task_statut = TaskStatus::Ready;//设置任务准备被调度
     {
@@ -1538,7 +1540,7 @@ pub fn sys_wait4(pid: i32, wstatus_ptr: usize, options: i32) -> isize {
         };
 
         if children.is_empty() {
-            warn!("sys_wait4: no children for current process");
+            debug!("sys_wait4: no children for current process");
             return -1;
         }
 

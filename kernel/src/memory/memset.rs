@@ -17,7 +17,6 @@ use core::hint;
 
 use crate::{config::*, memory::{address::*, alloc_frame, frame_allocator::FramTracker}};
 use crate::trap::no_return_start;
-use crate::trap::TrapFunction;
  use lazy_static::lazy_static;
  use crate::sync::UPSafeCell;
 
@@ -104,6 +103,12 @@ pub struct VirNumRangeIter{
              id
          }
      }
+     pub fn dealloc_id(&mut self,id:usize){
+        if self.recycle.contains(&id) {
+            error!("Kernel stack id recycle error,it has in recycle list")
+        }
+        self.recycle.push(id);
+     } 
  }
 
  lazy_static! {
@@ -219,7 +224,7 @@ pub struct MmapInfo {
 #[derive(Clone)]
 pub struct MapArea{ //通常为单次push进来，虽然粒度大，保证push粒度足够小即可
     ///虚拟页号范围,闭区间
-    range:VirNumRange,
+    pub range:VirNumRange,
     flags:MapAreaFlags,//访问标志   
     pub frames:BTreeMap<VirNumber,Arc<FramTracker>>,//Maparea 持有的物理页
     map_type:MapType,
@@ -233,6 +238,7 @@ pub struct MapSet{
     pub table:PageTable,
     areas:Vec<MapArea>,
     pub brk:VirAddr, //进程brk点
+    pub kernel_stack_range:Option<VirNumRange>,
 }
 impl MapArea {
     
@@ -280,6 +286,8 @@ impl MapArea {
             }
         };
         // 权限合并
+        
+
         page_table.map(vpn, ppn, self.flags.into());
         //debug!("Map Aread map vpn:{} -> ppn:{}",vpn.0,ppn.0);
     }
@@ -398,6 +406,9 @@ bitflags! {
 }
 
 impl MapSet {
+
+
+
 
     /// 打印mapset每个area的范围和权限
     /// 打印对应页表权限
@@ -1126,10 +1137,13 @@ impl MapSet {
         //设置brk
         memory_set.brk = userheap_start_end_vpn.into();
 
-        // 分配并映射内核栈（使用全局分配器，不再依赖 appid）
+        // 分配并映射内核运行栈（使用全局分配器，不再依赖 appid）
         let kernel_stack_top = Self::alloc_kernel_stack();
 
 
+        // 写入内核栈释放信息
+        let kernel_range = Self::get_kernel_range_from_kernel_top(VirAddr(kernel_stack_top));
+        memory_set.kernel_stack_range = Some(kernel_range);
         //打印权限信息
         //memory_set.print_area_information();
 
@@ -1141,6 +1155,44 @@ impl MapSet {
             kernel_stack_top
         )
          )
+    }
+
+    pub fn get_kernel_range_from_kernel_top(kernel_stack_top:VirAddr)->VirNumRange{
+        let kernel_bottom = kernel_stack_top.0 - KERNEL_STACK_SIZE+1; 
+        let kernel_range = VirNumRange::new(VirAddr(kernel_bottom), VirAddr(kernel_stack_top.0-1));
+        kernel_range
+    }
+
+    fn kernel_stack_id0_from_range(range: VirNumRange) -> Option<usize> {
+        let end_vpn = range.1;
+        let top = (end_vpn.0 + 1) * PAGE_SIZE;
+        if top as u128 > TRAP_BOTTOM_ADDR  as u128+ KERNEL_STACK_SIZE as u128 {
+            return None;
+        }
+        let denom:u128 = PAGE_SIZE as u128 + KERNEL_STACK_SIZE as u128 ;
+        let numer:u128 = TRAP_BOTTOM_ADDR as u128 + KERNEL_STACK_SIZE as u128- top as u128;
+        if numer % denom != 0 {
+            return None;
+        }
+        let id = numer / denom;
+        if id == 0 {
+            None
+        } else {
+            Some((id - 1) as usize)
+        }
+    }
+
+    pub fn dealloc_kernel_stack_id0(id0: usize) {
+        KERNEL_STACK_ALLOCATOR.lock().dealloc_id(id0);
+    }
+
+    pub fn kernel_stack_allocator_state() -> (usize, usize) {
+        let alloc = KERNEL_STACK_ALLOCATOR.lock();
+        (alloc.current_id, alloc.recycle.len())
+    }
+
+    pub fn area_count(&self) -> usize {
+        self.areas.len()
     }
 
     pub(crate) fn alloc_kernel_stack() -> usize {
@@ -1156,6 +1208,8 @@ impl MapSet {
         .strict_into_virnum();
         let kernel_stack_top =
             TRAP_BOTTOM_ADDR - ((PAGE_SIZE + KERNEL_STACK_SIZE) * id) + KERNEL_STACK_SIZE;
+
+        
 
         KERNEL_SPACE.lock().add_area(
             VirNumRange(strat_kernel_vpn, end_kernel_vpn),
@@ -1173,7 +1227,8 @@ impl MapSet {
         MapSet{
             table:PageTable::new(),
             areas:Vec::new(),
-            brk:VirAddr(0)
+            brk:VirAddr(0),
+            kernel_stack_range:None,
         }
     }
 
@@ -1237,6 +1292,13 @@ impl MapSet {
         }
         result
         
+    }
+
+    pub fn pop_one_contain_range_area(&mut self, range: VirNumRange) -> Option<MapArea> {
+        let index = self.areas.iter().position(|area| {
+            !area.range.is_contain_thisvpnRange(range).is_empty()
+        })?;
+        Some(self.areas.remove(index))
     }
 
     ///输入range，maptype和flags 自动处理maparea的映射和物理帧挂载以及对应memset的pagetable映射,处理数据的复制映射   但是映射用户栈不需要数据
@@ -1304,7 +1366,7 @@ impl MapSet {
 
     
         // 映射内核数据段
-        let data_range = VirNumRange::new(VirAddr(sdata as usize), VirAddr(edata as usize));//range封装过
+        let data_range = VirNumRange::new(VirAddr(sdata as usize), VirAddr(edata as usize-1));//range封装过
         mem_set.add_area(
             data_range,
             MapType::Indentical,
@@ -1312,10 +1374,22 @@ impl MapSet {
             None,
             None,
         );
-       // trace!("{} {}\n",data_start.0,data_end.0);
+        debug!("data {:?}\n",data_range);
 
-        //映射bss段
-        let bss_range = VirNumRange::new(VirAddr(sbss as usize), VirAddr(ebss as usize));//range封装过
+        // 映射内核启动栈保护页，栈溢出保护                                                                                               -1向下取整到之前一页，防止覆盖下一页
+        let stack_protector = VirNumRange::new(VirAddr(kernel_stack_protect_start as usize), VirAddr(kernel_stack_protect_end as usize-1));
+        mem_set.add_area(
+            stack_protector,
+            MapType::Indentical,
+            MapAreaFlags::empty(),
+            None,
+            None,
+        );
+        warn!("Protect :{:#x} - {:#x} range:{:?}",kernel_stack_protect_start as usize,kernel_stack_protect_end as usize,stack_protector);
+        
+
+        //映射内核启动栈
+        let bss_range = VirNumRange::new(VirAddr(kernel_stack_lower_bound as usize), VirAddr(kernel_stack_top as usize));//range封装过
         mem_set.add_area(
             bss_range,
             MapType::Indentical,
@@ -1323,7 +1397,57 @@ impl MapSet {
             None,
             None,
         );
-       // trace!("{} {}\n",bss_start.0,bss_end.0);
+       warn!("stack {:#x} {:#x} range:{:?}\n",kernel_stack_lower_bound as usize,kernel_stack_top as usize,bss_range);
+
+
+        // 映射内核trap栈保护页
+        let trap_stack_protector = VirNumRange::new(VirAddr(kernel_trap_stack_protect_start as usize), VirAddr(kernel_trap_stack_protect_end as usize-1));
+        mem_set.add_area(
+            trap_stack_protector,
+            MapType::Indentical,
+            MapAreaFlags::empty(),
+            None,
+            None,
+        );
+        warn!("Trap Protect :{:#x} - {:#x} range:{:?}",kernel_trap_stack_protect_start as usize,kernel_trap_stack_protect_end as usize,trap_stack_protector);
+        
+       
+        // 映射内核trap/正常运行 栈
+        let trap_run_range = VirNumRange::new(VirAddr(kernel_trap_stack_bottom as usize), VirAddr(kernel_trap_stack_top as usize));//range封装过
+        mem_set.add_area(
+            trap_run_range,
+            MapType::Indentical,
+            MapAreaFlags::R | MapAreaFlags::W,
+            None,
+            None,
+        );
+       warn!("trap_run_range {:#x} {:#x} range:{:?}\n",kernel_trap_stack_bottom as usize,kernel_trap_stack_top as usize,trap_run_range);
+
+
+        // 映射内核selftrap栈
+        let kernel_kernel_trap_range = VirNumRange::new(VirAddr(kernel_kernel_trap_bottom as usize), VirAddr(kernel_kernel_trap_top as usize -1));
+        mem_set.add_area(
+            kernel_kernel_trap_range,
+            MapType::Indentical,
+            MapAreaFlags::R | MapAreaFlags::W,
+            None,
+            None,
+        );
+       warn!("kernel_kernel_trap_run_range {:#x} {:#x} range:{:?}\n",kernel_kernel_trap_bottom as usize,kernel_kernel_trap_top as usize,kernel_kernel_trap_range);
+
+
+
+        // 除了stack之外的其它bss内容
+        let out_bss = VirNumRange::new(VirAddr(estack as usize), VirAddr(ekernel as usize-1));
+        mem_set.add_area(
+            out_bss,
+            MapType::Indentical,
+            MapAreaFlags::R | MapAreaFlags::W,
+            None,
+            None,
+        );
+        warn!("other bss {:#x} {:#x} range:{:?}\n",estack as usize,ekernel as usize,out_bss);
+
         
         // 映射物理内存(必须手动构造range区间)，phystart需要向上取整,end需要手动-1 range
         let phys_start =VirAddr(ekernel as usize).floor_up();
@@ -1336,9 +1460,9 @@ impl MapSet {
             None,
             None,
         );
-       // trace!("{} {}\n",phys_start.0,phys_end.0);
+        warn!("phys {} {}\n",phys_start.0,phys_end.0);
 
-        //设置brk
+        //设置brk Error
         mem_set.brk = VirAddr(ebss as usize + 1);
 
         //内核地址空间映射完成
@@ -1374,6 +1498,16 @@ impl MapSet {
 
 impl Drop for MapSet {
     fn drop(&mut self) {
+
+        // 换栈 涉及取消正在使用的page
+        // unsafe {
+        //     asm!("
+        //         la t5,kernel_kernel_trap_top
+        //         mv sp,
+        //     ")
+        // }
+        // 算了，要复制栈，unwind整条调用链
+
         for area in self.areas.iter() {
             let Some(info) = area.mmap.as_ref() else {
                 continue;
@@ -1416,6 +1550,12 @@ impl Drop for MapSet {
                     shared.remove(&key);
                 }
             }
+        }
+
+        // 释放应用内核栈
+        if let Some(range) = self.kernel_stack_range.take() {
+            let id0 = Self::kernel_stack_id0_from_range(range);
+            crate::trap::enqueue_kstack_free(range, id0);
         }
     }
 }

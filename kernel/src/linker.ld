@@ -39,6 +39,7 @@ SECTIONS
     .bss : {
         sbss = .;
         *(.bss.stack)
+        estack = .;
         *(.bss .bss.*)
         *(.sbss .sbss.*)
     }

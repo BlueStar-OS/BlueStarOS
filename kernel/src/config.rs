@@ -2,8 +2,26 @@ use crate::{task::TaskContext, trap::TrapContext};
  extern "C"{
         pub fn kernel_stack_lower_bound();
         pub fn kernel_stack_top();
+
+        // 内核启动栈保护页
+        pub fn kernel_stack_protect_start();
+        pub fn kernel_stack_protect_end();
+
         pub fn kernel_trap_stack_top();
         pub fn kernel_trap_stack_bottom();
+
+        // 内核运行栈保护页
+        pub fn kernel_trap_stack_protect_start();
+        pub fn kernel_trap_stack_protect_end();
+
+        // 内核sleftrap栈
+        pub fn kernel_kernel_trap_bottom();
+        pub fn kernel_kernel_trap_top();
+
+
+        // stack bss结束后的bss开始地址 
+        pub fn estack();
+
         pub fn ekernel();
         pub fn skernel();
         pub fn stext();
@@ -25,10 +43,7 @@ use crate::{task::TaskContext, trap::TrapContext};
         pub fn app_start();//测试应用地址
         pub fn app_end();//测试应用地址
         pub fn __switch(need_swapout:*const TaskContext,need_swapin:*const TaskContext);//任务切换汇编函数
-        ///内核的trap独立运行栈 栈顶
-        pub fn kernel_trap_run_stack_top();
-        ///内核的trap独立运行栈 栈底
-        pub fn kernel_trap_run_stack_bottom();
+
 }
 
 /// consent mode
@@ -43,7 +58,7 @@ pub const MEMORY_SIZE:usize=128*MB;//总可用空闲物理内存大小
 pub const KERNEL_HEAP_SIZE:usize=64*MB;//内核堆大小，64mb足以了，后期可以调整，主要是init程序加载时的vec比较大。
 
 
-pub const KERNEL_STACK_SIZE:usize=PAGE_SIZE*4;//应用内核栈有四个页面的大小
+pub const KERNEL_STACK_SIZE:usize=PAGE_SIZE*6;//应用内核栈有四个页面的大小
 pub static mut KERNEL_HEADP:[u8;KERNEL_HEAP_SIZE]=[0;KERNEL_HEAP_SIZE];//内核堆实例
 pub const  PAGE_SIZE_BITS:usize=12;//2^12=4096 4kb
 

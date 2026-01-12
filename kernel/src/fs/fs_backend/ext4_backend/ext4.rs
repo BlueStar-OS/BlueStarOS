@@ -1,5 +1,6 @@
 use crate::fs::vfs::*;
 use alloc::string::ToString;
+use log::error;
 use rsext4::{Jbd2Dev, ext4_backend::ext4::Ext4FileSystem, fs_mount, fs_umount, mkfs};
 
 use alloc::format;
@@ -262,6 +263,7 @@ impl VfsFs for Ext4Fs {
         if self.fs.is_some() {
             return Err(VfsFsError::Mounted);
         }
+        
         let fs = fs_mount(&mut self.dev).map_err(|_| VfsFsError::MountFail)?;
         self.fs = Some(fs);
         Ok(())

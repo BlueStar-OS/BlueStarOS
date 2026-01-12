@@ -1,21 +1,57 @@
 
 use core::{arch::global_asm, panic, panicking::panic};
-use crate::{config::*, task::TASK_MANAER, time::set_next_timeInterupt, trap::pagefaultHandler::PageFaultHandler};
+use crate::{config::*, sbi::shutdown, task::TASK_MANAER, time::set_next_timeInterupt, trap::pagefaultHandler::PageFaultHandler};
 use log::{debug, error, };
 use riscv::register::{scause::{self, Exception, Trap}, sie::Sie, sscratch, sstatus::{self, SPP, Sstatus}, stval, stvec, utvec::TrapMode};
 use crate::syscall::*;//系统调用
 use riscv::register::sie;
 use riscv::register::scause::Interrupt;
 use core::arch::asm;
-use crate::memory::VirAddr;
+use crate::memory::{MapSet, VirAddr, VirNumRange};
 use log::warn;
 use riscv::register::satp;
+use alloc::vec::Vec;
+use crate::sync::UPSafeCell;
+use lazy_static::lazy_static;
 
 mod pagefaultHandler;
 
-pub enum TrapFunction{
-    USERHANDLER,
-    KERNELHANDLER
+lazy_static! {
+    static ref PENDING_KSTACK_FREE: UPSafeCell<Vec<(VirNumRange, Option<usize>)>> = unsafe {
+        UPSafeCell::new(Vec::new())
+    };
+}
+
+pub fn enqueue_kstack_free(range: VirNumRange, id0: Option<usize>) {
+    let mut q = PENDING_KSTACK_FREE.lock();
+    q.push((range, id0));
+    drop(q);
+
+}
+
+fn recycle_pending_kstacks() {
+    let mut pending = PENDING_KSTACK_FREE.lock();
+    if pending.is_empty() {
+        return;
+    }
+
+    let mut kspace = KERNEL_SPACE.lock();
+    while let Some((range, id0)) = pending.pop() {
+        while let Some(mut area) = kspace.pop_one_contain_range_area(range) {
+            let mut vpn = area.range.0;
+            while vpn.0 <= area.range.1.0 {
+                if area.frames.contains_key(&vpn) {
+                    area.unmap_one(&mut kspace.table, vpn);
+                } else {
+                    kspace.table.unmap(vpn);
+                }
+                vpn.step();
+            }
+        }
+        if let Some(id0) = id0 {
+            MapSet::dealloc_kernel_stack_id0(id0);
+        }
+    }
 }
 
 #[repr(C)]
@@ -141,6 +177,10 @@ pub extern "C" fn app_entry_point() {
 use riscv::register::sepc;
 ///handler必须返回到trap里面去
 pub extern "C" fn kernel_trap_handler(){//内核专属trap（目前不应该被调用）
+    
+    // 回收内核栈
+    recycle_pending_kstacks();
+    
     set_kernel_forbid();
     let scauses = scause::read();
     let sepc_val = sepc::read();
@@ -214,21 +254,36 @@ pub fn no_return_start()->!{
 panic("Start Function you ret ,WTF????");
 }
 
-pub extern "C" fn kernel_traped_forbid(){
+
+extern "C"{
+pub fn kernel_traped_forbid();
+}
+
+
+
+#[no_mangle]
+pub extern "C" fn skernel_traped_forbid(){
+    unsafe {
+        asm!(
+            "li t6, 0x5aa55aa55aa55aa5",
+            options(nomem, nostack, preserves_flags)
+        );
+    }
     let scauses = scause::read();
     let sepc_val = sepc::read();
     let stval_val = stval::read();
     let sstatus_val = sstatus::read();
     let satp_val = satp::read();
 
-    panic!(
+    kprintln!(
         "UnSupport Kernel Trap: cause={:?} sepc={:#x} stval={:#x} sstatus={:#x} satp={:#x}",
         scauses.cause(),
         sepc_val,
         stval_val,
         sstatus_val.bits(),
         satp_val.bits()
-    )
+    );
+    shutdown();
 
 }
 

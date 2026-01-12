@@ -2,6 +2,7 @@
 mod ext4;
 
 use alloc::sync::Arc;
+use log::error;
 use rsext4::BlockDevice as RsExt4BlockDevice;
 use crate::fs::vfs::{File, VfsFsError};
 
@@ -76,7 +77,6 @@ impl RsExt4BlockDevice for Ext4BlockDevice {
         if buffer.len() < need {
             return Err(rsext4::BlockDevError::IoError);
         }
-
         for blk in 0..(count as usize) {
             let off = blk * block_size;
             let sub = &buffer[off..off + block_size];

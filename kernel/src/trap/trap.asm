@@ -6,7 +6,7 @@
 #     pub sstatus:Sstatus, //32*8(sp)
 #     ///返回地址
 #     pub sepc_entry_point:usize,//33*8(sp)
-#     ///内核地址空间satp
+#     /// 应用内核地址空间satp
 #     pub kernel_satp:usize,//34*8(sp)
 #     ///内核栈指针
 #     pub kernel_sp:usize,//35*8(sp)
@@ -31,8 +31,12 @@
 #x权限硬性要求对齐，确保 __kernel_trap 在段的开始处
 .align 4
 __kernel_trap:
-#切换到内核陷入栈,函数栈暂存
-csrrw sp,sscratch,sp #sp现在是trapcontext指针 sscratch 是usersp             
+
+    # marker: reached stvec entry
+    li t6, 0x1111222233334444
+
+# 切换到kernel_trap_stack内核trap上下文栈,用户态栈暂存
+csrrw sp,sscratch,sp #sp现在是trapcontext指针 sscratch 是usersp          
 sd x1,1*8(sp) #ra
 sd x3,3*8(sp) #gp
 .set n,4
@@ -52,7 +56,8 @@ sd t2,2*8(sp)#保存usersp
 #kernel satp
 ld t0,34*8(sp)
 #traphand;er
-ld t1,36*8(sp)
+ld t1,36*8(sp) 
+
 #app kernel sp
 ld sp,35*8(sp)
 
@@ -71,7 +76,7 @@ __kernel_refume: #a0 trap_context_addr a1:user satp
 csrw satp ,a1
 sfence.vma #刷新页表
 
-#让sscratch指向所有任务通用的trapcontext
+#让sscratch指向所有任务通用的trapcontext存储地址
 csrw sscratch,a0 
 
 #指向trapcontext
@@ -96,3 +101,17 @@ ld x3,3*8(sp)
 ld x2,2*8(sp) #最后恢复sp为user普通栈指针
 sret
 #回到触发异常的那条指令
+
+.global kernel_traped_forbid
+kernel_traped_forbid:
+l:
+    # marker
+    li t6, 0x5555666677778888
+
+
+    la sp, kernel_kernel_trap_top
+    addi sp, sp, -32 #预留空间，防止prologue打穿
+    # long jump
+    la t5, skernel_traped_forbid
+    jr t5
+

@@ -15,6 +15,8 @@ fn panic(_info: &PanicInfo) -> ! {
     }else {
         error!("[Kernel Panic]: Kernel panic: {:?}", _info.message());
     }
-
+    loop {
+        
+    }
     shutdown()
 }

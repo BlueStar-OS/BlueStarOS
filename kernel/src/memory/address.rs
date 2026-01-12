@@ -25,7 +25,7 @@ pub struct PageTable{
     entries:Vec<FramTracker>,
 }
 bitflags! {
-    #[derive(Debug)]
+    #[derive(Debug,Clone, Copy)]
     pub struct PTEFlags: usize {
         /// Valid
         const V = 1 << 0;
@@ -181,9 +181,7 @@ impl PageTable {
 
     ///获取内核地址空间的页表视图 只能由内核调用
     pub fn get_kernel_table_layer()->PageTable{
-        let inner=KERNEL_SPACE.lock();
-        let satp =inner.table.satp_token();
-        drop(inner);//drop inner 好习惯
+        let satp = satp::read().bits();
         let table=PageTable{
             root_ppn:PhysiNumber(satp & ((1usize << 44) -1)),
             entries:Vec::new()
@@ -291,7 +289,7 @@ impl PageTable {
     ///查找但是不创建新页表项 需要检查pte合法
     pub fn find_pte_vpn(&mut self,VirNum:VirNumber)->Option<&mut PageTableEntry>{
         let mut current_ppn=self.root_ppn.0;
-        let mut idx=VirNum.index();
+        let idx=VirNum.index();
         let mut pte_array=self.get_pte_array(current_ppn);
 
         for (id,index) in idx.iter().enumerate(){
@@ -362,7 +360,7 @@ impl PageTable {
 
     fn find_or_create_pte_vpn(&mut self,VirNum:VirNumber)->Option<&mut PageTableEntry>{
         let mut current_ppn=self.root_ppn.0;
-        let mut idx=VirNum.index();
+        let idx=VirNum.index();
         let mut pte_array=self.get_pte_array(current_ppn);
         for (id,index) in idx.iter().enumerate(){
 

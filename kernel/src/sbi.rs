@@ -37,8 +37,8 @@ pub fn get_char()->isize{//非阻塞 -1没有字符，>=0ascii码
 ///关机的操作的副作用文件系统卸载
 pub fn shutdown()->!{
     //取消文件系统挂载
-    if let Some(rootfs) = ROOTFS.lock().as_mut() {
-        rootfs.mount_poinr.iter().for_each(|fs| {
+    if let Some(rootfs) = ROOTFS.try_lock() {
+        rootfs.as_ref().unwrap().mount_poinr.iter().for_each(|fs| {
             fs.1.lock().umount();
         });
     }

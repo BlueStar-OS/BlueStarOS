@@ -74,9 +74,6 @@ impl Hal for VirtioHal {
         paddr
     }
     fn virt_to_phys(vaddr: virtio_drivers::VirtAddr) -> virtio_drivers::PhysAddr {
-        // Buffers passed into virtio_drivers may live on kernel stacks/heaps which are
-        // mapped by the kernel page table and are NOT guaranteed to be identity-mapped.
-        // Translate via kernel page table to obtain a real physical address.
         let mut table = PageTable::get_kernel_table_layer();
         if let Some(paddr) = table.translate(VirAddr(vaddr)) {
             paddr.0

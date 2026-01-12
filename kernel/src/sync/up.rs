@@ -32,4 +32,22 @@ impl<T> UPSafeCell<T>{
             }
         }
     }
+
+    #[track_caller]
+    pub fn try_lock(&self)->Option<core::cell::RefMut<'_,T>>{
+        match self.inner.try_borrow_mut() {
+            Ok(g) => Some(g),
+            Err(_) => {
+                let loc = core::panic::Location::caller();
+                use log::warn;
+                warn!(
+                    "RefCell already borrowed at {}:{}:{}",
+                    loc.file(),
+                    loc.line(),
+                    loc.column()
+                );
+                return None;
+            }
+        }
+    }
 }
