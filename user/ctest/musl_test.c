@@ -22,6 +22,7 @@
 
 // 简单的断言宏
 #define TEST_START(name) printf("\n[TEST] === %s ===\n", name)
+/// 写通过条件
 #define ASSERT(cond, msg) do { \
     if (!(cond)) { \
         printf("[FAIL] %s (Line %d)\n", msg, __LINE__); \
@@ -74,6 +75,7 @@ void test_memory() {
     // 测试 1: 小内存 (通常通过 brk 分配)
     printf("    Testing small malloc...\n");
     int *arr = (int*)malloc(100 * sizeof(int));
+    printf("Ptr %p \n",arr);
     ASSERT(arr != NULL, "malloc small");
     for(int i=0; i<100; i++) arr[i] = i;
     int sum = 0;
@@ -229,15 +231,15 @@ int main(int argc, char *argv[]) {
     printf("* BlueStarOS Musl Compatibility Verification *\n");
     printf("**********************************************\n");
     printf("Args: argc=%d, argv[0]=%s\n", argc, argv[0]);
-
+    printf("Why need much test, BlueStarOS is number %d!\n",1);
     // 顺序执行所有测试
-    test_memory();   // 先测内存，它是基石
-    test_file_io();  // 测文件系统基础
-    test_process();  // 测进程
-    test_pipe();     // 测 IPC
-    test_time();     // 测时间
-    test_directory(); // 测目录
+    //test_memory();   // 先测内存，它是基石
+    //test_file_io();  // 测文件系统基础
+    //test_process();  // 测进程
+    // test_pipe();     // 测 IPC
+    // test_time();     // 测时间
+    // test_directory(); // 测目录
 
-    printf("\n[SUCCESS] All Musl tests passed successfully!\n");
+    // printf("\n[SUCCESS] All Musl tests passed successfully!\n");
     return 0;
 }

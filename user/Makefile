@@ -5,6 +5,7 @@
 TARGET := riscv64gc-unknown-none-elf
 RV_MUSL_GCC := riscv64-linux-musl-gcc
 CTEST := $(patsubst ctest/%.c,%,$(wildcard ctest/*.c))
+CTEST_OUT_DIR := test
 BUILD_DIR := target/$(TARGET)/release
 BINS := $(patsubst src/bin/%.rs,%,$(wildcard src/bin/*.rs))
 KERNEL_IMG := ../kernel/disk.img
@@ -20,6 +21,11 @@ all: build
 build: FORCE
 	@mv carg .cargo
 	cargo build --release --target $(TARGET) --offline
+	@mkdir -p $(CTEST_OUT_DIR)
+	@for t in $(CTEST); do \
+		echo "[ctest] CC $$t"; \
+		$(RV_MUSL_GCC) -static -march=rv64gc -mabi=lp64d -o $(CTEST_OUT_DIR)/$$t ctest/$$t.c; \
+	done
 	@mv .cargo carg
 
 img: build
@@ -60,6 +66,16 @@ img: build
 		sudo cp $(BUILD_DIR)/$$b $$TMPDIR/test/
 		sudo chmod +x $$TMPDIR/test/$$b
 	done
+	if [ -d "$(CTEST_OUT_DIR)" ]; then
+		for f in $(CTEST_OUT_DIR)/* ; do
+			if [ -f "$$f" ]; then
+				name=$$(basename $$f)
+				echo "Copying ctest $$name..."
+				sudo cp "$$f" "$$TMPDIR/test/$$name"
+				sudo chmod +x "$$TMPDIR/test/$$name"
+			fi
+		done
+	fi
 	if [ -d "$(OSCOMP_ELF_DIR)" ]; then
 		echo "Copying oscomp test ELFs from $(OSCOMP_ELF_DIR)..."
 		sudo mkdir -p $$TMPDIR/oscomp

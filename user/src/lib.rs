@@ -60,28 +60,37 @@ pub extern "C" fn __user_start(sp0: usize) -> ! {
 static mut ARGS: Option<Vec<String>> = None;
 
 fn init_args_from_stack(sp: usize) {
-    let argc = unsafe { *(sp as *const usize) };
-    let mut p = sp + core::mem::size_of::<usize>();
-
-    let mut v: Vec<String> = Vec::new();
-    for _ in 0..argc {
-        let mut s = String::new();
-        loop {
-            let b = unsafe { *(p as *const u8) };
-            p += 1;
-            if b == 0 {
-                break;
+ 
+    let len = unsafe {*(sp as  *const usize)};
+    println!("Argc is :{:?} sp:{:#x}",len,sp);
+    let mut st:Vec<String> = Vec::new();
+    for i in 1..len+1 {
+        unsafe {
+            let mut v:Vec<u8> = Vec::new();
+            let str_ptr = *((sp+core::mem::size_of::<usize>()*i)as *const usize);
+            let mut cha = str_ptr;
+            loop {
+                let c = *(cha as *const u8) ;
+                if c==0{
+                    break;
+                }
+                v.push(c);
+                cha+=1;
             }
-            s.push(b as char);
+            let cs = String::from_utf8(v).expect("tran");
+            st.push(cs);
         }
-        while p % 8 != 0 {
-            p += 1;
+
+        
+    }
+    println!("{:?}",st);
+    if !st.is_empty() {
+        unsafe {
+            ARGS = Some(st);
         }
-        v.push(s);
     }
-    unsafe {
-        ARGS = Some(v);
-    }
+    
+
 }
 
 pub fn argc() -> usize {

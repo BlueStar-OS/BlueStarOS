@@ -56,6 +56,9 @@ impl FrameAllocatorTrait for FrameAlloctor{
         }else if self.start<self.end{
             let ppn=self.start;
             self.start+=1;
+            // unsafe {
+            //     core::slice::from_raw_parts_mut((ppn* PAGE_SIZE) as *mut u8, PAGE_SIZE).fill(0)
+            // }
             trace!("alloc frame:ppn:{}",ppn);
             Some(FramTracker::new(PhysiNumber(ppn)))
         }else{

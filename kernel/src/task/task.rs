@@ -1,6 +1,7 @@
 use core::arch::global_asm;
 use core::panicking::panic;
 
+use alloc::boxed::Box;
 use alloc::collections::vec_deque::VecDeque;
 use alloc::string::String;
 use alloc::string::ToString;
@@ -159,39 +160,121 @@ impl TaskControlBlock {
         (x + align - 1) & !(align - 1)
     }
 
+    fn align_slice(sli:&mut Vec<u8>,aligns: usize,sp:&mut usize){
+        while *sp%aligns!=0 {
+            *sp+=1;
+            sli[*sp]=0;
+        }
+    }
+
+    /// Not support envp
     fn push_args_to_user_stack(satp: usize, user_sp: usize, argv: &[String]) -> usize {
-        let argc = argv.len();
-        let mut total = core::mem::size_of::<usize>();
-        for a in argv.iter() {
-            total += Self::align_up(a.as_bytes().len() + 1, 8);
-        }
-        total = Self::align_up(total, 8);
+       ////////////////////////////////////////
+       //  argc
+       //  pointer
+       //  ....
+       //  ....
+       //  ....
+       //  argv end
+       //  envp end
+       //  string
+       //  string
+       // /////////////////////////////////////
+       let mut tb = PageTable::crate_table_from_satp(satp);
+       let mut base_line_size:usize = 0; // 基本元数据大小
+       let mut base_offset:usize = 0;
+       let usize_size = core::mem::size_of::<usize>();
+       base_line_size=base_line_size.saturating_add(usize_size); // argc
+       base_line_size=base_line_size.saturating_add(argv.len()*usize_size);// string ptr
+       base_line_size= base_line_size.saturating_add(usize_size*2); // argv end.envp end
 
-        let new_sp = user_sp.saturating_sub(total) & !7usize;
-        let mut blob: alloc::vec::Vec<u8> = alloc::vec::Vec::with_capacity(total);
-        blob.extend_from_slice(&argc.to_ne_bytes());
-        for a in argv.iter() {
-            blob.extend_from_slice(a.as_bytes());
-            blob.push(0);
-            while blob.len() % 8 != 0 {
-                blob.push(0);
+       let mut str_start_offset:usize = base_line_size;
+
+        for arg in argv.iter() {
+            //string size
+            let align_size = Self::align_up(arg.as_bytes().len()+1, usize_size);
+            base_line_size=base_line_size.saturating_add(align_size);
+        }
+
+        let mut str_real_start_addr = user_sp-base_line_size+str_start_offset;
+
+       let mut base_blob:Vec<u8> = vec![0u8;base_line_size];
+       // write argc
+       base_offset+=core::mem::size_of::<usize>();
+       base_blob[0..base_offset].copy_from_slice(&argv.len().to_le_bytes());
+       Self::align_slice(&mut base_blob, usize_size, &mut base_offset);
+
+        // write str pointer
+        for arg in argv.iter() {
+            let mut real_arg = arg.clone();
+            real_arg.push(0 as char);
+            let byte_len = arg.len()+1;
+            // pointer
+            base_blob[base_offset..base_offset+usize_size].copy_from_slice(&str_real_start_addr.to_le_bytes());
+            base_offset+=usize_size;
+            // str
+            base_blob[str_start_offset..str_start_offset+byte_len].copy_from_slice(real_arg.as_bytes());
+            
+            str_real_start_addr += Self::align_up(byte_len, usize_size); // next str pointer
+            str_start_offset +=Self::align_up(byte_len, usize_size); // next str
+        }
+        //end is zero
+        //copy to user
+        let need_how_page = base_blob.len() / PAGE_SIZE;
+        let user_stack_page = KERNEL_STACK_SIZE/PAGE_SIZE;
+        let mut page_vev:Vec<&mut [u8;PAGE_SIZE]> = Vec::new();
+        let user_sli =match tb.get_mut_byte(VirAddr(user_sp-base_line_size).into()){
+                Some(li)=>{
+                    li
+                }
+                None=>{
+                    return user_sp;
+                }
+            };
+            page_vev.push(user_sli);
+        if need_how_page > 1{
+            // 跨页
+            if need_how_page > user_stack_page {
+                // stack over flow!
+                return user_sp;
             }
-        }
-        while blob.len() < total {
-            blob.push(0);
-        }
-
-        let mut slices = PageTable::get_mut_slice_from_satp(satp, blob.len(), VirAddr(new_sp));
-        let mut off = 0usize;
-        for s in slices.iter_mut() {
-            if off >= blob.len() {
+            // usersp是页对齐的
+            for i in 1..need_how_page { // 补齐剩余页面
+                let user_sli_extend =match tb.get_mut_byte(VirAddr(user_sp-base_line_size+PAGE_SIZE*i+1).into()){
+                    Some(li)=>{
+                        li
+                    }
+                    None=>{
+                        return user_sp;
+                    }
+                };
+                page_vev.push(user_sli_extend);
+            }
+       }
+       
+       // first page
+       let mut pag= 0;
+       for byt in base_blob.chunks(PAGE_SIZE) {
+            if byt.is_empty() {
                 break;
             }
-            let n = core::cmp::min(s.len(), blob.len() - off);
-            s[..n].copy_from_slice(&blob[off..off + n]);
-            off += n;
-        }
-        new_sp
+            if byt.len()!=PAGE_SIZE {
+                if pag==0 {
+                    page_vev[pag][PAGE_SIZE-byt.len()..].copy_from_slice(byt);
+                    break;
+                }else {
+                    page_vev[pag][..byt.len()].copy_from_slice(byt);
+                    break;
+                }
+            }else {
+                page_vev[pag].copy_from_slice(byt);
+                pag+=1;
+            }
+            
+       }
+
+       user_sp-base_line_size
+       
     }
 
     ///设置父亲进程引用

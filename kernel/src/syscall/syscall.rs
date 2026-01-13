@@ -55,6 +55,54 @@ struct utsname{
     domainname:[u8;utname_field_len], //NIS DOMAIN name
 }
 
+/// sys_ioctl
+pub fn sys_ioctl()->isize{
+    return  0 ;
+}
+
+/// 退出当前进程组的所有线程
+pub fn sys_exit_group(exit_code:usize)->isize{
+    sys_exit(exit_code);
+    -1
+}
+
+/// 把我的线程 ID (TID) 存在这个地址里。如果我死了，记得把这个地址清零，并唤醒在此等待的 futex。
+pub fn sys_set_tid_address(tidptr:usize)->isize{
+    // simple implent
+    sys_getpid()
+}
+
+
+#[repr(C)]
+pub struct iovec{
+    iovec_base:usize,
+    iovec_len:usize
+}
+pub fn sys_writev(fd:i32,iov_vec:usize,iov_cnt:i32)->isize{
+    let iovec_base = core::mem::size_of::<iovec>();
+    let usize_size = core::mem::size_of::<usize>();
+    // 读取iovec写入
+    let satp = TASK_MANAER.get_current_stap();
+    let mut tb = PageTable::crate_table_from_satp(satp);
+    let mut write_re = 0;
+    for i in 0..iov_cnt {
+        // 处理可能跨页
+        let user_base =if let Some(re) =  tb.read_bytes_from_userspace(VirAddr(iov_vec+i as usize * iovec_base), usize_size){
+            usize::from_le_bytes(re.try_into().unwrap())
+        }else {
+            return -1;
+        };
+        let len =if let Some(re) = tb.read_bytes_from_userspace(VirAddr(iov_vec+i as usize * iovec_base+usize_size), usize_size){
+            usize::from_le_bytes(re.try_into().unwrap())
+        }else {
+            return -1;
+        };
+        let re = sys_write(fd as usize, user_base, len);
+        write_re+=re;
+    }
+    write_re
+}
+
 pub fn sys_nanosleep(req_ptr: usize, rem_ptr: usize) -> isize {
     if req_ptr == 0 {
         return -1;
@@ -636,6 +684,9 @@ pub fn sys_getppid() -> isize {
 pub fn sys_brk(new_brk:VirAddr)->isize{ 
     let new_brkaddr = new_brk.0;
 
+    let satp = TASK_MANAER.get_current_stap();
+    let mut tb = PageTable::crate_table_from_satp(satp);
+
     // 先取出当前 task 的 Arc，避免持有 task queue 的锁期间再 lock task。
     let current_task = {
         let inner = TASK_MANAER.task_que_inner.lock();
@@ -644,6 +695,9 @@ pub fn sys_brk(new_brk:VirAddr)->isize{
 
     let mut tcb = current_task.lock();
     let old_brk = tcb.memory_set.brk.0;
+
+ warn!("sys_brk: request new={:#x}, current={:#x}", new_brkaddr, old_brk);
+
 
     // Linux 语义：brk(0) 只查询当前 break。
     if new_brkaddr == 0 {
@@ -656,10 +710,24 @@ pub fn sys_brk(new_brk:VirAddr)->isize{
         return new_brkaddr as isize;
     }
 
+
     // expand：需要把 [old_brk, new_brk) 涉及到的新页映射出来。
     // 已经映射的旧页不需要重复映射：从包含 old_brk 的页的下一页开始。
-    let mut start_vpn: VirNumber = VirAddr(old_brk).floor_down();
+    let mut start_vpn: VirNumber = VirAddr(old_brk.saturating_sub(1)).floor_down();
     start_vpn.step();
+    loop {
+        let vp = tb.find_pte_vpn(start_vpn);
+        // sv39 2mb空洞
+        if vp.is_none(){
+            break;
+        }
+        if vp.unwrap().is_valid(){
+            start_vpn.step();
+        }else {
+            break;
+        }
+    }
+    
     let end_vpn: VirNumber = VirAddr(new_brkaddr - 1).floor_down();
 
     if start_vpn.0 <= end_vpn.0 {
@@ -675,6 +743,8 @@ pub fn sys_brk(new_brk:VirAddr)->isize{
     }
 
     tcb.memory_set.brk = VirAddr(new_brkaddr);
+    warn!("sys_brk: success, returning {:#x}", new_brkaddr);
+
     new_brkaddr as isize
 }
 

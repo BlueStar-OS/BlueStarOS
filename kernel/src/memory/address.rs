@@ -225,6 +225,22 @@ impl PageTable {
         result_v
     }
 
+    /// 防止一些跨页结构体字段读取
+    pub fn read_bytes_from_userspace(&mut self,vidr:VirAddr,len:usize)->Option<Vec<u8>>{
+        let mut byt:Vec<u8> = Vec::new();
+        for i in 0..len {
+            match self.translate(VirAddr(vidr.0+i)){
+                Some(phy)=>{
+                    byt.push(unsafe{*(phy.0 as *const u8) });
+                }
+                None=>{
+                    return None;
+                }
+            }
+        }
+        Some(byt)
+    }
+
     ///从给定的satp中创建临时新页表 临时使用物理ppn为粗略提取
     pub fn crate_table_from_satp(satp:usize)->Self{
         let table=PageTable{

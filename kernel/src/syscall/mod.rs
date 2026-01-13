@@ -4,6 +4,7 @@ use crate::memory::VirAddr;
 use crate::syscall::syscall::*;
 // Linux riscv64 syscall numbers (subset used by the oscomp test suite)
 pub const SYS_GETCWD: usize = 17;
+pub const SYS_IOCTL:usize = 29;
 pub const SYS_UNLINKAT: usize = 35;
 pub const SYS_LINKAT: usize = 37;
 pub const SYS_UMOUNT2: usize = 39;
@@ -17,9 +18,12 @@ pub const SYS_GETDENTS64: usize = 61;
 pub const SYS_LSEEK: usize = 62;
 pub const SYS_READ: usize = 63;
 pub const SYS_WRITE: usize = 64;
+pub const SYS_WRITEV:usize = 66; 
 pub const SYS_NEWFSTATAT: usize = 79;
 pub const SYS_FSTAT: usize = 80;
 pub const SYS_EXIT: usize = 93;
+pub const SYS_EXIT_GROUP:usize = 94;
+pub const SYS_SET_TID_ADDRESS:usize = 96;
 pub const SYS_NANOSLEEP: usize = 101;
 pub const SYS_SETPRIORITY: usize = 140;
 pub const SYS_TIMES: usize = 153;
@@ -41,6 +45,9 @@ pub const SYS_DUP3: usize = 24;
 ///返回值：通过 x10 (a0) 寄存器返回给用户态
 pub fn syscall_handler(id:usize,arg:[usize;6]) -> isize {
     match id {
+        SYS_SET_TID_ADDRESS => sys_set_tid_address(arg[0]),
+        SYS_EXIT_GROUP => sys_exit_group(arg[0]),
+        SYS_WRITEV => sys_writev(arg[0] as i32, arg[1], arg[2] as i32),
         SYS_WRITE => sys_write(arg[0], arg[1], arg[2]),
         SYS_READ => sys_read(arg[0], arg[1], arg[2]),
         SYS_EXIT => sys_exit(arg[0]),
