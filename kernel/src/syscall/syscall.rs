@@ -1533,7 +1533,18 @@ pub fn sys_wait4(pid: i32, wstatus_ptr: usize, options: i32) -> isize {
                 return -1;
             }
             let current = inner.current;
-            let current_task = inner.task_queen[current].clone();
+            let current_task = match inner.task_queen.get(current) {
+                Some(t) => t.clone(),
+                None => {
+                    warn!(
+                        "sys_wait4: current index out of bounds: current={} len={}",
+                        current,
+                        inner.task_queen.len()
+                    );
+                    drop(inner);
+                    return -1;
+                }
+            };
             drop(inner);
             let t = current_task.lock();
             t.childrens.clone()

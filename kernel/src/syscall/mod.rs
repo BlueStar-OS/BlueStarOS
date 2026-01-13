@@ -1,4 +1,4 @@
-mod syscall;
+pub mod syscall;
 use log::{error, warn};
 use crate::memory::VirAddr;
 use crate::syscall::syscall::*;
@@ -116,3 +116,4 @@ pub fn syscall_handler(id:usize,arg:[usize;6]) -> isize {
         }
     }
 }
+

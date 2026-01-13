@@ -149,6 +149,24 @@ pub fn set_kernel_forbid(){
     }
 }
 
+fn log_user_fault_detail(tag: &str) {
+    let scauses = scause::read();
+    let sepc_val = sepc::read();
+    let stval_val = stval::read();
+    let sstatus_val = sstatus::read();
+    let satp_val = satp::read();
+    error!(
+        "{}: cause={:?} sepc={:#x} stval={:#x} va={:#x} sstatus={:#x} satp={:#x}",
+        tag,
+        scauses.cause(),
+        sepc_val,
+        stval_val,
+        stval_val,
+        sstatus_val.bits(),
+        satp_val.bits()
+    );
+}
+
 /// 第一次进入用户态的入口点
 /// __switch 会跳转到这里，设置好 trap 环境后跳转到用户态
 #[no_mangle]
@@ -219,15 +237,15 @@ pub extern "C" fn kernel_trap_handler(){//内核专属trap（目前不应该被�
             //panic!("User IllegalInstruction at {:#x}", sepc_val)
         }
         Trap::Exception(Exception::InstructionPageFault)=>{
-            error!("User InstructionPageFault at {:#x}, accessing {:#x}", sepc_val, stval_val);
+            log_user_fault_detail("User InstructionPageFault");
             PageFaultHandler(VirAddr(stval_val),scauses);
         }
         Trap::Exception(Exception::LoadPageFault)=>{
-            warn!("User LoadPageFault at {:#x}, accessing {:#x}", sepc_val, stval_val);
+            log_user_fault_detail("User LoadPageFault");
             PageFaultHandler(VirAddr(stval_val),scauses);
         }
         Trap::Exception(Exception::StorePageFault)=>{
-            error!("User StorePageFault at {:#x}, accessing {:#x}", sepc_val, stval_val);
+            log_user_fault_detail("User StorePageFault");
             PageFaultHandler(VirAddr(stval_val),scauses);
         }
         Trap::Interrupt(Interrupt::SupervisorTimer)=>{

@@ -404,6 +404,13 @@ impl TaskManager {//全局唯一
         drop(inner);
         let ts = self.stride_select_task();
         if ts.is_none() {
+            let mut inner = self.task_que_inner.lock();
+            if let Some(t) = inner.task_blocking.pop_back() {
+                t.lock().task_statut = TaskStatus::Ready;
+                inner.task_queen.push_back(t);
+                inner.current = inner.task_queen.len().saturating_sub(1);
+            }
+            drop(inner);
             return;
         }
         let mut inner = self.task_que_inner.lock(); 
@@ -599,6 +606,13 @@ impl TaskManager {//全局唯一
     fn stride_select_task_inner(inner: &TaskManagerInner) -> Option<(usize, usize)> {
         let current = inner.current;
         let mut selected: Option<(usize, usize)> = None; // (index, pass)
+
+        if inner.task_queen.is_empty() {
+            // block是还有,因为init可能还在里面
+            drop(inner);
+            TASK_MANAER.wake_task_from_blocking(INIT_PID); //尝试唤醒init
+        }
+
         for (idx, cell) in inner.task_queen.iter().enumerate() {
             let t = cell.lock();
             if let TaskStatus::Ready = t.task_statut {
@@ -981,9 +995,8 @@ impl TaskManager {//全局唯一
 
     ///kail当前任务，内核有权调用 调用栈顶必须为TrapHandler! 调用它的地方考虑是否直接return
     pub fn kail_current_task_and_run_next(&self){
-        self.reparent_current_children_to_init();
-        self.mark_current_zombie(-1);
-        self.suspend_and_run_task();//调度下一个stride最小的任务
+        use crate::syscall::syscall::sys_exit;
+        sys_exit(usize::MAX);
         error!("Task Kailed!");
     }
 
