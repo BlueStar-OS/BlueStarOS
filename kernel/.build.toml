@@ -1,0 +1,4 @@
+[system.Custom]
+build_cmd = "make ARCH=aarch64 build"
+elf_path = "./src/BlueStarOS.elf"
+to_bin = false

@@ -1,13 +1,17 @@
 use log::{trace, warn};
-use crate::{config::{KERNEL_HEADP, KERNEL_HEAP_SIZE, MB, PAGE_SIZE}, memory::address::*,sync::UPSafeCell};
+use crate::{config::{KERNEL_HEADP, KERNEL_HEAP_SIZE, MB, PAGE_SIZE}, sync::UPSafeCell};
 use core::cell::UnsafeCell;
 use buddy_system_allocator::LockedHeap;
+use crate::arch::memory::*;
+
 #[allow(static_mut_refs)]
 use lazy_static::lazy_static;
 
 #[global_allocator]
 pub static ALLOCATOR: LockedHeap = LockedHeap::empty(); //内核堆分配器
 use alloc::vec::Vec;
+
+
 
 pub fn allocator_init(){
     unsafe{

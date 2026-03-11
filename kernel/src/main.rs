@@ -5,12 +5,13 @@
 //#![deny(warnings)]
 #![no_std]
 #![no_main]
-#![feature(panic_info_message,alloc,panic_internals,const_trait_impl,error_in_core)]
-use core::arch::global_asm;
-#[cfg(feature = "ext4")]
-use crate::sbi::putc;
+#![feature(panic_internals,panic_info_message,const_trait_impl,error_in_core)]
+
+extern crate alloc;
+
 
 mod sbi;
+mod arch;  // 架构抽象层
 mod driver;  // driver 必须在 console 之前加载，因为 console 依赖 driver
 #[macro_use]
 mod console;
@@ -24,22 +25,22 @@ mod trap;
 mod time;
 mod task;
 mod fs;
-
-use alloc::string::String;
-use log::{debug, error, trace, warn};
-use riscv::asm;
-use crate::config::{ebss, sbss};
-use crate::driver::blktest::blktest;
-use crate::fs::vfs::{ROOTFS, RootFs};
+use crate::arch::*;
+use crate::driver::uart::putc;
+use crate::sbi::shutdown;
+use log::*;
+use crate::fs::vfs::*;
 use crate::task::run_first_task;
-use crate::time::{ set_next_timeInterupt};
-use crate::trap::{enable_timer_interupt, rather_global_interrupt, set_kernel_trap_handler};
-extern crate alloc;
-use crate::{config::*, logger::kernel_info_debug, memory::allocator_init};
-use crate::memory::init_frame_allocator;
-use crate::memory::MapSet;
-global_asm!(include_str!("entry.asm"));
+use crate::time::*;
+use crate::arch::*;
+use crate::memory::*;
+use crate::logger::*;
+use crate::config::*;
+use crate::arch::set_kernel_trap_handler;
+use core::arch::global_asm;
+
 global_asm!(include_str!("app.asm"));
+
 /// clear BSS segment
 pub fn clear_bss() {
     extern "C" {
@@ -55,24 +56,38 @@ pub fn kernel_init(){
     allocator_init();//内核堆，分配器初始化
     init_frame_allocator(ekernel as usize,ekernel as usize +MEMORY_SIZE);//物理内存页分配器初始化
 }
+
 /// the rust entry-point of os
 #[no_mangle]
 pub fn blue_main() -> ! {//永远不会返回
     kernel_init(); //bss，日志，分配器初始化
-    set_kernel_trap_handler();//初始化陷阱入口，应该在地址空间激活前开启
+
     KERNEL_SPACE.lock().activate();//激活地址空间
+    
+
+    set_kernel_trap_handler();//初始化陷阱入口，必须在地址空间激活后设置虚拟地址
+
     rather_global_interrupt();//愿意处理全局中断使能
     enable_timer_interupt();//开启全局时间中断使能
     set_next_timeInterupt();//第一次开启时钟中断
     
+    
+
     debug!("stext {:#x}",__kernel_trap as usize);
+
     debug!("traper {:#x}",straper as usize);
     debug!("trap refume virtualaddr:{:#x}",__kernel_refume as usize - __kernel_trap as usize + TRAP_BOTTOM_ADDR);
-    
+   
     RootFs::init_rootfs();
-    
+    use crate::driver::init_gpu;
+    init_gpu(); //初始化virtio gpu设备
+
+
     run_first_task();
+
     warn!("All right,kernel Will end\n");
     panic!("Kernel End");
+
+    
 
 }

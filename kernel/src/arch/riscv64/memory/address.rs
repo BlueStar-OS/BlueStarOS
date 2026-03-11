@@ -1,29 +1,14 @@
-use core::ops::Add;
-use core::sync::atomic::{compiler_fence,Ordering};
 use bitflags::bitflags;
-use log::{debug, error, trace, warn};
-use riscv::register::satp;
-use crate::memory::MapArea;
-use crate::{config::*, memory::frame_allocator::*};
+use crate::PAGE_SIZE_BITS;
+use crate::PAGE_SIZE;
+use crate::memory::FramTracker;
 use alloc::vec::Vec;
 use alloc::vec;
-#[derive(Debug,Clone,Copy,PartialEq, Eq, PartialOrd, Ord)]
-pub struct VirNumber(pub usize); //虚拟页号
-#[derive(Debug,Clone,Copy,PartialEq, Eq, PartialOrd, Ord)]
-pub struct PhysiNumber(pub usize);
-#[derive(Debug,Clone,Copy,PartialEq, Eq, PartialOrd, Ord)]
-pub struct VirAddr(pub usize);
-#[derive(Debug,Clone,Copy,PartialEq, Eq, PartialOrd, Ord)]
-pub struct PhysiAddr(pub usize);
-#[derive(Debug,Clone,Copy)]
-#[repr(C)]
-pub struct PageTableEntry(pub usize);
-
-#[derive(Clone)]
-pub struct PageTable{
-    pub root_ppn:PhysiNumber,
-    entries:Vec<FramTracker>,
-}
+use core::sync::atomic::compiler_fence;
+use crate::riscv64::satp;
+use crate::error;
+use core::sync::atomic::Ordering;
+use crate::memory::alloc_frame;
 bitflags! {
     #[derive(Debug,Clone, Copy)]
     pub struct PTEFlags: usize {
@@ -47,6 +32,15 @@ bitflags! {
 }
 
 
+#[derive(Debug,Clone,Copy,PartialEq, Eq, PartialOrd, Ord)]
+pub struct VirNumber(pub usize); //虚拟页号
+#[derive(Debug,Clone,Copy,PartialEq, Eq, PartialOrd, Ord)]
+pub struct PhysiNumber(pub usize);
+#[derive(Debug,Clone,Copy,PartialEq, Eq, PartialOrd, Ord)]
+pub struct VirAddr(pub usize);
+#[derive(Debug,Clone,Copy,PartialEq, Eq, PartialOrd, Ord)]
+pub struct PhysiAddr(pub usize);
+
 
 impl From<PhysiNumber> for PhysiAddr {
     fn from(value: PhysiNumber) -> Self {
@@ -68,7 +62,6 @@ impl From<VirAddr> for VirNumber {
         VirNumber(value.0>>PAGE_SIZE_BITS)
     }
 }
-
 
 
 impl VirNumber {
@@ -128,6 +121,16 @@ impl PhysiAddr{
     }
 }
 
+
+#[derive(Debug,Clone,Copy)]
+#[repr(C)]
+pub struct PageTableEntry(pub usize);
+
+#[derive(Clone)]
+pub struct PageTable{
+    pub root_ppn:PhysiNumber,
+    entries:Vec<FramTracker>,
+}
 
 
 impl PageTableEntry {
@@ -403,7 +406,7 @@ impl PageTable {
     pub fn satp_token(&self)->usize{
           //debug!("token: root ppn:{}", self.root_ppn.0);
           // MODE (8 for Sv39) | ASID (0) | PPN
-          (8 << 60) | (self.root_ppn.0)
+          (8usize << 60) | (self.root_ppn.0)
     }
 
     

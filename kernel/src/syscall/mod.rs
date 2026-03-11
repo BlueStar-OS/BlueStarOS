@@ -1,6 +1,6 @@
 pub mod syscall;
 use log::{error, warn};
-use crate::memory::VirAddr;
+use crate::arch::memory::*;
 use crate::syscall::syscall::*;
 // Linux riscv64 syscall numbers (subset used by the oscomp test suite)
 pub const SYS_GETCWD: usize = 17;

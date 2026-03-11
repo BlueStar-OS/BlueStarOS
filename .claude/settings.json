@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:www.infradead.org)",
+      "Read(//home/inkbottle/othersrc/BlueStarOS/kernel/**)"
+    ]
+  }
+}

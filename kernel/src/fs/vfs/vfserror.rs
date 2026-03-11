@@ -1,5 +1,4 @@
 use core::{ fmt::{Display, Formatter, Result}};
-use core::error::Error;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum VfsFsError {
@@ -48,4 +47,5 @@ impl Display for VfsFsError {
     }
 }
 
+use core::error::Error;
 impl Error for VfsFsError {}

@@ -12,7 +12,7 @@ const SHUTDOWN_CALLID:usize=8;
 
 
 #[inline(always)]
-fn sbi_call(callid:usize,arg0:usize,arg1:usize,arg2:usize)->isize{
+pub fn sbi_call(callid:usize,arg0:usize,arg1:usize,arg2:usize)->isize{
     let mut result;
     unsafe {
         asm!(

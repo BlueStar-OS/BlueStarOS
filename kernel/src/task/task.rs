@@ -1,5 +1,4 @@
-use core::arch::global_asm;
-use core::panicking::panic;
+
 
 use alloc::boxed::Box;
 use alloc::collections::vec_deque::VecDeque;
@@ -17,11 +16,11 @@ use riscv::register::sstatus;
 use riscv::register::sstatus::SPP;
 use rsext4::OpenFile;
 use rsext4::ext4_backend::datablock_cache;
-use crate::__kernel_refume;
 use crate::config::*;
 use crate::fs::vfs::File;
 use crate::fs::vfs::LinuxDirent64;
 use crate::fs::vfs::OpenFlags;
+use crate::kernel_trap_handler;
 use crate::fs::vfs::vfs_getdents64;
 use crate::fs::vfs::vfs_open;
 use crate::fs::vfs::VFS_DT_REG;
@@ -29,26 +28,21 @@ use crate::memory::*;
 use crate::sbi::shutdown;
 use crate::task::Signal;
 use crate::task::file_loader;
+use crate::arch::task::*;
 use log::debug;
-use crate::fs::component::stdio::stdio::{stdin_file, stdout_file, stderr_file};
-use crate::trap::{app_entry_point, kernel_trap_handler};
+use crate::app_entry_point;
+use crate::TrapContext;
+use crate::arch::memory::*;
+use crate::fs::component::tty::*;
+
 ///init进程PID
 pub const INIT_PID:i32=1;
 /// TASK_MANAGER是否初始化，防止死循环
 pub static mut TASK_MANAGER_INIT:bool = false;
 
 ///任务上下文
-use crate::{ sync::UPSafeCell, trap::TrapContext};
-global_asm!(include_str!("_switch.S"));
+use crate::{ sync::UPSafeCell};
 
-#[repr(C)]
-#[derive(Clone)]
-pub struct TaskContext{
-     ra:usize, //offset 0
-     pub sp:usize, //offser 8
-     ///s0-s11 被调用者保存寄存器 switch保存
-     calleed_register:[usize;12]//offset 16-..
-}
 
 #[derive(Clone,PartialEq,Debug)]
 pub enum TaskStatus {
@@ -141,18 +135,7 @@ impl Drop for ProcessId {
 }
 
 
-impl TaskContext {
-    /// 创建任务上下文，跳转到 app_entry_point
-    /// 注意：kernel_sp 是内核栈指针，不是用户栈！
-    /// app_entry_point 是内核函数，需要内核栈来执行
-    pub fn return_trap_new(kernel_sp: usize) -> Self {
-       TaskContext { ra: app_entry_point as usize, sp: kernel_sp, calleed_register: [0;12] }
-    }
-///零初始化
-    pub fn zero_init()->Self{
-        TaskContext { ra: 0, sp: 0, calleed_register: [0;12] }
-    }
-}
+
 
 impl TaskControlBlock {
 

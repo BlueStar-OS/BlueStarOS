@@ -2,21 +2,19 @@ use alloc::collections::btree_map::BTreeMap;
 use bitflags::bitflags;
 use alloc::vec::Vec;
 use alloc::sync::Arc;
-use crate::memory::memset::satp::Satp;
 use alloc::sync::Weak;
 use log::warn;
 use log::{debug, error, trace};
 use core::arch::asm;
+use crate::arch::memory::*;
 use core::cell::RefMut;
 use core::hint;
-    use riscv::register::satp;
-    use crate::fs::vfs::File;
-    use crate::task::TaskManagerInner;
-    use crate::task::getapp_kernel_sapce;
-    use crate::task::{TASK_MANAER, file_loader};
+use crate::fs::vfs::File;
+use crate::task::TaskManagerInner;
+use crate::task::getapp_kernel_sapce;
+use crate::task::{TASK_MANAER, file_loader};
 
-use crate::{config::*, memory::{address::*, alloc_frame, frame_allocator::FramTracker}};
-use crate::trap::no_return_start;
+use crate::{config::*, memory::{ alloc_frame, frame_allocator::FramTracker}};
  use lazy_static::lazy_static;
  use crate::sync::UPSafeCell;
 
@@ -1486,13 +1484,10 @@ impl MapSet {
 
     /// Change page table by writing satp CSR Register.
     pub fn activate(&self) {
-         let satps = self.table.satp_token();
-        debug!("Active PageTable: SATP = {:#x}", satps);
-        unsafe {
-            satp::write(satps);
-            asm!("sfence.vma");
-            debug!("Page Witch Successful!!!!!");
-        }
+
+        active_memset(self);
+
+
     }
 }
 

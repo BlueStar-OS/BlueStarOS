@@ -1,8 +1,10 @@
 use log::{debug, error, warn};
 
-use crate::{memory::{PTEFlags, PageTable, VirAddr, VirNumRange, VirNumber}, task::TASK_MANAER};
+use crate::{memory::{ VirNumRange}, task::TASK_MANAER};
 use riscv::register::{scause::{self, Exception, Trap}, sie::Sie, sscratch, sstatus::{self, SPP, Sstatus}, stval, stvec, utvec::TrapMode};
 use riscv::register::scause::Scause;
+use crate::arch::memory::*;
+
 
 ///专门处理非虚拟化环境下的PAGEFAULT exception
 ///faultVAddr发生fault时被操作的addr

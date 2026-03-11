@@ -7,6 +7,12 @@ rustflags = [
 ]
 linker = "rust-lld"
 
+[target.aarch64-unknown-none-softfloat]
+rustflags = [
+    "-Clink-arg=-Tsrc/linker-aarch64.ld", "-Cforce-frame-pointers=yes"
+]
+linker = "rust-lld"
+
 [source.crates-io]
 replace-with = "vendored-sources"
 

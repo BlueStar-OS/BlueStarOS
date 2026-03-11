@@ -1,8 +1,8 @@
-    .section .text.entry
-    .globl _blue_start
+.section .text.entry
+.globl _blue_start
 _blue_start:
     la sp, kernel_stack_top
-    la t0,kernel_trap_stack_top
+    la t0, kernel_trap_stack_top
     csrrw t0,sscratch,t0
     call blue_main
 

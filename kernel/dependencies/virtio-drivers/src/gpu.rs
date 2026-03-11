@@ -183,7 +183,8 @@ impl<H: Hal> VirtIOGpu<'_, H> {
         Ok(())
     }
 
-    fn get_display_info(&mut self) -> Result<RespDisplayInfo> {
+    /// Get the display info.
+    pub fn get_display_info(&mut self) -> Result<RespDisplayInfo> {
         let info: RespDisplayInfo = self.request(CtrlHeader::with_type(Command::GetDisplayInfo))?;
         info.header.check_type(Command::OkDisplayInfo)?;
         Ok(info)

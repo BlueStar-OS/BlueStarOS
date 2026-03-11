@@ -1,7 +1,8 @@
 use core::fmt::{self, Write};
 use alloc::sync::Arc;
-use crate::{sbi, task::TASK_MANAER};
+use crate::task::TASK_MANAER;
 use crate::fs::vfs::{File, OpenFlags, VfsFsError};
+use crate::driver::uart;
 
 
 pub const FD_TYPE_STDIN: usize = 0;
@@ -10,6 +11,7 @@ pub const FD_TYPE_STDERR: usize = 2;
 
 /// 标准输出文件节点
 pub struct Stdout;
+
 
 /// 标准输入文件节点
 pub struct Stdin;
@@ -21,14 +23,13 @@ pub struct Stderr;
 impl Stdin {
     ///调用栈顶必须为traphandler！！！，因为其中有TASK_MANAER.suspend_and_run_task();
     pub fn get_char() -> u8 {
-        //直接调用sbi接口，返回一个字符，没有字符就挂起
-        let cha = sbi::get_char() as u8;
-
-        if cha == 0 {
-            TASK_MANAER.suspend_and_run_task();//没有字符就切换任务
+        // 使用UART驱动读取字符，没有字符就挂起
+        loop {
+            if let Some(cha) = uart::getc() {
+                return cha;
+            }
+            TASK_MANAER.suspend_and_run_task(); // 没有字符就切换任务
         }
-        
-        cha
     }
 }
 
@@ -39,7 +40,7 @@ impl File for Stdout {
 
     fn write(&self, buf: &[u8]) -> Result<usize, VfsFsError> {
         for &byte in buf {
-            sbi::putc(byte as usize);
+            uart::putc(byte);
         }
         Ok(buf.len())
     }
@@ -51,12 +52,12 @@ impl File for Stdin {
         buf.iter_mut().for_each(|b| *b = 0);
 
         for slot in buf.iter_mut() {
-            let mut cha = sbi::get_char();
-            while cha == 0 {
+            let mut cha = uart::getc();
+            while cha.is_none() {
                 TASK_MANAER.suspend_and_run_task();
-                cha = sbi::get_char();
+                cha = uart::getc();
             }
-            *slot = cha as u8;
+            *slot = cha.expect("[tty]: Should have data") as u8;
             read_count += 1;
             if *slot == 13 {
                 break;
@@ -77,10 +78,10 @@ impl File for Stderr {
 
     fn write(&self, buf: &[u8]) -> Result<usize, VfsFsError> {
         for &b in b"<3>" {
-            sbi::putc(b as usize);
+            uart::putc(b as u8);
         }
         for &byte in buf {
-            sbi::putc(byte as usize);
+            uart::putc(byte as u8);
         }
         Ok(buf.len())
     }
@@ -89,7 +90,7 @@ impl File for Stderr {
 impl Write for Stdout {
     fn write_str(&mut self, s: &str) -> core::fmt::Result {
         for cha in s.chars() {
-            sbi::putc(cha as usize);
+            uart::putc(cha as u8);
         }
         Ok(())
     }

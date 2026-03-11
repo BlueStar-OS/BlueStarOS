@@ -1,5 +1,5 @@
-use crate::{task::TaskContext, trap::TrapContext};
- extern "C"{
+use crate::arch::task::TaskContext;
+extern "C"{
         pub fn kernel_stack_lower_bound();
         pub fn kernel_stack_top();
 
@@ -36,13 +36,15 @@ use crate::{task::TaskContext, trap::TrapContext};
         pub fn __kernel_trap();
         ///内核陷阱恢复地址
         pub fn __kernel_refume();
+        ///内核陷入拒绝函数
+        pub fn kernel_traped_forbid();
         ///内核陷阱的物理起始地址
         pub fn straper();
         ///用户程序专用陷阱物理起始地址
         pub fn utraper();
         pub fn app_start();//测试应用地址
         pub fn app_end();//测试应用地址
-        pub fn __switch(need_swapout:*const TaskContext,need_swapin:*const TaskContext);//任务切换汇编函数
+     
 
 }
 
@@ -83,6 +85,11 @@ pub const BIG_INT:usize=1_000_000;
 
 ///文件系统每个Block大小
 pub const BLOCKSIZE:usize = 4096;
+
+
+
+
+
 
 use lazy_static::lazy_static;
 use crate::{MapSet, sync::UPSafeCell};
