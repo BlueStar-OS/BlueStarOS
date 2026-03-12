@@ -46,6 +46,18 @@ SECTIONS
 
     . = ALIGN(4K);
     ebss = .;
+
+    /* DTB probe entries (按优先级排序) */
+    . = ALIGN(8);
+    __dtb_probe_start = .;
+    .dtb_probe : {
+        KEEP(*(.dtb_probe.high))
+        KEEP(*(.dtb_probe.mid))
+        KEEP(*(.dtb_probe.low))
+    }
+    __dtb_probe_end = .;
+
+    . = ALIGN(4K);
     ekernel = .;
 
     /DISCARD/ : {

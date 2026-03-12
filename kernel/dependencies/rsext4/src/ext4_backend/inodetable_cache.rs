@@ -281,8 +281,8 @@ impl InodeCache {
         block_dev: &mut Jbd2Dev<B>,
         inode_num: u64,
     ) -> BlockDevResult<()> {
-        if let Some(cached) = self.cache.remove(&inode_num)
-            && cached.dirty {
+        if let Some(cached) = self.cache.remove(&inode_num){
+            if cached.dirty {
                 Self::write_inode_static(
                     block_dev,
                     &cached.inode,
@@ -291,6 +291,7 @@ impl InodeCache {
                     self.inode_size,
                 )?;
             }
+        }
         Ok(())
     }
 
@@ -354,8 +355,8 @@ impl InodeCache {
         block_dev: &mut Jbd2Dev<B>,
         inode_num: u64,
     ) -> BlockDevResult<()> {
-        if let Some(cached) = self.cache.get(&inode_num)
-            && cached.dirty {
+        if let Some(cached) = self.cache.get(&inode_num){
+            if cached.dirty {
                 let block_num = cached.block_num;
                 let offset = cached.offset_in_block;
                 let mut buffer = alloc::vec![0u8; self.inode_size];
@@ -367,6 +368,7 @@ impl InodeCache {
                     cached.dirty = false;
                 }
             }
+        }
         Ok(())
     }
 

@@ -2,7 +2,9 @@
 use crate::global_asm;
 global_asm!(include_str!("./_switch.S"));
 
-
+extern "C" {
+    pub fn __switch(need_swapout: *const TaskContext, need_swapin: *const TaskContext);
+}
 
 // ============ 任务上下文 ============
 
@@ -35,14 +37,14 @@ impl TaskContext {
         }
     }
 
-    pub fn goto_restore(kstack_ptr: usize) -> Self {
+    pub fn return_trap_new(kernel_sp: usize) -> Self {
         extern "C" { fn app_entry_point(); }
         Self {
             x19: 0, x20: 0, x21: 0, x22: 0, x23: 0,
             x24: 0, x25: 0, x26: 0, x27: 0, x28: 0,
             x29: 0,  // fp
             x30: app_entry_point as usize,  // lr - 返回地址
-            sp: kstack_ptr,
+            sp: kernel_sp,
         }
     }
 }

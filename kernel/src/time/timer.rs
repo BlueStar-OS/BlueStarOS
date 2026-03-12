@@ -1,10 +1,8 @@
 const  MSEC:usize=1000;
-use riscv::register::time;
-use crate::sbi::set_next_timetriger;
 use crate::config::{CPU_CIRCLE, TIME_FREQUENT};
 use log::debug;
-
-
+use crate::set_next_timetriger;
+use crate::arch::time::*;
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default)]
 pub struct TimeVal{
@@ -16,13 +14,13 @@ pub struct TimeVal{
 ///返回tick数
 
 pub fn get_time_tick()->usize{
-    time::read()
+    read_time()
 }
 
 
 ///返回毫秒数
 pub fn get_time_ms()->usize{
-    let current=(time::read()*MSEC)/CPU_CIRCLE;//先×再除防止精度丢失
+    let current=(read_time()*MSEC)/CPU_CIRCLE;//先×再除防止精度丢失
     current
 }
 
@@ -36,8 +34,8 @@ pub fn set_next_timeInterupt(){
 
 ///内核sleep函数,传入毫秒数 阻塞式  目前不能使用，buged
 pub fn kernel_sleep(time_ms:usize){
-let target =time::read()+CPU_CIRCLE/MSEC*time_ms;
-    while time::read()<= target {
+let target =read_time()+CPU_CIRCLE/MSEC*time_ms;
+    while read_time()<= target {
       //  debug!("current :{} targer :{}",time::read(),target)
       core::hint::spin_loop();
     }

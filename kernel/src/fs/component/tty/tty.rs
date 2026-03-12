@@ -1,5 +1,6 @@
 use core::fmt::{self, Write};
 use alloc::sync::Arc;
+use log::error;
 use crate::task::TASK_MANAER;
 use crate::fs::vfs::{File, OpenFlags, VfsFsError};
 use crate::driver::uart;
@@ -52,12 +53,13 @@ impl File for Stdin {
         buf.iter_mut().for_each(|b| *b = 0);
 
         for slot in buf.iter_mut() {
-            let mut cha = uart::getc();
-            while cha.is_none() {
+            let mut cha = Self::get_char();
+            while cha == 0 {
+                
                 TASK_MANAER.suspend_and_run_task();
-                cha = uart::getc();
+                cha = Self::get_char();
             }
-            *slot = cha.expect("[tty]: Should have data") as u8;
+            *slot = cha as u8;
             read_count += 1;
             if *slot == 13 {
                 break;

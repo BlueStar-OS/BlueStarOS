@@ -67,14 +67,6 @@ __aarch64_vector:
 
 .align 7
 __kernel_trap:
-
-    // 测试：输出字符'6'到UART (0x09000000)
-    mov x27, #0x36          // ASCII '6'
-    mov x28, #0x0000
-    movk x28, #0x0900, lsl #16
-    strb w27, [x28]
-
-
     // 1. 切换栈指针：sp ↔ tpidr_el1
     // tpidr_el1保存TrapContext地址，sp是用户栈
     // 注意：不能直接 msr/mrs sp，需要通过通用寄存器中转

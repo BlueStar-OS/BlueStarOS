@@ -446,10 +446,11 @@ impl<B: BlockDevice> BlockDev<B> {
 
     /// 刷新脏缓冲区到磁盘
     pub fn flush(&mut self) -> BlockDevResult<()> {
-        if self.is_dirty
-            && let Some(block_id) = self.cached_block {
+        if self.is_dirty{
+            if let Some(block_id) = self.cached_block {
                 self.write_block(block_id)?;
             }
+        }
         self.dev.flush()
     }
 

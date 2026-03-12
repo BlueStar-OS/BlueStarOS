@@ -25,7 +25,7 @@ use crate::config::SECTOR_SIZE;
 use crate::sync::UPSafeCell;
 use crate::fs::vfs::vfs::VfsFs;
 use lazy_static::lazy_static;
-use log::{error, warn};
+use log::{debug, error, warn};
 use crate::alloc::string::ToString;
 use crate::fs::vfs::{LinuxDirent64, VFS_DT_REG};
 use crate::fs::fs_backend::fat32::Fat32Fs;
@@ -205,6 +205,7 @@ impl RootFs {
 
     //initfs 根据feature选择fs实例化
     pub fn init_rootfs(){
+        debug!("FileSysteam Initialing...");
         // 挂载ramfs
         let mut mount_point:BTreeMap<MountPath,MountFs> =BTreeMap::new(); 
         // WARN: 5MB RamFs

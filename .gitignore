@@ -5,3 +5,6 @@ testsuits-for-oskernel/
 *.img
 .vscode
 *.elf
+tmp
+.claude
+other/

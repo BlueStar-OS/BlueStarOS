@@ -542,12 +542,12 @@ impl Ext4FileSystem {
 
             // 如果块号变化，先把前一个块写回
             if current_block != Some(block_num) {
-                if let Some(prev_block) = current_block
-                    && Some(prev_block) == buffer_snapshot_block {
+                if let Some(prev_block) = current_block{
+                    if Some(prev_block) == buffer_snapshot_block {
                         //由于目前日志回放在fs构建之后（块组描述符读取之后），目前为了快速修复防止读取到旧的超级块。直接落盘写回
                         block_dev.write_block(prev_block as u32, false)?;
                     }
-
+                }
                 // 读取新块
                 block_dev.read_block(block_num as u32)?;
                 current_block = Some(block_num);
@@ -570,10 +570,12 @@ impl Ext4FileSystem {
         }
 
         // 写回最后一个块
-        if let Some(last_block) = current_block
-            && Some(last_block) == buffer_snapshot_block {
+        if let Some(last_block) = current_block{
+            if Some(last_block) == buffer_snapshot_block {
                 block_dev.write_block(last_block as u32, true)?;
             }
+        }
+            
 
         debug!("Group descriptors written back");
         Ok(())

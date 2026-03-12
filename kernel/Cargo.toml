@@ -8,6 +8,7 @@ edition = "2021"
 default = ["main_fs"]
 main_fs = ["ext4"]
 ext4 = ["rsext4"]
+qemu_plat = []
 
 [dependencies]
 log = "0.4"
@@ -19,6 +20,7 @@ xmas-elf = "0.7.0"
 spin = "0.9"
 virtio-drivers = { path = "./dependencies/virtio-drivers" }
 rsext4 = {path = "./dependencies/rsext4", optional = true}
+paste = "1.0.15"
 
 
 [build-dependencies]

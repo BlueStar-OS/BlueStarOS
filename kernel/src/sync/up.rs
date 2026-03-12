@@ -20,8 +20,9 @@ impl<T> UPSafeCell<T>{
     #[track_caller]
     pub fn lock(&self)->core::cell::RefMut<'_,T>{
         match self.inner.try_borrow_mut() {
-            Ok(g) => g,
+            Ok(g) =>{g},
             Err(_) => {
+            kprintln!("Try lock error");
                 let loc = core::panic::Location::caller();
                 panic!(
                     "RefCell already borrowed at {}:{}:{}",

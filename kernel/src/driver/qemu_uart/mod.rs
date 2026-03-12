@@ -1,5 +1,7 @@
 // QEMU UART串口驱动
-const UART0_BASE: usize = 0x10000000;
+static mut UART0_BASE: usize = 0x10000000;
+
+use crate::kprintln;
 
 /// 发送一个字符
 pub fn putc(c: u8) {
@@ -11,12 +13,18 @@ pub fn putc(c: u8) {
 
 /// 读取一个字符（非阻塞）
 /// 返回 Some(c) 如果有数据，否则返回 None
+/// 16550 UART: 先检查 LSR (偏移+5) 的 DR 位 (bit 0)，
+/// 有数据才读 RBR (偏移+0)，读 RBR 会自动清除 DR
 pub fn getc() -> Option<u8> {
     unsafe {
-        let uart = UART0_BASE as *const u8;
-        // QEMU简化UART：直接读取即可
-        // 实际硬件需要检查状态寄存器
-        Some(uart.read_volatile())
+        let lsr = (UART0_BASE + 5) as *const u8;
+        let rbr = UART0_BASE as *const u8;
+        // LSR bit 0 = Data Ready
+        if lsr.read_volatile() & 1 != 0 {
+            Some(rbr.read_volatile())
+        } else {
+            None
+        }
     }
 }
 
@@ -28,4 +36,37 @@ pub fn getc_blocking() -> u8 {
         }
         core::hint::spin_loop();
     }
+}
+
+// ===== DTB 探测器示例 =====
+
+use crate::driver::dtb::DeviceNode;
+use log::info;
+
+/// UART 16550 探测器
+fn uart_16550_probe(node: &DeviceNode, _compatible: &str) -> Result<(), &'static str> {
+    // 获取寄存器地址
+    let reg = node.get_property("reg").ok_or("Missing reg property")?;
+    let regs = reg.as_reg(2, 2);
+
+    if regs.is_empty() {
+        return Err("Empty reg property");
+    }
+
+    let base_addr = regs[0].address as usize;
+    kprintln!("[UART Probe] Found UART at {:#x}, size={:#x}", base_addr, regs[0].size);
+
+    unsafe{
+        UART0_BASE = base_addr
+    }
+
+    Ok(())
+}
+
+// 注册 UART 探测器
+crate::dtb_probe! {
+    compatible: "ns16550a",
+    priority: Mid,
+    driver: "uart-16550",
+    probe: uart_16550_probe
 }

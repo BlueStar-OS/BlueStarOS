@@ -25,13 +25,13 @@ use crate::fs::vfs::vfs_getdents64;
 use crate::fs::vfs::vfs_open;
 use crate::fs::vfs::VFS_DT_REG;
 use crate::memory::*;
-use crate::sbi::shutdown;
+use crate::shutdown;
 use crate::task::Signal;
 use crate::task::file_loader;
 use crate::arch::task::*;
 use log::debug;
 use crate::app_entry_point;
-use crate::TrapContext;
+use crate::arch::trap::TrapContext;
 use crate::arch::memory::*;
 use crate::fs::component::tty::*;
 
@@ -824,7 +824,7 @@ impl TaskManager {//全局唯一
             Some((idx, _)) => idx,
             None => {
                 warn!("No task can select");
-                shutdown();
+                shutdown()
             }
         };
         

@@ -55,15 +55,15 @@ impl FrameAllocatorTrait for FrameAlloctor{
     ///分配物理页帧
     fn alloc(&mut self)->Option<FramTracker>{
         if let Some(ppn)=self.recycle.pop(){
-            trace!("realloc frame:ppn:{}",ppn);
+            // trace!("realloc frame:ppn:{}",ppn);
             Some(FramTracker::new(PhysiNumber(ppn)))
         }else if self.start<self.end{
             let ppn=self.start;
             self.start+=1;
-            // unsafe {
-            //     core::slice::from_raw_parts_mut((ppn* PAGE_SIZE) as *mut u8, PAGE_SIZE).fill(0)
-            // }
-            trace!("alloc frame:ppn:{}",ppn);
+            unsafe {
+                core::slice::from_raw_parts_mut((ppn* PAGE_SIZE) as *mut u8, PAGE_SIZE).fill(0)
+            }
+            // trace!("alloc frame:ppn:{}",ppn);
             Some(FramTracker::new(PhysiNumber(ppn)))
         }else{
             panic!("no more frame!");
@@ -95,7 +95,7 @@ impl FrameAlloctor {
         self.end=PhysiAddr(end).floor_down().0;
         self.recycle=Vec::new(); 
         self.origin=PhysiAddr(start).floor_up().0;
-        trace!("frame allocator init: start ppn:{} end ppn:{} size:{}MB",self.start,self.end,(end-start)/MB);
+        kprintln!("frame allocator init: start ppn:{} end ppn:{} size:{}MB",self.start,self.end,(end-start)/MB);
     }
 }
 
@@ -123,6 +123,9 @@ lazy_static!{
     };
 }
 pub fn init_frame_allocator(start:usize,end:usize){
+    kprintln!("Init frame allocator start={:#x}, end={:#x}", start, end);
+    kprintln!("PhysiAddr(start) = {:#x}", PhysiAddr(start).0);
+    kprintln!("floor_up result = {}", PhysiAddr(start).floor_up().0);
     FRAME_ALLOCATOR.lock().init(start,end);
 }
 pub fn alloc_frame()->Option<FramTracker>{

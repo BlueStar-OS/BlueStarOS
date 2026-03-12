@@ -967,8 +967,8 @@ pub fn link<B: BlockDevice>(
     let mut copied_ft: Option<u8> = None;
     if let Some((_lpino, mut lp_inode)) = get_inode_with_num(fs, block_dev, &linked_parent_path)
         .ok()
-        .flatten()
-        && let Ok(blocks) = resolve_inode_block_allextend(fs, block_dev, &mut lp_inode) {
+        .flatten(){
+        if let Ok(blocks) = resolve_inode_block_allextend(fs, block_dev, &mut lp_inode) {
             for &phys in blocks.values() {
                 let cached = match fs.datablock_cache.get_or_load(block_dev, phys) {
                     Ok(v) => v,
@@ -990,6 +990,7 @@ pub fn link<B: BlockDevice>(
                 }
             }
         }
+    }
 
     let file_type = copied_ft.unwrap_or_else(|| {
         if target_inode.is_file() {

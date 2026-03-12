@@ -45,14 +45,26 @@ pub struct VirNumRange(pub VirNumber,pub VirNumber);
 bitflags! {//MapAreaFlags 和 PTEFlags 起始全为0
     #[derive(Debug,Clone, Copy)]
     pub struct MapAreaFlags: usize {
-        ///Readable
+        ///Valid - bit 0
+        const V = 1 << 0;
+        ///Readable - bit 1
         const R = 1 << 1;
-        ///Writable
+        ///Writable - bit 2
         const W = 1 << 2;
-        ///Excutable
+        ///Excutable - bit 3
         const X = 1 << 3;
-        ///Accessible in U mode
-        const U = 1 << 4;  //这里是maparea的标志 不要和页表标志搞混淆
+        ///Accessible in U mode - bit 4
+        const U = 1 << 4;
+        ///Global mapping - bit 5 (AArch64: nG bit inverted)
+        const G = 1 << 5;
+        ///Accessed - bit 6 (AArch64: AF bit, must be 1)
+        const A = 1 << 6;
+        ///Dirty - bit 7 (AArch64: DBM bit for hardware dirty tracking)
+        const D = 1 << 7;
+        ///Device memory - bit 8 (AArch64: use AttrIndx=1 for Device nGnRE)
+        ///CRITICAL: Must be set for MMIO devices (UART, etc.)
+        ///Using Normal memory for devices causes undefined behavior!
+        const DEV = 1 << 8;
     }
 }
 
@@ -284,8 +296,6 @@ impl MapArea {
             }
         };
         // 权限合并
-        
-
         page_table.map(vpn, ppn, self.flags.into());
         //debug!("Map Aread map vpn:{} -> ppn:{}",vpn.0,ppn.0);
     }
@@ -1330,25 +1340,30 @@ impl MapSet {
         //映射陷阱
         mem_set.map_traper();
 
-        //映射硬件段
+
+
+        //映射硬件段 (MMIO设备，必须使用设备内存属性!)
         let hardware_range = VirNumRange::new(VirAddr(0x0 as usize), VirAddr(0x10010000 as usize));//range封装过
         mem_set.add_area(
             hardware_range,
             MapType::Indentical,
-            MapAreaFlags::R | MapAreaFlags::W,
+            MapAreaFlags::V | MapAreaFlags::R | MapAreaFlags::W | MapAreaFlags::A | MapAreaFlags::G | MapAreaFlags::DEV,
             None,
             None,
         );
+
+        debug!("[MEMMAP] Hardware (Device): {:#x}-{:#x}, flags: V|R|W|A|G|DEV", 0x0, 0x10010000);
 
         //映射代码段
         let text_range = VirNumRange::new(VirAddr(stext as usize), VirAddr(etext as usize));//range封装过
         mem_set.add_area(
             text_range,
             MapType::Indentical,
-            MapAreaFlags::R | MapAreaFlags::X,
+            MapAreaFlags::V | MapAreaFlags::R | MapAreaFlags::X | MapAreaFlags::A | MapAreaFlags::G,
             None,
             None,
         );
+        debug!("[MEMMAP] Text: {:#x}-{:#x}, flags: V|R|X|A|G", stext as usize, etext as usize);
 
 
         //映射rodata段
@@ -1356,46 +1371,46 @@ impl MapSet {
         mem_set.add_area(
             rodata_range,
             MapType::Indentical,
-            MapAreaFlags::R,
+            MapAreaFlags::V | MapAreaFlags::R | MapAreaFlags::A | MapAreaFlags::G,
             None,
             None,
         );
-        //trace!("{} {}\n",rodata_start_vpn.0,rodata_end_vpn.0);
+        debug!("[MEMMAP] Rodata: {:#x}-{:#x}, flags: V|R|A|G", srodata as usize, erodata as usize);
 
-    
+
         // 映射内核数据段
         let data_range = VirNumRange::new(VirAddr(sdata as usize), VirAddr(edata as usize-1));//range封装过
         mem_set.add_area(
             data_range,
             MapType::Indentical,
-            MapAreaFlags::R | MapAreaFlags::W,
+            MapAreaFlags::V | MapAreaFlags::R | MapAreaFlags::W | MapAreaFlags::A | MapAreaFlags::G,
             None,
             None,
         );
-        debug!("data {:?}\n",data_range);
+        debug!("[MEMMAP] Data: {:#x}-{:#x}, flags: V|R|W|A|G", sdata as usize, edata as usize);
 
         // 映射内核启动栈保护页，栈溢出保护                                                                                               -1向下取整到之前一页，防止覆盖下一页
         let stack_protector = VirNumRange::new(VirAddr(kernel_stack_protect_start as usize), VirAddr(kernel_stack_protect_end as usize-1));
         mem_set.add_area(
             stack_protector,
             MapType::Indentical,
-            MapAreaFlags::empty(),
+            MapAreaFlags::V,  // 保护页：只有Valid，没有任何访问权限
             None,
             None,
         );
-        warn!("Protect :{:#x} - {:#x} range:{:?}",kernel_stack_protect_start as usize,kernel_stack_protect_end as usize,stack_protector);
-        
+        debug!("[MEMMAP] Stack Guard: {:#x}-{:#x}, flags: V (guard page)", kernel_stack_protect_start as usize, kernel_stack_protect_end as usize);
+
 
         //映射内核启动栈
         let bss_range = VirNumRange::new(VirAddr(kernel_stack_lower_bound as usize), VirAddr(kernel_stack_top as usize));//range封装过
         mem_set.add_area(
             bss_range,
             MapType::Indentical,
-            MapAreaFlags::R | MapAreaFlags::W,
+            MapAreaFlags::V | MapAreaFlags::R | MapAreaFlags::W | MapAreaFlags::A | MapAreaFlags::G,
             None,
             None,
         );
-       warn!("stack {:#x} {:#x} range:{:?}\n",kernel_stack_lower_bound as usize,kernel_stack_top as usize,bss_range);
+        debug!("[MEMMAP] Stack: {:#x}-{:#x}, flags: V|R|W|A|G", kernel_stack_lower_bound as usize, kernel_stack_top as usize);
 
 
         // 映射内核trap栈保护页
@@ -1403,23 +1418,23 @@ impl MapSet {
         mem_set.add_area(
             trap_stack_protector,
             MapType::Indentical,
-            MapAreaFlags::empty(),
+            MapAreaFlags::V,  // 保护页：只有Valid，没有任何访问权限
             None,
             None,
         );
-        warn!("Trap Protect :{:#x} - {:#x} range:{:?}",kernel_trap_stack_protect_start as usize,kernel_trap_stack_protect_end as usize,trap_stack_protector);
-        
-       
+        debug!("[MEMMAP] Trap Stack Guard: {:#x}-{:#x}, flags: V (guard page)", kernel_trap_stack_protect_start as usize, kernel_trap_stack_protect_end as usize);
+
+
         // 映射内核trap/正常运行 栈
         let trap_run_range = VirNumRange::new(VirAddr(kernel_trap_stack_bottom as usize), VirAddr(kernel_trap_stack_top as usize));//range封装过
         mem_set.add_area(
             trap_run_range,
             MapType::Indentical,
-            MapAreaFlags::R | MapAreaFlags::W,
+            MapAreaFlags::V | MapAreaFlags::R | MapAreaFlags::W | MapAreaFlags::A | MapAreaFlags::G,
             None,
             None,
         );
-       warn!("trap_run_range {:#x} {:#x} range:{:?}\n",kernel_trap_stack_bottom as usize,kernel_trap_stack_top as usize,trap_run_range);
+        debug!("[MEMMAP] Trap Stack: {:#x}-{:#x}, flags: V|R|W|A|G", kernel_trap_stack_bottom as usize, kernel_trap_stack_top as usize);
 
 
         // 映射内核selftrap栈
@@ -1427,11 +1442,11 @@ impl MapSet {
         mem_set.add_area(
             kernel_kernel_trap_range,
             MapType::Indentical,
-            MapAreaFlags::R | MapAreaFlags::W,
+            MapAreaFlags::V | MapAreaFlags::R | MapAreaFlags::W | MapAreaFlags::A | MapAreaFlags::G,
             None,
             None,
         );
-       warn!("kernel_kernel_trap_run_range {:#x} {:#x} range:{:?}\n",kernel_kernel_trap_bottom as usize,kernel_kernel_trap_top as usize,kernel_kernel_trap_range);
+        debug!("[MEMMAP] Kernel Trap Stack: {:#x}-{:#x}, flags: V|R|W|A|G", kernel_kernel_trap_bottom as usize, kernel_kernel_trap_top as usize);
 
 
 
@@ -1440,13 +1455,13 @@ impl MapSet {
         mem_set.add_area(
             out_bss,
             MapType::Indentical,
-            MapAreaFlags::R | MapAreaFlags::W,
+            MapAreaFlags::V | MapAreaFlags::R | MapAreaFlags::W | MapAreaFlags::A | MapAreaFlags::G,
             None,
             None,
         );
-        warn!("other bss {:#x} {:#x} range:{:?}\n",estack as usize,ekernel as usize,out_bss);
+        debug!("[MEMMAP] BSS (heap): {:#x}-{:#x}, flags: V|R|W|A|G", estack as usize, ekernel as usize);
 
-        
+
         // 映射物理内存(必须手动构造range区间)，phystart需要向上取整,end需要手动-1 range
         let phys_start =VirAddr(ekernel as usize).floor_up();
         let phys_end =VirAddr(ekernel as usize + MEMORY_SIZE-PAGE_SIZE).floor_down(); //ekernel 为结束地址 end需要手动-1 range
@@ -1454,18 +1469,18 @@ impl MapSet {
         mem_set.add_area(
             phys_range,
             MapType::Indentical,
-            MapAreaFlags::W | MapAreaFlags::R,
+            MapAreaFlags::V | MapAreaFlags::W | MapAreaFlags::R | MapAreaFlags::A | MapAreaFlags::G,
             None,
             None,
         );
-        warn!("phys {} {}\n",phys_start.0,phys_end.0);
+        debug!("[MEMMAP] Physical Memory: {:#x}-{:#x}, flags: V|R|W|A|G", phys_start.0 << 12, phys_end.0 << 12);
 
         //设置brk Error
         mem_set.brk = VirAddr(ebss as usize + 1);
 
         //内核地址空间映射完成
         let vdr:VirAddr=phys_end.into();
-        debug!("Kernle AddressSet Total Memory:{} MB,Kernel Size:{}MB",(vdr.0 -skernel as usize)/MB,(ekernel as usize -skernel as usize)/MB);
+        debug!("[MEMMAP] ✓ Kernel address space mapped: Total {} MB, Kernel size {} MB",(vdr.0 -skernel as usize)/MB,(ekernel as usize -skernel as usize)/MB);
         
         mem_set
 

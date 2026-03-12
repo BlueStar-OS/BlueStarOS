@@ -1,6 +1,90 @@
 use core::arch::asm;
 use log::{debug, error, warn};
+use crate::task::TASK_MANAER;
+use crate::syscall::syscall_handler;
+use crate::arch::memory::VirAddr;
+use crate::time::set_next_timeInterupt;
+use crate::arch::TrapContext;
 
+// AArch64页错误处理适配器
+fn handle_page_fault_aarch64(fault_addr: VirAddr, esr: u64) {
+    use crate::arch::memory::{VirNumber, PageTable, PTEFlags};
+
+    debug!("Handle Fault Virtual Address:{:#x}", fault_addr.0);
+    let contain_vpn: VirNumber = fault_addr.floor_down();
+    let tsak_satp = TASK_MANAER.get_current_stap();
+    let mut map_layer: PageTable = PageTable::crate_table_from_satp(tsak_satp);
+
+    // 解析ESR_EL1获取错误类型
+    let ec = (esr >> 26) & 0x3F;
+    let iss = esr & 0x1FFFFFF;
+    let is_write = (iss & (1 << 6)) != 0;  // WnR bit
+    let is_instruction = ec == 0x20 || ec == 0x21;
+
+    // 检查页表项
+    match &mut map_layer.find_pte_vpn(contain_vpn) {
+        Some(pte) => {
+            if pte.is_valid() {
+                // 处理A/D位更新
+                if pte.is_valid() && pte.flags().contains(PTEFlags::W) && is_write {
+                    (*pte).set_isaccess();
+                    (*pte).set_isdirty();
+                    unsafe {
+                        asm!("dsb sy", "tlbi vmalle1", "dsb sy", "isb");
+                    }
+                    warn!("Update pte access and dirty flags");
+                    return;
+                } else if pte.is_valid() && pte.flags().contains(PTEFlags::R) && !is_write {
+                    (*pte).set_isaccess();
+                    unsafe {
+                        asm!("dsb sy", "tlbi vmalle1", "dsb sy", "isb");
+                    }
+                    warn!("Update pte access flags");
+                    return;
+                } else if !pte.is_valid() {
+                    // 继续处理缺页
+                } else {
+                    error!("PageFault Unhandled! Killed.");
+                    error!("  Addr: {:#x}", fault_addr.0);
+                    error!("  ESR: {:#x}", esr);
+                    error!("  PTE Flags: {:?}", pte.flags());
+                    TASK_MANAER.kail_current_task_and_run_next();
+                    return;
+                }
+            }
+        }
+        None => {
+            // 路不通，继续处理
+        }
+    }
+
+    // 检查是否有对应的mmap区域
+    let inner = TASK_MANAER.task_que_inner.lock();
+    let current = inner.current;
+    drop(inner);
+    let inner = TASK_MANAER.task_que_inner.lock();
+
+    let will_kill: bool = {
+        let memset = &mut inner.task_queen[current].lock().memory_set;
+        !memset.is_mmap_vpn(contain_vpn)
+    };
+
+    if will_kill {
+        error!("area not contain mmap addr kill!");
+        drop(inner);
+        TASK_MANAER.kail_current_task_and_run_next();
+        return;
+    }
+
+    debug!("[PageFaultHandler]:ligel!");
+
+    {
+        let memset = &mut inner.task_queen[current].lock().memory_set;
+        memset.findarea_allocFrame_and_setPte(contain_vpn);
+    }
+
+    drop(inner);
+}
 
 /// ESR_EL1 异常类别（EC）定义
 #[repr(u8)]
@@ -90,33 +174,107 @@ fn log_exception_detail(tag: &str) {
 
 // ============ 用户态异常处理（EL0 → EL1）============
 
-/// 用户态同步异常处理
+/// 用户态同步异常处理 - 主要的trap处理入口
 #[no_mangle]
 pub extern "C" fn sync_el0_64() {
-    log_exception_detail("Sync exception from EL0");
-    panic!("Sync exception from EL0");
-}
+    use crate::trap::recycle_pending_kstacks;
+    use crate::arch::set_kernel_forbid;
 
-/// 处理系统调用
-fn handle_syscall(syscall_num: usize) {
-   
-}
+    // 回收内核栈
+    recycle_pending_kstacks();
 
-/// 处理页错误
-fn handle_page_fault() {
-    let far = read_far_el1();
+    set_kernel_forbid();
+
     let esr = read_esr_el1();
+    let elr = read_elr_el1();
+    let far = read_far_el1();
+    let ec = ExceptionClass::from_esr(esr);
 
-    // TODO: 调用页错误处理器
-    // PageFaultHandler(VirAddr(far as usize), esr);
+    // 获取系统调用参数（如果是系统调用）
+    let (sys_id, sys_args) = {
+        let current_trapcx = TASK_MANAER.get_current_trapcx();
+        let id = current_trapcx.x[8] as usize;  // AArch64: x8 是系统调用号
+        let args = [
+            current_trapcx.x[0] as usize,  // x0-x5 是参数
+            current_trapcx.x[1] as usize,
+            current_trapcx.x[2] as usize,
+            current_trapcx.x[3] as usize,
+            current_trapcx.x[4] as usize,
+            current_trapcx.x[5] as usize,
+        ];
+        (id, args)
+    };
 
-    warn!("Page fault at {:#x}, killing task", far);
+    match ec {
+        ExceptionClass::SVC64 => {
+            // 系统调用
+            {
+                let current_trapcx = TASK_MANAER.get_current_trapcx();
+                debug!("pre elr:{:#x}", current_trapcx.elr_el1);
+                current_trapcx.elr_el1 += 4;  // SVC指令是4字节
+            }
+
+            let ret = syscall_handler(sys_id, sys_args);
+
+            {
+                let current_trapcx: &mut TrapContext = TASK_MANAER.get_current_trapcx();
+                debug!("lat elr:{:#x}", current_trapcx.elr_el1);
+                current_trapcx.x[0] = ret as usize;  // x0 是返回值
+            }
+        }
+        ExceptionClass::InstructionAbortLower => {
+            // 指令页错误
+            error!("User InstructionAbort at {:#x}", far);
+            handle_page_fault_aarch64(VirAddr(far as usize), esr);
+        }
+        ExceptionClass::DataAbortLower => {
+            // 数据页错误
+            log_exception_detail("User DataAbort");
+            handle_page_fault_aarch64(VirAddr(far as usize), esr);
+        }
+        ExceptionClass::PCAlignment => {
+            error!("User PC alignment fault at {:#x}", elr);
+            TASK_MANAER.kail_current_task_and_run_next();
+        }
+        ExceptionClass::SPAlignment => {
+            error!("User SP alignment fault at {:#x}", far);
+            TASK_MANAER.kail_current_task_and_run_next();
+        }
+        ExceptionClass::BRK => {
+            error!("User BRK instruction at {:#x}", elr);
+            TASK_MANAER.kail_current_task_and_run_next();
+        }
+        _ => {
+            log_exception_detail("Unknown user exception");
+            panic!("Unknown trap from user: {:?}", ec);
+        }
+    }
+
+    // 返回用户态
+    use crate::arch::app_entry_point;
+    app_entry_point();
 }
 
 /// 用户态IRQ中断处理
 #[no_mangle]
 pub extern "C" fn irq_el0_64() {
-    panic!("IRQ from EL0");
+    use crate::trap::recycle_pending_kstacks;
+
+    // 回收内核栈
+    recycle_pending_kstacks();
+
+    // 处理进程信号
+    TASK_MANAER.resolve_current_task_signal();
+
+    // 设置下一次时钟中断
+    set_next_timeInterupt();
+
+    // 挂起当前任务并运行下一个
+    TASK_MANAER.suspend_and_run_task();
+
+    // 返回用户态
+    use crate::arch::app_entry_point;
+    app_entry_point();
 }
 
 /// 用户态FIQ中断处理

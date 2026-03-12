@@ -1,3 +1,4 @@
+use log::warn;
 use spin::Mutex;
 use virtio_drivers::{Hal, VirtIOBlk, VirtIOHeader};
 use lazy_static::*;
@@ -5,6 +6,7 @@ use alloc::{sync::Arc, vec::Vec};
 use crate::{memory::*};
 use crate::sync::UPSafeCell;
 use crate::kprintln;
+use log::debug;
 use virtio_drivers::VirtIOGpu;
 use crate::arch::memory::*;
 const MMIO_BASE: usize = 0x10001000; //QEMU virtio mmio base address
@@ -110,6 +112,7 @@ impl VirtBlk {
     /// 添加到全局块设备里面
     pub fn new()->Self{
         unsafe {
+            debug!("New VirtBlk");
             let header = &mut *(MMIO_BASE as *mut VirtIOHeader);
             let capacity_in_sectors = core::ptr::read_volatile(header.config_space() as *const u64);
             let blk = VirtBlk(

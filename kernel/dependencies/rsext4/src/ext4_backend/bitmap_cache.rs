@@ -219,10 +219,11 @@ impl BitmapCache {
         block_dev: &mut Jbd2Dev<B>,
         key: &CacheKey,
     ) -> BlockDevResult<()> {
-        if let Some(bitmap) = self.cache.remove(key)
-            && bitmap.dirty {
+        if let Some(bitmap) = self.cache.remove(key){
+            if bitmap.dirty {
                 Self::write_bitmap_static(block_dev, bitmap.block_num, &bitmap.data)?;
             }
+        }
         Ok(())
     }
 
@@ -269,8 +270,8 @@ impl BitmapCache {
         block_dev: &mut Jbd2Dev<B>,
         key: &CacheKey,
     ) -> BlockDevResult<()> {
-        if let Some(bitmap) = self.cache.get(key)
-            && bitmap.dirty {
+        if let Some(bitmap) = self.cache.get(key){
+            if bitmap.dirty {
                 let block_num = bitmap.block_num;
                 let data = bitmap.data.clone();
 
@@ -282,6 +283,7 @@ impl BitmapCache {
                     bitmap.dirty = false;
                 }
             }
+        }
         Ok(())
     }
 

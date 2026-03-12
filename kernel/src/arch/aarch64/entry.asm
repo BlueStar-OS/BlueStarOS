@@ -29,6 +29,37 @@ _blue_start:
     .long   0
 
 _start_kernel:
+
+
+    //Save dtb pointer
+    mov x20,x0
+
+    // underflow el level
+    mrs x0,CurrentEL
+    lsr x0,x0,#2
+    cmp x0, #2
+    b.ne 1f
+
+    // 配置 EL2 → EL1 降级
+    mov     x0, #(1 << 31)  // HCR_EL2.RW=1 (EL1 用 AArch64)
+    msr     hcr_el2, x0
+
+    mov     x0, #0x3c5      // SPSR: EL1h (SPSel=1), DAIF 全屏蔽 外部中断全屏蔽
+    msr     spsr_el2, x0
+
+    adr     x0, 1f          // 返回地址
+    msr     elr_el2, x0
+
+    eret                     // 降到 EL1 
+
+    1:
+    
+    // Save DTB pointer from x0 (passed by U-Boot following ARM64 boot protocol)
+    // x0 contains the device tree blob pointer
+    ldr x1, =_dtb_pointer
+    str x20, [x1]
+
+    // Initialize stack
     ldr x0, =kernel_stack_top
     mov sp, x0
 
@@ -39,6 +70,14 @@ _start_kernel:
     msr daifset, #2
 
     bl blue_main
+
+
+// DTB pointer storage
+.section .data
+.align 3
+.global _dtb_pointer
+_dtb_pointer:
+    .quad 0
 
 
 
@@ -55,6 +94,7 @@ kernel_stack_protect_end:
 kernel_stack_lower_bound:
     .space 4096 * 64
     .globl kernel_stack_top
+    .align 4
 kernel_stack_top:
     .global kernel_stack_protect_start
 

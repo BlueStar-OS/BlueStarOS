@@ -44,8 +44,6 @@ extern "C"{
         pub fn utraper();
         pub fn app_start();//测试应用地址
         pub fn app_end();//测试应用地址
-     
-
 }
 
 /// consent mode

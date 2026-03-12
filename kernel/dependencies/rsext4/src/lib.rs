@@ -2,7 +2,6 @@
 #![deny(unused)]
 #![deny(dead_code)]
 #![deny(warnings)]
-#![feature(iter_repeat_n,let_chains)]
 
 
 extern crate alloc;

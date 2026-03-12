@@ -2,7 +2,7 @@
 ARCH  ?= riscv64
 MODE := release
 USER_DIR := ../user
-LOG ?= WARN
+LOG ?= DEBUG
 
 # Architecture-specific settings
 ifeq ($(ARCH), riscv64)
@@ -14,6 +14,8 @@ QEMU_MACHINE := virt
 QEMU_CPU :=
 QEMU_BIOS := -bios $(BOOTLOADER)
 QEMU_KERNEL = -device loader,file=$(KERNEL_BIN),addr=$(KERNEL_ENTRY_PA)
+# 驱动 features
+DRIVER_FEATURES ?= qemu_plat
 else ifeq ($(ARCH), aarch64)
 TARGET := aarch64-unknown-none-softfloat
 KERNEL_ENTRY_PA := 0x40080000
@@ -22,6 +24,8 @@ QEMU_MACHINE := virt
 QEMU_CPU := -cpu cortex-a72
 QEMU_BIOS :=
 QEMU_KERNEL = -kernel $(KERNEL_ELF)
+# 驱动 features
+DRIVER_FEATURES ?=
 else
 $(error Unsupported ARCH=$(ARCH). Supported: riscv64, aarch64)
 endif
@@ -35,6 +39,13 @@ ifeq ($(MODE), release)
 	MODE_ARG := --release
 endif
 
+# Driver features argument
+ifneq ($(DRIVER_FEATURES),)
+	FEATURES_ARG := --features "$(DRIVER_FEATURES)"
+else
+	FEATURES_ARG :=
+endif
+
 # Binutils
 OBJDUMP := rust-objdump --arch-name=$(ARCH)
 OBJCOPY := rust-objcopy --binary-architecture=$(ARCH)
@@ -46,7 +57,7 @@ DISASM ?= -x
 build: user-makeimg
 	@cargo clean
 	@rm -f $(KERNEL_ELF) $(KERNEL_BIN) src/BlueStarOS.elf src/BlueStarOS.bin
-	@LOG=$(LOG) cargo build --target $(TARGET) $(MODE_ARG) --offline
+	@LOG=$(LOG) cargo build --target $(TARGET) $(MODE_ARG) $(FEATURES_ARG) --offline
 	$(OBJCOPY) $(KERNEL_ELF) --strip-all -O binary $(KERNEL_BIN)
 	@cp $(KERNEL_ELF) src/BlueStarOS.elf
 	@cp $(KERNEL_BIN) src/BlueStarOS.bin
@@ -83,16 +94,15 @@ run-inner: build
 		$(QEMU_CPU) \
 		-m 256m \
 		$(QEMU_BIOS) \
-		$(QEMU_KERNEL) -s \
+		$(QEMU_KERNEL) -s\
 		-drive file=disk.img,format=raw,if=none,id=x0 \
 		-net none \
 		-device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0 \
 		-device virtio-gpu-device,bus=virtio-mmio-bus.1 \
-		-serial stdio
 		-nographic
 
 run-consent-inner: user-consent-img
-	@cargo build --target $(TARGET) $(MODE_ARG) --offline
+	@cargo build --target $(TARGET) $(MODE_ARG) $(FEATURES_ARG) --offline
 	@qemu-system-$(ARCH) \
 		-machine virt \
 		-kernel $(KERNEL_ELF) \

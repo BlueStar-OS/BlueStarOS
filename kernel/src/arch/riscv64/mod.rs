@@ -2,15 +2,19 @@
 pub mod task;
 pub mod memory;
 pub mod panic;
+pub mod trap;
+pub mod sbi;
+pub mod time;
 // 重新导出，让外部可以通过 crate::arch::TaskContext 访问
 pub use task::TaskContext;
 pub use task::__switch;
-
+pub use trap::TrapContext;
+pub use sbi::*;
 
 use riscv::register::{stvec, utvec::TrapMode};
 use crate::config::TRAP_BOTTOM_ADDR;
 use core::{arch::global_asm,  panicking::panic};
-use crate::{config::*, sbi::shutdown, task::TASK_MANAER, time::set_next_timeInterupt};
+use crate::{config::*, task::TASK_MANAER, time::set_next_timeInterupt};
 use log::{debug, error, };
 use riscv::register::{scause::{self, Exception, Trap}, sie::Sie, sscratch, sstatus::{self, SPP, Sstatus}, stval};
 use crate::syscall::*;//系统调用
@@ -34,7 +38,10 @@ global_asm!(include_str!("trap.asm"));
 // 引入入口
 global_asm!(include_str!("./entry.asm"));
 
+/// 平台初始化函数
+pub fn arch_init(){
 
+}
 
 /// 设置内核陷阱处理程序向量
 pub fn set_kernel_trap_handler() {
@@ -48,53 +55,6 @@ pub fn set_kernel_trap_handler() {
 pub fn set_kernel_forbid() {
     unsafe {
         stvec::write(kernel_traped_forbid as usize, TrapMode::Direct);
-    }
-}
-
-// ============ Trap 上下文 ============
-#[repr(C)]
-#[repr(align(8))]  // 确保 8 字节对齐
-pub struct TrapContext{
-     ///32个寄存器完全保存
-     pub x:[usize;32],
-     ///陷入状态
-     pub sstatus:Sstatus, //32*8(sp)
-     ///返回地址
-     pub sepc_entry_point:usize,//33*8(sp)
-     ///内核地址空间satp
-     pub kernel_satp:usize,//34*8(sp)
-     ///内核栈指针
-     pub kernel_sp:usize,//35*8(sp)
-     ///陷阱处理程序
-     pub trap_handler:usize,//36*8(sp)
-}
-
-
-
-impl TrapContext {
-    /// 初始化应用的 TrapContext,设置usersp
-    pub fn init_app_trap_context(
-        entry: usize,
-        kernel_satp: usize,
-        trap_handler: usize,
-        kernel_sp: usize,
-        user_sp:usize,
-    ) -> Self {
-        let mut sstatus = sstatus::read();
-        sstatus.set_spp(SPP::User);  // 设置返回用户态
-        let mut register = [0; 32];
-        //x2
-        debug!("SSTATUS:{:#X}",sstatus.bits());
-        register[2]=user_sp;
-        register[1]=no_return_start as usize;
-        TrapContext {
-            x: register,               // 通用寄存器初始化为 0，x[2](sp) 会在外部设置
-            sstatus,
-            sepc_entry_point: entry,   // 用户程序入口
-            kernel_satp,              // 内核页表
-            kernel_sp,                // 内核栈指针
-            trap_handler,             // trap 处理函数
-        }
     }
 }
 
@@ -249,7 +209,7 @@ pub extern "C" fn kernel_trap_handler(){//内核专属trap（目前不应该被�
 }
 
 pub fn no_return_start()->!{
-panic("Start Function you ret ,WTF????");
+    panic("Start Function you ret ,WTF????");
 }
 
 

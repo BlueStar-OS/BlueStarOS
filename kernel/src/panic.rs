@@ -1,5 +1,7 @@
 use core::panic::PanicInfo;
-use crate::sbi::shutdown;
+use log::error;
+
+use crate::shutdown;
 #[panic_handler]
 fn panic(_info: &PanicInfo) -> ! {
     let location = _info.location();
@@ -13,9 +15,7 @@ fn panic(_info: &PanicInfo) -> ! {
     }else {
         crate::kprintln!("[Kernel Panic]: {:?}", _info.message());
     }
-
-    //backtrace();
-
+    
     shutdown()
 
 }

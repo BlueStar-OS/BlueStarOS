@@ -3,12 +3,22 @@
 _blue_start:
     la sp, kernel_stack_top
     la t0, kernel_trap_stack_top
+    
+    // 设备树
+    la t1,_dtb_pointer
+    sd a1,0(t1)
+    
     csrrw t0,sscratch,t0
     call blue_main
 
 
 
-
+// DTB pointer storage
+.section .data
+.align 3
+.global _dtb_pointer
+_dtb_pointer:
+    .quad 0
 
 
 .section .bss.stack

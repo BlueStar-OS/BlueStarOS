@@ -1,8 +1,9 @@
 OUTPUT_ARCH(aarch64)
 ENTRY(_blue_start)
 
-BASE_ADDRESS = 0x40080000; 
-/* BASE_ADDRESS = 0x00480000; 香橙派 */ 
+/* U-Boot loads kernel to 0x02000000 */
+/* BASE_ADDRESS = 0x40080000; */
+BASE_ADDRESS = 0x02000000;
 SECTIONS
 {
     . = BASE_ADDRESS;
@@ -47,6 +48,18 @@ SECTIONS
 
     . = ALIGN(4K);
     ebss = .;
+
+    /* DTB probe entries (按优先级排序) */
+    . = ALIGN(8);
+    __dtb_probe_start = .;
+    .dtb_probe : {
+        KEEP(*(.dtb_probe.high))
+        KEEP(*(.dtb_probe.mid))
+        KEEP(*(.dtb_probe.low))
+    }
+    __dtb_probe_end = .;
+
+    . = ALIGN(4K);
     ekernel = .;
 
     _kernel_size = ekernel - skernel;

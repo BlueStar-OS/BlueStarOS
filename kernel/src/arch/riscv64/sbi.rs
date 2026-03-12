@@ -1,0 +1,50 @@
+use core::arch::asm;
+
+use log::error;
+
+use crate::fs::vfs::{ROOTFS, VfsFs};
+
+
+const SET_TIMER:usize=0;
+const PUTC_CALLID:usize=1;
+const GETCHAR_CALLID:usize=2;
+const SHUTDOWN_CALLID:usize=8;
+
+
+#[inline(always)]
+pub fn sbi_call(callid:usize,arg0:usize,arg1:usize,arg2:usize)->isize{
+    let mut result;
+    unsafe {
+        asm!(
+            "ecall",
+            inlateout("x10") arg0 => result,
+            in("x11") arg1,
+            in("x12") arg2,
+            in("x16") 0,
+            in("x17") callid,
+        );
+    }
+    result
+}
+///关机的操作的副作用文件系统卸载
+pub fn shutdown()->!{
+    //取消文件系统挂载
+    if let Some(rootfs) = ROOTFS.try_lock() {
+        rootfs.as_ref().unwrap().mount_poinr.iter().for_each(|fs| {
+            fs.1.lock().umount();
+        });
+    }
+        
+
+    sbi_call(SHUTDOWN_CALLID, 0, 0, 0);
+
+    
+    loop {
+        unsafe { asm!("wfi") };
+    }
+}
+///设置下一次的时钟中断
+pub fn set_next_timetriger(timer:usize){
+    sbi_call(SET_TIMER, timer, 0, 0);
+}
+

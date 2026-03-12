@@ -1,6 +1,6 @@
 
 use core::{arch::global_asm, panic};
-use crate::{config::*, sbi::shutdown, task::TASK_MANAER, time::set_next_timeInterupt, trap::pagefaultHandler::PageFaultHandler};
+use crate::{config::*, shutdown, task::TASK_MANAER, time::set_next_timeInterupt, trap::pagefaultHandler::PageFaultHandler};
 use log::{debug, error, };
 use riscv::register::{scause::{self, Exception, Trap}, sie::Sie, sscratch, sstatus::{self, SPP, Sstatus}, stval, stvec, utvec::TrapMode};
 use crate::syscall::*;//系统调用

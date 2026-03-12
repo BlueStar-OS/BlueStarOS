@@ -28,6 +28,8 @@ bitflags! {
         const A = 1 << 6;
         /// Dirty
         const D = 1 << 7;
+        /// Dev
+        const DEV = 1 << 8;
     }
 }
 
@@ -343,7 +345,7 @@ impl PageTable {
             return;//返回
         }
 
-        *pte=PageTableEntry::new(ppn.0,flags|PTEFlags::V); //合法
+        *pte=PageTableEntry::new(ppn.0,flags |PTEFlags::V); //合法
     }
 
     ///判断该vpn是否存在合法映射

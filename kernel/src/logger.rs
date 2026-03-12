@@ -22,9 +22,9 @@ impl Log for SimpleLogger {
             Level::Trace => 90, // BrightBlack
         };
         crate::kprintln!(
-            "\u{1B}[{}m[{}][{:>5}] {}\u{1B}[0m",
+            "\u{1B}[{}m[{:>5}] {}\u{1B}[0m",
             color,
-            get_time_ms(),      
+           // get_time_ms(),      
             record.level(),
             record.args(),
         );
@@ -34,7 +34,10 @@ impl Log for SimpleLogger {
 /// initiate logger
 pub fn init() {
     static LOGGER: SimpleLogger = SimpleLogger;
-    log::set_logger(&LOGGER).unwrap();
+    let err = log::set_logger(&LOGGER).err();
+    if err.is_some(){
+        kprintln!("Error Occuput :{} ",err.unwrap());
+    }
     log::set_max_level(match option_env!("LOG") {
         Some("ERROR") => LevelFilter::Error,
         Some("WARN") => LevelFilter::Warn,
@@ -43,6 +46,7 @@ pub fn init() {
         Some("TRACE") => LevelFilter::Trace,
         _ => LevelFilter::Off,
     });
+    kprintln!("Start set logger end");
 }
 
 /*
