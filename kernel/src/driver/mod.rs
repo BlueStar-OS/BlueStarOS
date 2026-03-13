@@ -8,9 +8,7 @@ pub use self::virtio_blk::*;
 pub mod dtb;
 
 //UART drivers
-#[cfg(feature = "qemu_plat")]
 mod qemu_uart;
-#[cfg(feature = "qemu_plat")]
 pub mod uart {
     pub use super::qemu_uart::{putc, getc, getc_blocking};
 }
@@ -21,21 +19,21 @@ pub mod uart {
 
 
 
-#[cfg(target_arch = "aarch64")]
-mod rk3588_uart;
-#[cfg(target_arch = "aarch64")]
-pub mod uart {
-    use super::rk3588_uart::*;
+// #[cfg(target_arch = "aarch64")]
+// mod rk3588_uart;
+// #[cfg(target_arch = "aarch64")]
+// pub mod uart {
+//     use super::rk3588_uart::*;
     
-    pub fn putc(c: u8) {
-        UART.putc(c);
-    }
+//     pub fn putc(c: u8) {
+//         UART.putc(c);
+//     }
 
-    pub fn getc() -> Option<u8> {
-        UART.getc()
-    }
+//     pub fn getc() -> Option<u8> {
+//         UART.getc()
+//     }
 
-    pub fn getc_blocking() -> u8 {
-        UART.getc_blocking()
-    }
-}
+//     pub fn getc_blocking() -> u8 {
+//         UART.getc_blocking()
+//     }
+// }

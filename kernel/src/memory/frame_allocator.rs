@@ -18,12 +18,11 @@ pub fn allocator_init(){
         #[allow(static_mut_refs)]
         let start = KERNEL_HEADP.as_ptr() as usize;
         let end = start + KERNEL_HEAP_SIZE;
-        use log::info;
-        info!("heap range: [{:#x}, {:#x}) size={} MB", start, end, KERNEL_HEAP_SIZE/MB);
+        kprintln!("heap range: [{:#x}, {:#x}) size={} MB", start, end, KERNEL_HEAP_SIZE/MB);
         #[allow(static_mut_refs)]
         ALLOCATOR.lock().init(KERNEL_HEADP.as_ptr() as usize,KERNEL_HEAP_SIZE);
     }
-    trace!("Kernel HeapAlloctor init, can use size:{}MB , mount on KERNEL_HEADP",KERNEL_HEAP_SIZE/MB);
+    kprintln!("Kernel HeapAlloctor init, can use size:{}MB , mount on KERNEL_HEADP",KERNEL_HEAP_SIZE/MB);
 }
 
 ///物理页分配器 [start,end)
@@ -122,6 +121,7 @@ lazy_static!{
         UPSafeCell::new(FrameAlloctor::new())
     };
 }
+
 pub fn init_frame_allocator(start:usize,end:usize){
     kprintln!("Init frame allocator start={:#x}, end={:#x}", start, end);
     kprintln!("PhysiAddr(start) = {:#x}", PhysiAddr(start).0);

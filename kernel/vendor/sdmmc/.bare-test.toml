@@ -1,0 +1,3 @@
+serial = "/dev/ttyUSB0"
+baud_rate = 1500000
+dtb_file = "/code/StarryOS/orangepi.dtb"

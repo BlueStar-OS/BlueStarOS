@@ -1,0 +1,23 @@
+[package]
+authors = ["周睿 <zrufo747@outlook.com>"]
+categories = ["embedded", "no-std"]
+description = "Trait for DMA alloc and some collections"
+edition = "2021"
+keywords = ["os", "dma"]
+license = "MIT"
+name = "dma-api"
+repository = "https://github.com/drivercraft/dma-api"
+version = "0.3.1"
+
+[features]
+alloc = []
+
+[dependencies]
+
+[target.'cfg(target_arch = "aarch64")'.dependencies]
+aarch64-cpu-ext = "0.1"
+
+[[test]]
+name = "test"
+path = "tests/test.rs"
+required-features = ["alloc"]

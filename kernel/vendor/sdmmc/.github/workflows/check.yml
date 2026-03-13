@@ -1,0 +1,78 @@
+name: Quality Checks
+
+on:
+  workflow_call:
+
+jobs:
+  fmt:
+    name: Format Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: nightly
+          components: rustfmt
+
+      - name: Check code format
+        run: cargo fmt --all -- --check
+
+  clippy:
+    name: Clippy Lint
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: nightly
+          components: rust-src, clippy
+          targets: aarch64-unknown-none
+
+      - name: Run clippy (pio feature)
+        run: cargo clippy -Zbuild-std=core,alloc --target aarch64-unknown-none --features pio -- -D warnings
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: nightly
+          components: rust-src
+          targets: aarch64-unknown-none
+
+      - name: Build library (pio feature)
+        run: cargo build -Zbuild-std=core,alloc --target aarch64-unknown-none --features pio
+
+      - name: Build library (release, pio feature)
+        run: cargo build -Zbuild-std=core,alloc --release --target aarch64-unknown-none --features pio
+
+  doc:
+    name: Documentation
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: nightly
+          components: rust-src
+          targets: aarch64-unknown-none
+
+      - name: Build documentation
+        run: cargo doc -Zbuild-std=core,alloc --no-deps --target aarch64-unknown-none --features pio

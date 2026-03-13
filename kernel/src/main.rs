@@ -56,24 +56,28 @@ pub fn clear_bss() {
 }
 
 pub fn kernel_init(){
-    
     kprintln!("Clean BSS");
-
     clear_bss();//清空bss
 
-    kprintln!("Arch init");
+    kprintln!("Arch PlatForm init");
     //平台初始化 必须放在clearbss之后！ 因为其中有bss的静态初始化页表相关
     arch_init();
+    
+    //内核堆，分配器初始化
+    allocator_init();
+    
+    // 初始化设备树,运行设备探针
+    dtb::init();
+
+
+
     kprintln!("Logger start inited");
     logger::init();//日志初始化 - 必须先初始化日志才能使用 debug!
     kprintln!("Logger inited");
     kprintln!("Inital Physical Memory Alloctor");
     init_frame_allocator(ekernel as usize,ekernel as usize +MEMORY_SIZE);//物理内存页分配器初始化
-    warn!("Logger inited");
     kernel_info_debug();//打印内核日志
-    allocator_init();//内核堆，分配器初始化
-    // 初始化设备树
-    dtb::init();
+    
 }
 
 /// the rust entry-point of os
@@ -86,7 +90,7 @@ pub fn blue_main() -> ! {//永远不会返回
 
     kernel_init(); //bss，日志，分配器初始化
 
-    kprintln!("Kernel init success!");
+    debug!("Kernel init success!");
 
     set_kernel_trap_handler();//初始化陷阱入口，必须在地址空间激活后设置虚拟地址
 

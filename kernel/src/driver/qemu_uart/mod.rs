@@ -1,5 +1,8 @@
 // QEMU UART串口驱动
+#[cfg(target_arch = "riscv64")]
 static mut UART0_BASE: usize = 0x10000000;
+#[cfg(target_arch = "aarch64")]
+static mut UART0_BASE: usize = 0x09000000;
 
 use crate::kprintln;
 
