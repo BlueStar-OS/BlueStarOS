@@ -47,7 +47,7 @@ use crate::driver::dtb::DeviceNode;
 use log::info;
 
 /// UART 16550 探测器
-fn arm_pl011_probe(node: &DeviceNode, _compatible: &str) -> Result<(), &'static str> {
+fn uart_16550_probe(node: &DeviceNode, _compatible: &str) -> Result<(), &'static str> {
     // 获取寄存器地址
     let reg = node.get_property("reg").ok_or("Missing reg property")?;
     let regs = reg.as_reg(2, 2);
@@ -77,13 +77,12 @@ fn arm_pl011_probe(node: &DeviceNode, _compatible: &str) -> Result<(), &'static 
     Ok(())
 }
 
-
-// 注册 QEMU环境 UART 探测器
+// 注册 UART 探测器
 crate::dtb_probe! {
-    compatible: "arm,pl011",
+    compatible: "ns16550a",
     priority: Mid,
-    driver: "armpl011",
-    probe: arm_pl011_probe
+    driver: "uart-16550",
+    probe: uart_16550_probe
 }
 
 

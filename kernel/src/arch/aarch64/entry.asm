@@ -8,8 +8,9 @@ _blue_start:
     // Offset 0x04: code1 - reserved
     .long   0
 
-    // Offset 0x08: text_offset - load offset from RAM start
-    .quad   0
+    // Offset 0x08: text_offset - QEMU virt RAM starts at 0x40000000,
+    // and the kernel is linked at 0x40080000.
+    .quad   0x00080000
 
     // Offset 0x10: image_size - effective size
     .quad   _kernel_size

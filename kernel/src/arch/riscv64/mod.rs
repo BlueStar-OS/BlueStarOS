@@ -46,6 +46,12 @@ use crate::trap::pagefaultHandler::PageFaultHandler;
 use crate::kprintln;
 use crate::arch::driver::keyboard;
 
+use crate::allocator_init;
+use crate::dtb;
+use crate::logger;
+use crate::init_frame_allocator_from_dtb;
+use crate::kernel_info_debug;
+
 
 
 
@@ -60,11 +66,43 @@ global_asm!(include_str!("./entry.asm"));
 
 /// 平台初始化函数
 pub fn arch_init(){
+    kprintln!("Arch PlatForm init");
+
+     //内核堆，分配器初始化
+    allocator_init();
+
+    // 初始化设备树,运行设备探针
+    dtb::init();
+
+    kprintln!("Logger start inited");
+    logger::init();//日志初始化 - 必须先初始化日志才能使用 debug!
+    kprintln!("Logger inited");
+    kprintln!("Inital Physical Memory Alloctor");
+    init_frame_allocator_from_dtb(ekernel as usize);//物理内存页分配器初始化（从DTB探测）
+    kernel_info_debug();//打印内核日志
+
     // riscv64: 初始化 PLIC + 键盘中断
     driver::plic::plic_init();
     keyboard::enable_uart_rx_interrupt();
     enable_external_interrupt();
     //上面的是纯寄存器操作,是安全的
+
+
+    kprintln!("Welcome to BlueStarOS!");
+
+    debug!("Kernel init success!");
+
+    set_kernel_trap_handler();//初始化陷阱入口，必须在地址空间激活后设置虚拟地址
+
+
+    KERNEL_SPACE.lock().activate();//激活地址空间
+
+
+    // 下面需要在内核空间开启之后执行，因为涉及内核态中断访问trap
+    rather_global_interrupt();//愿意处理全局中断使能
+    enable_timer_interupt();//开启全局时间中断使能
+    set_next_timeInterupt();//第一次开启时钟中断
+    
 }
 
 /// 设置内核陷阱处理程序向量

@@ -125,6 +125,9 @@ static mut EARLY_L1: EarlyPageTable = EarlyPageTable { entries: [0; 512] };
 /// L2 页表 — 覆盖第一个 1GB (0x00000000 - 0x3FFFFFFF)
 static mut EARLY_L2_FIRST_GB: EarlyPageTable = EarlyPageTable { entries: [0; 512] };
 
+/// L2 页表 — 覆盖第二个 1GB (0x40000000 - 0x5FFFFFFF)
+static mut EARLY_L2_SECONED_GB: EarlyPageTable = EarlyPageTable { entries: [0; 512] };
+
 /// L2 页表 — 覆盖第四个 1GB (0xC0000000 - 0xFFFFFFFF)
 /// 包含 RK3588 UART2 (0xFEB50000)
 static mut EARLY_L2_FOURTH_GB: EarlyPageTable = EarlyPageTable { entries: [0; 512] };
@@ -160,13 +163,16 @@ pub unsafe fn early_mmu_init() {
             // 0x10000000 - 0x3FFFFFFF: Normal
             BLOCK_NORMAL
         };
-        // bug,没shift
         EARLY_L2_FIRST_GB.entries[i] = phys_addr | attr;
+
+        EARLY_L2_SECONED_GB.entries[i] = 0x40000000 + (phys_addr | attr)
     }
 
     // L1[0] → L2 表 (Table Descriptor)
     let l2_phys = &EARLY_L2_FIRST_GB as *const _ as u64;
-    EARLY_L1.entries[0] = l2_phys | DESC_TABLE;
+    let l2_phys_2 = &EARLY_L2_SECONED_GB as *const _ as u64;
+    EARLY_L1.entries[0] = l2_phys   | DESC_TABLE;
+    EARLY_L1.entries[1] = l2_phys_2 | DESC_TABLE;
 
     // 填充第四个 1GB 的 L2 表 (0xC0000000 - 0xFFFFFFFF)
     // 全部映射为 Device (UART、外设等)

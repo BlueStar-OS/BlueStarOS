@@ -13,8 +13,22 @@ QEMU_MACHINE := virt
 QEMU_CPU :=
 QEMU_BIOS := 
 QEMU_KERNEL = -kernel $(KERNEL_ELF)
+QEMU_DEBUG_BOOT = -bios $(BOOTLOADER) -device loader,file=$(KERNEL_BIN),addr=$(KERNEL_ENTRY_PA)
+GDB_SET_ARCH = -ex 'set arch riscv:rv64'
 # 驱动 features
 DRIVER_FEATURES ?= qemu_plat
+
+
+QEMU_DEVICE_ARGS = \
+	-drive file=disk.img,format=raw,if=none,id=x0 \
+	-net none \
+	-device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0 \
+	-device virtio-gpu-device,bus=virtio-mmio-bus.1 \
+	-device sdhci-pci \
+	-device sd-card,drive=emmc0 \
+	-drive id=emmc0,file=emmc.img,format=raw,if=none
+
+
 else ifeq ($(ARCH), aarch64)
 TARGET := aarch64-unknown-none-softfloat
 KERNEL_ENTRY_PA := 0x40080000
@@ -22,9 +36,24 @@ BOOTLOADER :=
 QEMU_MACHINE := virt
 QEMU_CPU := -cpu cortex-a72
 QEMU_BIOS :=
-QEMU_KERNEL = -kernel $(KERNEL_ELF)
+QEMU_KERNEL = -kernel $(KERNEL_BIN)
+QEMU_DEBUG_BOOT = $(QEMU_BIOS) $(QEMU_KERNEL)
+GDB_SET_ARCH = -ex 'set arch aarch64'
 # 驱动 features
 DRIVER_FEATURES ?=
+
+
+QEMU_DEVICE_ARGS = \
+	-machine virt,gic-version=3  \
+	-drive file=disk.img,format=raw,if=none,id=x0 \
+	-net none \
+	-device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0 \
+	-device virtio-gpu-device,bus=virtio-mmio-bus.1 \
+	-device sdhci-pci \
+	-device sd-card,drive=emmc0 \
+	-drive id=emmc0,file=emmc.img,format=raw,if=none
+
+
 else
 $(error Unsupported ARCH=$(ARCH). Supported: riscv64, aarch64)
 endif
@@ -44,6 +73,14 @@ ifneq ($(DRIVER_FEATURES),)
 else
 	FEATURES_ARG :=
 endif
+
+ifneq ($(QEMU_DTB),)
+	QEMU_DTB_ARG := -dtb $(QEMU_DTB)
+else
+	QEMU_DTB_ARG :=
+endif
+
+
 
 # Binutils
 OBJDUMP := rust-objdump --arch-name=$(ARCH)
@@ -93,21 +130,18 @@ run-inner: build
 		$(QEMU_CPU) \
 		-m 256m \
 		$(QEMU_BIOS) \
-		$(QEMU_KERNEL) -s\
-		-drive file=disk.img,format=raw,if=none,id=x0 \
-		-net none \
-		-device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0 \
-		-device virtio-gpu-device,bus=virtio-mmio-bus.1 \
-		-device sdhci-pci \
-		-device sd-card,drive=emmc0 \
-		-drive id=emmc0,file=emmc.img,format=raw,if=none \
+		$(QEMU_KERNEL) \
+		$(QEMU_DTB_ARG) \
+		-s \
+		$(QEMU_DEVICE_ARGS) \
 		-nographic
 
 run-consent-inner: user-consent-img
 	@cargo build --target $(TARGET) $(MODE_ARG) $(FEATURES_ARG) --offline
 	@qemu-system-$(ARCH) \
 		-machine virt \
-		-kernel $(KERNEL_ELF) \
+		-kernel $(KERNEL_BIN) \
+		$(QEMU_DTB_ARG) \
 		-m 128M \
 		-nographic \
 		-smp 2 \
@@ -119,14 +153,14 @@ run-consent-inner: user-consent-img
 
 debug: build
 	@tmux new-session -d \
-		"qemu-system-$(ARCH) -machine virt -nographic -bios $(BOOTLOADER) -device loader,file=$(KERNEL_BIN),addr=$(KERNEL_ENTRY_PA) -s -S" && \
-		tmux split-window -h "$(ARCH)-unknown-elf-gdb -ex 'file $(KERNEL_ELF)' -ex 'set arch riscv:rv64' -ex 'target remote localhost:1234'" && \
+		"qemu-system-$(ARCH) -machine $(QEMU_MACHINE) $(QEMU_CPU) -m 256m -nographic $(QEMU_DEBUG_BOOT) $(QEMU_DTB_ARG) $(QEMU_DEVICE_ARGS) -s -S" && \
+		tmux split-window -h "$(ARCH)-unknown-elf-gdb -ex 'file $(KERNEL_ELF)' $(GDB_SET_ARCH) -ex 'target remote localhost:1234'" && \
 		tmux -2 attach-session -d
 
 gdbserver: build
-	@qemu-system-$(ARCH) -machine virt -nographic -bios $(BOOTLOADER) -device loader,file=$(KERNEL_BIN),addr=$(KERNEL_ENTRY_PA) -s 
+	@qemu-system-$(ARCH) -machine $(QEMU_MACHINE) $(QEMU_CPU) -m 256m -nographic $(QEMU_DEBUG_BOOT) $(QEMU_DTB_ARG) $(QEMU_DEVICE_ARGS) -s 
 
 gdbclient:
-	@$(ARCH)-unknown-elf-gdb -ex 'file $(KERNEL_ELF)' -ex 'set arch riscv:rv64' -ex 'target remote localhost:1234'
+	@$(ARCH)-unknown-elf-gdb -ex 'file $(KERNEL_ELF)' $(GDB_SET_ARCH) -ex 'target remote localhost:1234'
 
 .PHONY: build env kernel clean user user-apps disasm disasm-vim run-inner run-consent-inner run_consent gdbserver gdbclient list-apps regen-asm

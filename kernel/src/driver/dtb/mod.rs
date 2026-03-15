@@ -39,6 +39,8 @@ pub use probe::{ProbeEntry, ProbePriority, ProbeCallback};
 
 use log::{debug, trace, info, warn};
 
+use crate::kprintln;
+
 // Import DTB pointer from assembly (defined in entry.asm)
 extern "C" {
     /// DTB pointer set by entry.asm (from x0 passed by bootloader)
@@ -54,11 +56,11 @@ pub fn init() {
     let dtb_ptr = unsafe { _dtb_pointer };
 
     if dtb_ptr == 0 {
-        warn!("[DTB] No DTB pointer found");
+        kprintln!("[DTB] No DTB pointer found");
         return;
     }
 
-    debug!("[DTB] DTB pointer at {:#x}", dtb_ptr);
+    kprintln!("[DTB] DTB pointer at {:#x}", dtb_ptr);
 
     // Create slice from DTB
     let dtb_slice = unsafe {
@@ -253,23 +255,41 @@ fn trace_device_tree(tree: &DeviceTree) {
 /// ```
 #[macro_export]
 macro_rules! dtb_probe {
-    (
-        compatible: $compatible:expr,
-        priority: $priority:ident,
-        driver: $driver:expr,
-        probe: $probe_fn:expr
-    ) => {
-        $crate::paste::paste! {
+    (@emit $section:literal, $compatible:expr, $priority:ident, $driver:expr, $probe_fn:expr) => {
+        const _: () = {
             #[used]
-            #[link_section = concat!(".dtb_probe.", stringify!([<$priority:lower>]))]
-            static [<DTB_PROBE_ $priority:upper _ $driver:upper>]:
-                $crate::driver::dtb::ProbeEntry =
+            #[link_section = $section]
+            static DTB_PROBE_ENTRY: $crate::driver::dtb::ProbeEntry =
                 $crate::driver::dtb::ProbeEntry::new(
                     $compatible,
                     $crate::driver::dtb::ProbePriority::$priority,
                     $probe_fn,
                     $driver,
                 );
-        }
+        };
+    };
+    (
+        compatible: $compatible:expr,
+        priority: High,
+        driver: $driver:expr,
+        probe: $probe_fn:expr
+    ) => {
+        $crate::dtb_probe!(@emit ".dtb_probe.high", $compatible, High, $driver, $probe_fn);
+    };
+    (
+        compatible: $compatible:expr,
+        priority: Mid,
+        driver: $driver:expr,
+        probe: $probe_fn:expr
+    ) => {
+        $crate::dtb_probe!(@emit ".dtb_probe.mid", $compatible, Mid, $driver, $probe_fn);
+    };
+    (
+        compatible: $compatible:expr,
+        priority: Low,
+        driver: $driver:expr,
+        probe: $probe_fn:expr
+    ) => {
+        $crate::dtb_probe!(@emit ".dtb_probe.low", $compatible, Low, $driver, $probe_fn);
     };
 }

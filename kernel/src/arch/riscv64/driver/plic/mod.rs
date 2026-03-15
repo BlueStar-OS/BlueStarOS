@@ -1,6 +1,14 @@
 // PLIC (Platform-Level Interrupt Controller) 驱动
 // QEMU riscv64 virt 平台专用
 
+use crate::dtb_probe;
+use crate::info;
+use crate::dtb::DeviceNode;
+use crate::VirNumRange;
+use crate::arch::memory::*;
+use crate::kprintln;
+use crate::register_kernel_mmio;
+use crate::MapAreaFlags;
 /// QEMU virt PLIC 基地址
 const PLIC_BASE: usize = 0x0C00_0000;
 
@@ -64,4 +72,35 @@ pub fn plic_complete(irq: u32) {
         let complete = sclaim_reg(S_CONTEXT) as *mut u32;
         complete.write_volatile(irq);
     }
+}
+
+pub fn plic_fn(node: &DeviceNode, _compatible: &str) -> Result<(), &'static str> {
+    kprintln!("[PLIC]:PLIC device is probed!, registe mmio...");
+    let reg = node.get_property("reg").ok_or("Missing reg property")?;
+    let regs = reg.as_reg(2, 2);
+    if regs.is_empty() {
+        return Err("Empty reg property");
+    }
+
+    let base_addr = regs[0].address as usize;
+    let size = regs[0].size as usize;
+    if size == 0 {
+        return Err("plic MMIO size is zero");
+    }
+
+    let mmio_range = VirNumRange::new(VirAddr(base_addr), VirAddr(base_addr + size - 1));
+    let flags = MapAreaFlags::V | MapAreaFlags::R | MapAreaFlags::W
+        | MapAreaFlags::A | MapAreaFlags::G | MapAreaFlags::DEV;
+    register_kernel_mmio(mmio_range, flags);
+
+   
+    Ok(())
+}
+
+
+dtb_probe! {
+    compatible: "sifive,plic-1.0.0",
+    priority: High,
+    driver: "plic",
+    probe: plic_fn
 }

@@ -934,16 +934,7 @@ impl TaskManager {//全局唯一
              unsafe { (*task_cx_ptr).kernel_sp },
              unsafe { core::ptr::read((task_cx_ptr as *const u8).add(11*8) as *const usize) }); // x30 offset = 11*8
 
-      // 读取当前 TTBR0/TTBR1/TCR
-      unsafe {
-          let ttbr0: usize;
-          let ttbr1: usize;
-          let tcr: usize;
-          core::arch::asm!("mrs {}, ttbr0_el1", out(reg) ttbr0);
-          core::arch::asm!("mrs {}, ttbr1_el1", out(reg) ttbr1);
-          core::arch::asm!("mrs {}, tcr_el1", out(reg) tcr);
-          debug!("run_first_task: ttbr0={:#x} ttbr1={:#x} tcr={:#x}", ttbr0, ttbr1, tcr);
-      }
+     
       // 调用 __switch 切换到第一个任务
       // __switch 会：
       // 1. 保存 _unused 的上下文（虽然我们不会再用到）

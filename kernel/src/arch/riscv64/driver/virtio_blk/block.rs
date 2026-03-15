@@ -1,142 +1,215 @@
-use log::warn;
-use spin::Mutex;
-use virtio_drivers::{Hal, VirtIOBlk, VirtIOHeader};
 use lazy_static::*;
-use alloc::{sync::Arc, vec::Vec};
-use crate::{memory::*};
-use crate::sync::UPSafeCell;
-use crate::kprintln;
-use log::debug;
-use virtio_drivers::VirtIOGpu;
-use crate::arch::memory::*;
-const MMIO_BASE: usize = 0x10001000; //QEMU virtio mmio base address
-const MMIO_STRIDE: usize = 0x1000; //QEMU virtio mmio stride
-const MMIO_END: usize = 0x10008000; //QEMU virtio mmio end address
+use log::{debug, info};
+use virtio_drivers::{DeviceType, Hal, VirtIOBlk, VirtIOGpu, VirtIOHeader};
 
-lazy_static!{
-    static ref QUEUE_FRAMES:UPSafeCell<Vec<(virtio_drivers::PhysAddr, Vec<FramTracker>)>> =
+use alloc::vec::Vec;
+
+use crate::arch::memory::*;
+use crate::driver::dtb::DeviceNode;
+use crate::kprintln;
+use crate::memory::*;
+use crate::sync::UPSafeCell;
+
+const VIRTIO_DEVICE_BLOCK_ID: u32 = 2;
+const VIRTIO_DEVICE_GPU_ID: u32 = 16;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct VirtioMmioDevice {
+    base: usize,
+    device_id: u32,
+}
+
+lazy_static! {
+    static ref QUEUE_FRAMES: UPSafeCell<Vec<(virtio_drivers::PhysAddr, Vec<FramTracker>)>> =
+        UPSafeCell::new(Vec::new());
+    static ref VIRTIO_MMIO_DEVICES: UPSafeCell<Vec<VirtioMmioDevice>> =
         UPSafeCell::new(Vec::new());
 }
 
+fn virtio_device_name(device_id: u32) -> &'static str {
+    match device_id {
+        VIRTIO_DEVICE_BLOCK_ID => "block",
+        VIRTIO_DEVICE_GPU_ID => "gpu",
+        1 => "network",
+        3 => "console",
+        _ => "unknown",
+    }
+}
+
+fn record_virtio_mmio_device(device: VirtioMmioDevice) {
+    let mut devices = VIRTIO_MMIO_DEVICES.lock();
+    if devices.iter().any(|existing| existing.base == device.base) {
+        return;
+    }
+    devices.push(device);
+}
+
+fn find_virtio_mmio_device(device_id: u32) -> Option<VirtioMmioDevice> {
+    let devices = VIRTIO_MMIO_DEVICES.lock();
+    devices.iter().copied().find(|device| device.device_id == device_id)
+}
+
+fn virtio_mmio_probe(node: &DeviceNode, _compatible: &str) -> Result<(), &'static str> {
+    let reg = node.get_property("reg").ok_or("Missing reg property")?;
+    let regs = reg.as_reg(2, 2);
+    if regs.is_empty() {
+        return Err("Empty reg property");
+    }
+
+    let base_addr = regs[0].address as usize;
+    let size = regs[0].size as usize;
+    if size == 0 {
+        return Err("VirtIO MMIO size is zero");
+    }
+
+    let mmio_range = VirNumRange::new(VirAddr(base_addr), VirAddr(base_addr + size - 1));
+    let flags = MapAreaFlags::V | MapAreaFlags::R | MapAreaFlags::W
+        | MapAreaFlags::A | MapAreaFlags::G | MapAreaFlags::DEV;
+    register_kernel_mmio(mmio_range, flags);
+
+    let header = unsafe { &*(base_addr as *const VirtIOHeader) };
+    if !header.verify() {
+        return Err("VirtIO MMIO header verify failed");
+    }
+
+    let device_type = header.device_type();
+    let device_id = device_type as u8 as u32;
+    info!(
+        "[VirtIO Probe] Found {} device at {:#x}, size={:#x}",
+        virtio_device_name(device_id),
+        base_addr,
+        size
+    );
+
+    record_virtio_mmio_device(VirtioMmioDevice {
+        base: base_addr,
+        device_id,
+    });
+    Ok(())
+}
+
+crate::dtb_probe! {
+    compatible: "virtio,mmio",
+    priority: Mid,
+    driver: "virtio-mmio",
+    probe: virtio_mmio_probe
+}
 
 pub fn init_gpu() {
     kprintln!("Scanning for VirtIO GPU...");
 
-    // 1. 遍历 MMIO 区域寻找 GPU 设备
-    for addr in (MMIO_BASE..MMIO_END).step_by(MMIO_STRIDE) {
-        let header = unsafe { &mut *(addr as *mut VirtIOHeader) };
-        
-        // 验证魔数 "virt" (0x74726976) 且设备 ID 为 16 (GPU)
-        if header.verify() && header.device_type() == virtio_drivers::DeviceType::GPU {
-            kprintln!("Found VirtIO GPU at address: {:#x}", addr);
-            
-            // 2. 初始化 GPU 驱动
-            let mut gpu = VirtIOGpu::<VirtioHal>::new(header)
-                .expect("Failed to create GPU driver");
+    let Some(device) = find_virtio_mmio_device(VIRTIO_DEVICE_GPU_ID) else {
+        kprintln!("VirtIO GPU not found via DTB");
+        return;
+    };
 
-            let raw_ref= &mut gpu as *mut VirtIOGpu<VirtioHal>;
-            
-            // 获取 framebuffer (这是显存的一块映射切片)
-            let mut fb = gpu.setup_framebuffer()
-                .expect("Failed to setup framebuffer");
-
-            // 3. 获取显示信息并设置 Framebuffer
-            // 设置分辨率，例如 800x600
-              
-            let (width, height) = unsafe { (raw_ref.as_mut()).unwrap().resolution() };
-            kprintln!("Framebuffer resolution: {}x{}", width, height);
-            
-            // Framebuffer 通常是 RGBA 或 BGRA 格式，每个像素 4 字节
-            // slice 长度 = width * height * 4
-            
-            kprintln!("Drawing red square...");
-            draw_red_square(&mut fb, width, height);
-
-            // 4. 重要：刷新缓冲区到屏幕
-            // 告诉 GPU 将显存内容推送到 QEMU 窗口
-            gpu.flush().expect("Failed to flush GPU");
-            
-            kprintln!("Done!");
-            return;
-        }
+    let header = unsafe { &mut *(device.base as *mut VirtIOHeader) };
+    if header.device_type() != DeviceType::GPU {
+        kprintln!("VirtIO GPU probe mismatch at {:#x}", device.base);
+        return;
     }
-    kprintln!("VirtIO GPU not found!");
+
+    kprintln!("Found VirtIO GPU at address: {:#x}", device.base);
+
+    let mut gpu = VirtIOGpu::<VirtioHal>::new(header)
+        .expect("Failed to create GPU driver");
+    let raw_ref = &mut gpu as *mut VirtIOGpu<VirtioHal>;
+    let mut fb = gpu
+        .setup_framebuffer()
+        .expect("Failed to setup framebuffer");
+
+    let (width, height) = unsafe { raw_ref.as_mut().unwrap().resolution() };
+    kprintln!("Framebuffer resolution: {}x{}", width, height);
+    kprintln!("Drawing red square...");
+    draw_red_square(&mut fb, width, height);
+    gpu.flush().expect("Failed to flush GPU");
+    kprintln!("Done!");
 }
 
 fn draw_red_square(fb: &mut [u8], screen_width: u32, screen_height: u32) {
     let width = screen_width;
     let height = screen_height;
-  // --------------------------------------------------------
-    // 1. 先把背景全部涂成白色，确保我们知道屏幕边界在哪里
-    // --------------------------------------------------------
     for i in (0..fb.len()).step_by(4) {
-        fb[i] = 255;     // B
-        fb[i+1] = 255;   // G
-        fb[i+2] = 255;   // R
-        fb[i+3] = 0;     // A (有时候 Alpha=0 会导致透视黑屏，保险起见可以设 255，但在 QEMU 0 通常没事)
+        fb[i] = 255;
+        fb[i + 1] = 255;
+        fb[i + 2] = 255;
+        fb[i + 3] = 0;
     }
 
-    // --------------------------------------------------------
-    // 2. 画红色正方形 (修正为 BGRA 格式)
-    // --------------------------------------------------------
     let sq_x = 200;
     let sq_y = 150;
     let sq_size = 200;
 
     for y in sq_y..(sq_y + sq_size) {
         for x in sq_x..(sq_x + sq_size) {
-            if x >= width || y >= height { continue; }
+            if x >= width || y >= height {
+                continue;
+            }
 
-            // 这里的 width 必须和 setup_framebuffer 传入的 width 严格一致
             let idx = ((y * width + x) * 4) as usize;
-
-            // 边界安全检查（防止 panic）
             if idx + 3 < fb.len() {
-                // 修正：VirtIO GPU 通常是 BGRA 格式
-                fb[idx] = 0;       // Blue
-                fb[idx + 1] = 0;   // Green
-                fb[idx + 2] = 255; // Red
-                fb[idx + 3] = 255; // Alpha
+                fb[idx] = 0;
+                fb[idx + 1] = 0;
+                fb[idx + 2] = 255;
+                fb[idx + 3] = 255;
             }
         }
     }
 }
 
-
-pub struct VirtBlk(pub UPSafeCell<VirtIOBlk<'static,VirtioHal>>, u64);
+pub struct VirtBlk(pub UPSafeCell<VirtIOBlk<'static, VirtioHal>>, u64);
 
 unsafe impl Send for VirtBlk {}
 unsafe impl Sync for VirtBlk {}
 
 impl crate::fs::vfs::BlueBlk for VirtBlk {
-    fn read_block(&mut self, lba: usize, buf: &mut [u8]) -> Result<(), crate::fs::vfs::VfsFsError> {
-        self.0.lock().read_block(lba, buf).map_err(|_| crate::fs::vfs::VfsFsError::IO)
+    fn read_block(
+        &mut self,
+        lba: usize,
+        buf: &mut [u8],
+    ) -> Result<(), crate::fs::vfs::VfsFsError> {
+        self.0
+            .lock()
+            .read_block(lba, buf)
+            .map_err(|_| crate::fs::vfs::VfsFsError::IO)
     }
+
     fn write_block(&mut self, lba: usize, buf: &[u8]) -> Result<(), crate::fs::vfs::VfsFsError> {
-        self.0.lock().write_block(lba, buf).map_err(|_| crate::fs::vfs::VfsFsError::IO)
+        self.0
+            .lock()
+            .write_block(lba, buf)
+            .map_err(|_| crate::fs::vfs::VfsFsError::IO)
     }
+
     fn capacity_in_sectors(&self) -> u64 {
         self.1
     }
 }
 
-
-
 impl VirtBlk {
-    /// TODO:扫描mmio遍历设备
-    /// 添加到全局块设备里面
-    pub fn new()->Self{
+    pub fn new() -> Self {
+        Self::new_from_dtb().expect("VirtIO block MMIO device not discovered via DTB probe")
+    }
+
+    pub fn new_from_dtb() -> Result<Self, &'static str> {
+        let device = find_virtio_mmio_device(VIRTIO_DEVICE_BLOCK_ID)
+            .ok_or("No virtio block MMIO device found")?;
+
         unsafe {
-            debug!("New VirtBlk");
-            let header = &mut *(MMIO_BASE as *mut VirtIOHeader);
-            let capacity_in_sectors = core::ptr::read_volatile(header.config_space() as *const u64);
-            let blk = VirtBlk(
+            debug!("New VirtBlk from DTB at {:#x}", device.base);
+            let header = &mut *(device.base as *mut VirtIOHeader);
+            if header.device_type() != DeviceType::Block {
+                return Err("Probed VirtIO MMIO device is not a block device");
+            }
+
+            let capacity_in_sectors =
+                core::ptr::read_volatile(header.config_space() as *const u64);
+            Ok(VirtBlk(
                 UPSafeCell::new(
-                    VirtIOBlk::new(header).expect("failed new blk device")
+                    VirtIOBlk::new(header).map_err(|_| "failed new blk device")?,
                 ),
                 capacity_in_sectors,
-            );
-            blk
+            ))
         }
     }
 
@@ -146,6 +219,7 @@ impl VirtBlk {
 }
 
 pub struct VirtioHal;
+
 impl Hal for VirtioHal {
     fn dma_alloc(pages: usize) -> virtio_drivers::PhysAddr {
         let frames = alloc_contiguous_frames(pages).expect("no contiguous frames alloced");
@@ -163,6 +237,7 @@ impl Hal for VirtioHal {
         QUEUE_FRAMES.lock().push((base_addr.0, frames));
         base_addr.0
     }
+
     fn dma_dealloc(paddr: virtio_drivers::PhysAddr, pages: usize) -> i32 {
         let mut q = QUEUE_FRAMES.lock();
         if let Some(pos) = q.iter().position(|(base, v)| *base == paddr && v.len() == pages) {
@@ -173,17 +248,17 @@ impl Hal for VirtioHal {
             -1
         }
     }
+
     fn phys_to_virt(paddr: virtio_drivers::PhysAddr) -> virtio_drivers::VirtAddr {
         paddr
     }
+
     fn virt_to_phys(vaddr: virtio_drivers::VirtAddr) -> virtio_drivers::PhysAddr {
         let mut table = PageTable::get_kernel_table_layer();
         if let Some(paddr) = table.translate(VirAddr(vaddr)) {
             paddr.0
         } else {
-            // Fallback to identity mapping for early-boot / direct-mapped regions.
             vaddr
         }
     }
 }
-

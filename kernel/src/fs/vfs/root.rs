@@ -185,7 +185,12 @@ impl RootFs {
             #[cfg(feature = "ext4")]
             use crate::arch::driver::virtio_blk::VirtBlk;
             #[cfg(not(target_arch = "aarch64"))]
-            let blk: Arc<Mutex<dyn crate::fs::vfs::BlueBlk>> = Arc::new(Mutex::new(VirtBlk::new()));
+            let blk: Arc<Mutex<dyn crate::fs::vfs::BlueBlk>> = Arc::new(Mutex::new(
+                VirtBlk::new_from_dtb().map_err(|e| {
+                    error!("virtio-blk probe/init failed: {}", e);
+                    VfsFsError::IO
+                })?
+            ));
             let total_sectors = blk.lock().capacity_in_sectors();
 
             let whole = Arc::new(VBLOCK::new(
