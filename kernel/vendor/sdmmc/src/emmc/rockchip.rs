@@ -27,6 +27,9 @@ impl EMmcHost {
             return Ok(());
         }
 
+        // Rockchip 平台识别模式只支持 375KHz
+        let freq = if freq <= 400000 { 375000 } else { freq };
+
         // 计算输入时钟
         let input_clk = emmc_set_clk(freq as u64).unwrap() as u32;
         info!("input_clk: {}", input_clk);
@@ -154,32 +157,50 @@ impl EMmcHost {
     pub fn dwcmshc_sdhci_emmc_set_clock(&mut self, freq: u32) -> Result<(), SdError> {
         let mut timeout = 500;
         let timing = self.card.as_ref().unwrap().timing;
-        let data = EMmcChipConfig::rk3568_config();
+        let data = EMmcChipConfig::rk3588_config();
 
         self.rockchip_emmc_set_clock(freq)?;
-        // Disable output clock while config DLL
+
+        // 保存分频器设置，然后禁用时钟输出以配置 DLL
+        let clk_saved = self.read_reg16(EMMC_CLOCK_CONTROL);
+        // 只保留分频器位 (bit 6-15)，清除使能位
+        let clk_div = clk_saved & !( EMMC_CLOCK_INT_EN | EMMC_CLOCK_INT_STABLE | EMMC_CLOCK_CARD_EN);
         self.write_reg16(EMMC_CLOCK_CONTROL, 0);
 
-        info!(
-            "EMMC Clock Control: {:#x}",
-            self.read_reg16(EMMC_CLOCK_CONTROL)
+        debug!(
+            "EMMC Clock Control: {:#x}, saved div: {:#x}",
+            self.read_reg16(EMMC_CLOCK_CONTROL),
+            clk_div
         );
 
-        // DLL配置基于频率
-        if freq >= 100_000_000 {
-            // Enable DLL
-            self.write_reg(DWCMSHC_EMMC_DLL_CTRL, DWCMSHC_EMMC_DLL_CTRL_RESET);
-            delay_us(1000);
-            self.write_reg(DWCMSHC_EMMC_DLL_CTRL, 0);
-            let mut extra = 0x1 << 16 | 0x2 << 17 | 0x3 << 19;
-            self.write_reg(DWCMSHC_EMMC_ATCTRL, extra);
+        // Disable cmd conflict check and enable internal clock gate
+        let mut extra = self.read_reg(DWCMSHC_HOST_CTRL3);
+        extra &= !0x1;
+        extra |= 1 << 4;
+        self.write_reg(DWCMSHC_HOST_CTRL3, extra);
 
-            /* Init DLL Setting */
+        // DLL配置基于频率 (Linux 用 52MHz 作为分界线)
+        if freq > 52_000_000 {
+            // Reset DLL
+            self.write_reg(DWCMSHC_EMMC_DLL_CTRL, DWCMSHC_EMMC_DLL_CTRL_RESET);
+            delay_us(1);
+            self.write_reg(DWCMSHC_EMMC_DLL_CTRL, 0);
+
+            // RK3588: RXCLK 只设 DLYENA，不设 NO_INVERTER 和 ORI_GATE
+            // RK3568: RXCLK 设 DLYENA | NO_INVERTER
+            let mut extra = DWCMSHC_EMMC_DLL_DLYENA;
+            if (data.flags & RK_RXCLK_NO_INVERTER) != 0 {
+                extra |= DLL_RXCLK_NO_INVERTER;
+            }
+            self.write_reg(DWCMSHC_EMMC_DLL_RXCLK, extra);
+
+            // Init DLL settings
             extra = DWCMSHC_EMMC_DLL_START_DEFAULT << DWCMSHC_EMMC_DLL_START_POINT
                 | DWCMSHC_EMMC_DLL_INC_VALUE << DWCMSHC_EMMC_DLL_INC
                 | DWCMSHC_EMMC_DLL_START;
             self.write_reg(DWCMSHC_EMMC_DLL_CTRL, extra);
 
+            // Wait for DLL lock
             loop {
                 if timeout <= 0 {
                     info!("Timeout waiting for DLL to be ready");
@@ -194,62 +215,41 @@ impl EMmcHost {
                 timeout -= 1;
             }
 
-            let dll_lock_value = ((self.read_reg(DWCMSHC_EMMC_DLL_STATUS0) & 0xFF) * 2) & 0xFF;
-
-            extra = DWCMSHC_EMMC_DLL_DLYENA | DLL_RXCLK_ORI_GATE;
-            if (data.flags & RK_RXCLK_NO_INVERTER) != 0 {
-                extra |= DLL_RXCLK_NO_INVERTER;
-            }
-
-            if (data.flags & RK_TAP_VALUE_SEL) != 0 {
-                extra |= DLL_TAP_VALUE_SEL | (dll_lock_value << DLL_TAP_VALUE_OFFSET);
-            }
-            self.write_reg(DWCMSHC_EMMC_DLL_RXCLK, extra);
+            // ATCTRL: tune clock stop en + pre/post change delay
+            extra = 0x1 << 16 | 0x3 << 17 | 0x3 << 19;
+            self.write_reg(DWCMSHC_EMMC_ATCTRL, extra);
 
             let mut txclk_tapnum = data.hs200_tx_tap;
+
+            // RK3588 HS400: 配置 CMDOUT 并覆盖 txclk tap
             if (data.flags & RK_DLL_CMD_OUT) != 0
                 && (timing == MMC_TIMING_MMC_HS400 || timing == MMC_TIMING_MMC_HS400ES)
             {
                 txclk_tapnum = data.hs400_tx_tap;
 
                 extra = DLL_CMDOUT_SRC_CLK_NEG
-                    | DLL_CMDOUT_BOTH_CLK_EDGE
+                    | DLL_CMDOUT_EN_SRC_CLK_NEG
                     | DWCMSHC_EMMC_DLL_DLYENA
                     | (data.hs400_cmd_tap as u32)
                     | DLL_CMDOUT_TAPNUM_FROM_SW;
-                if (data.flags & RK_TAP_VALUE_SEL) != 0 {
-                    extra |= DLL_TAP_VALUE_SEL | (dll_lock_value << DLL_TAP_VALUE_OFFSET);
-                }
 
                 self.write_reg(DECMSHC_EMMC_DLL_CMDOUT, extra);
             }
 
+            // TXCLK
             extra = DWCMSHC_EMMC_DLL_DLYENA
                 | DLL_TXCLK_TAPNUM_FROM_SW
-                | DLL_TXCLK_NO_INVERTER
+                | DLL_RXCLK_NO_INVERTER  // Linux: DLL_RXCLK_NO_INVERTER << DWCMSHC_EMMC_DLL_RXCLK_SRCSEL (bit 29)
                 | txclk_tapnum as u32;
-            if (data.flags & RK_TAP_VALUE_SEL) != 0 {
-                extra |= DLL_TAP_VALUE_SEL | (dll_lock_value << DLL_TAP_VALUE_OFFSET);
-            }
             self.write_reg(DWCMSHC_EMMC_DLL_TXCLK, extra);
 
-            extra =
-                DWCMSHC_EMMC_DLL_DLYENA | data.hs400_strbin_tap as u32 | DLL_STRBIN_TAPNUM_FROM_SW;
-            if (data.flags & RK_TAP_VALUE_SEL) != 0 {
-                extra |= DLL_TAP_VALUE_SEL | (dll_lock_value << DLL_TAP_VALUE_OFFSET);
-            }
+            // STRBIN
+            extra = DWCMSHC_EMMC_DLL_DLYENA
+                | DLL_STRBIN_TAPNUM_DEFAULT
+                | DLL_STRBIN_TAPNUM_FROM_SW;
             self.write_reg(DWCMSHC_EMMC_DLL_STRBIN, extra);
         } else {
-            // Disable dll
-            self.write_reg(DWCMSHC_EMMC_DLL_CTRL, 0);
-
-            // Disable cmd conflict check
-            let mut extra = self.read_reg(DWCMSHC_HOST_CTRL3);
-
-            extra &= !0x1;
-            self.write_reg(DWCMSHC_HOST_CTRL3, extra);
-
-            // reset the clock phase when the frequency is lower than 100MHz
+            // Bypass DLL: 低速模式 (<=52MHz)
             self.write_reg(
                 DWCMSHC_EMMC_DLL_CTRL,
                 DWCMSHC_EMMC_DLL_BYPASS | DWCMSHC_EMMC_DLL_START,
@@ -258,19 +258,15 @@ impl EMmcHost {
             self.write_reg(DWCMSHC_EMMC_DLL_TXCLK, 0);
             self.write_reg(DECMSHC_EMMC_DLL_CMDOUT, 0);
 
-            // Before switching to hs400es mode, the driver
-            // will enable enhanced strobe first. PHY needs to
-            // configure the parameters of enhanced strobe first.
-            let ddr50_strbin_delay_num = 16;
+            // Enhanced strobe PHY 参数 (hs400es 切换前需要)
             let extra = DWCMSHC_EMMC_DLL_DLYENA
                 | DLL_STRBIN_DELAY_NUM_SEL
-                | (ddr50_strbin_delay_num << DLL_STRBIN_DELAY_NUM_OFFSET);
-            // info!("extra: {:#b}", extra);
+                | ((data._ddr50_strbin_delay_num as u32) << DLL_STRBIN_DELAY_NUM_OFFSET);
             self.write_reg(DWCMSHC_EMMC_DLL_STRBIN, extra);
         }
 
-        // Enable card clock
-        self.enable_card_clock(0)?;
+        // 带分频器重新使能时钟
+        self.enable_card_clock(clk_div)?;
 
         info!("Clock {:#x}", self.read_reg16(EMMC_CLOCK_CONTROL));
 

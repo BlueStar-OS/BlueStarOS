@@ -105,6 +105,21 @@ fn draw_red_square(fb: &mut [u8], screen_width: u32, screen_height: u32) {
 
 pub struct VirtBlk(pub UPSafeCell<VirtIOBlk<'static,VirtioHal>>, u64);
 
+unsafe impl Send for VirtBlk {}
+unsafe impl Sync for VirtBlk {}
+
+impl crate::fs::vfs::BlueBlk for VirtBlk {
+    fn read_block(&mut self, lba: usize, buf: &mut [u8]) -> Result<(), crate::fs::vfs::VfsFsError> {
+        self.0.lock().read_block(lba, buf).map_err(|_| crate::fs::vfs::VfsFsError::IO)
+    }
+    fn write_block(&mut self, lba: usize, buf: &[u8]) -> Result<(), crate::fs::vfs::VfsFsError> {
+        self.0.lock().write_block(lba, buf).map_err(|_| crate::fs::vfs::VfsFsError::IO)
+    }
+    fn capacity_in_sectors(&self) -> u64 {
+        self.1
+    }
+}
+
 
 
 impl VirtBlk {

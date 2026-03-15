@@ -41,6 +41,4 @@ __switch:
     mov sp, x9
 
     // 返回到 x30(lr) 指向的地址
-    // 对于新任务，lr 指向 app_entry_point
-    // 对于被切换出去的任务，lr 指向 __switch 的下一条指令
     ret

@@ -63,6 +63,17 @@ fn uart_16550_probe(node: &DeviceNode, _compatible: &str) -> Result<(), &'static
         UART0_BASE = base_addr
     }
 
+    // 注册 QEMU MMIO 区域（UART + PLIC + virtio）
+    {
+        use crate::memory::{register_kernel_mmio, VirNumRange, MapAreaFlags};
+        use crate::arch::memory::VirAddr;
+
+        let mmio_range = VirNumRange::new(VirAddr(base_addr), VirAddr(base_addr+(regs[0].size as usize)-1));
+        let flags = MapAreaFlags::V | MapAreaFlags::R | MapAreaFlags::W
+                  | MapAreaFlags::A | MapAreaFlags::G | MapAreaFlags::DEV;
+        register_kernel_mmio(mmio_range, flags);
+    }
+
     Ok(())
 }
 
@@ -72,4 +83,11 @@ crate::dtb_probe! {
     priority: Mid,
     driver: "uart-16550",
     probe: uart_16550_probe
+}
+
+
+
+//UART drivers
+pub mod uart {
+    pub use super::{putc, getc, getc_blocking};
 }

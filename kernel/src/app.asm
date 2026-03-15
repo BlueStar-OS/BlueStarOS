@@ -1,6 +1,6 @@
  .section .data.app
      .globl app_start
   app_start:
-     .incbin "./cinit"
+     .incbin "./musl_test"
      .globl app_end
   app_end:

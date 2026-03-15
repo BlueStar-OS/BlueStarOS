@@ -1,5 +1,6 @@
 mod task;
 mod process;
+pub mod signal;
 use crate::fs::vfs::{OpenFlags, vfs_open};
 use alloc::vec::{Vec};
 use alloc::vec;
@@ -72,6 +73,17 @@ pub fn file_loader(file_path: &str) -> Vec<u8> {
         return bytes.to_vec();
     }
 
+    // rk3588 临时内联
+    if file_path == "/test/init" {
+        let start = app_start as usize;
+        let end = app_end as usize;
+        if end <= start {
+            return vec![];
+        }
+        let bytes = unsafe { core::slice::from_raw_parts(start as *const u8, end - start) };
+        return bytes.to_vec();
+    }
+
     let fd =match vfs_open(file_path, OpenFlags::empty()){
         Ok(res)=>{
             res
@@ -120,4 +132,5 @@ pub fn file_loader(file_path: &str) -> Vec<u8> {
     out
 }
 
+pub use signal::OsSignal;
 pub use task::*;

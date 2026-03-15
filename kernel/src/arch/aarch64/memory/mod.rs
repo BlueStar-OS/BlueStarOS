@@ -107,8 +107,8 @@ const MAIR_EL1_VALUE: u64 = MAIR_ATTR0_NORMAL_WB | MAIR_ATTR1_DEVICE_NGNRE;
 //   bits[11:10] ORGN0 = 01  → TTBR0 页表遍历 Outer Write-Back Write-Allocate
 //   bits[13:12] SH0   = 11  → TTBR0 页表遍历 Inner Shareable
 //   bits[15:14] TG0   = 00  → TTBR0 粒度 4KB
-//   bits[21:16] T1SZ  = 25  → TTBR1 地址空间 = 2^39 (虽然 EPD1=1 禁用了)
-//   bit[23]     EPD1  = 1   → 禁用 TTBR1 翻译 (当前内核只用 TTBR0)
+//   bits[21:16] T1SZ  = 25  → TTBR1 地址空间 = 2^39
+//   bit[23]     EPD1  = 0   → 启用 TTBR1 翻译 (内核栈在高地址空间)
 //   bits[31:30] TG1   = 10  → TTBR1 粒度 4KB
 //   bits[34:32] IPS   = 010 → 物理地址 40-bit (1TB)
 
@@ -145,12 +145,24 @@ const TCR_TG0_4K: u64 = 0 << 14;
 // 10 = 4KB
 const TCR_TG1_4K: u64 = 2 << 30;
 
+// IRGN1/ORGN1: TTBR1 页表遍历的缓存策略 (与 TTBR0 对称)
+// 01 = Write-Back Write-Allocate — 页表遍历经过缓存
+// 如果设为 00 (Non-cacheable)，内核写入的 PTE 还在 D-cache 中未刷出，
+// MMU 做 TTBR1 页表遍历时绕过缓存直接读 DRAM，看到全零 → Translation Fault!
+const TCR_IRGN1_WBWA: u64 = 1 << 24; // Inner cacheability
+const TCR_ORGN1_WBWA: u64 = 1 << 26; // Outer cacheability
+
+// SH1: TTBR1 页表遍历的共享属性
+// 11 = Inner Shareable — 多核系统中页表遍历结果在所有核心间一致
+const TCR_SH1_INNER: u64 = 3 << 28;
+
 // IPS: 中间物理地址大小 (Intermediate Physical Address Size)
 // 010 = 40-bit → 最大支持 1TB 物理内存
 const TCR_IPS_40BIT: u64 = 2 << 32;
 
-// 组合 TCR 值 = 0x0000000280993519
-// 验证: T0SZ=25, IRGN0=WB, ORGN0=WB, SH0=ISH, TG0=4K, T1SZ=25, EPD1=0, TG1=4K, IPS=40bit
+// 组合 TCR 值
+// T0SZ=25, IRGN0=WB, ORGN0=WB, SH0=ISH, TG0=4K,
+// T1SZ=25, EPD1=0, IRGN1=WB, ORGN1=WB, SH1=ISH, TG1=4K, IPS=40bit
 const TCR_EL1_VALUE: u64 =
     TCR_T0SZ_39BIT |
     TCR_T1SZ_39BIT |
@@ -159,6 +171,9 @@ const TCR_EL1_VALUE: u64 =
     TCR_SH0_INNER |
     TCR_TG0_4K |
     TCR_EPD0 |
+    TCR_IRGN1_WBWA |
+    TCR_ORGN1_WBWA |
+    TCR_SH1_INNER |
     TCR_TG1_4K |
     TCR_IPS_40BIT;
 
@@ -303,7 +318,7 @@ pub fn active_memset(memset: &MapSet) {
             "isb"
         );
 
-        debug!("[MMU] MMU 已启用! I-cache 已失效");
+        debug!("[MMU] MMU Turned! I-cache already into invalid");
 
         // 验证 MMU 状态
         let mut sctlr_verify: u64;
@@ -311,7 +326,7 @@ pub fn active_memset(memset: &MapSet) {
             "mrs {0}, sctlr_el1",
             out(reg) sctlr_verify
         );
-        debug!("[MMU] 验证 SCTLR_EL1 = {:#x}, M={}, C={}, I={}",
+        debug!("[MMU] Verify SCTLR_EL1 = {:#x}, M={}, C={}, I={}",
             sctlr_verify,
             (sctlr_verify >> 0) & 1,
             (sctlr_verify >> 2) & 1,

@@ -5,14 +5,16 @@ pub mod memory;
 pub mod trap;
 pub mod sbi;
 pub mod time;
+pub mod driver;
 
 use core::arch::{global_asm, asm};
 use crate::arch::memory::early_mmu_init;
 use crate::arch::memory::eaylymmu::turn_early_mmu;
 use crate::arch::task::TaskContext;
 use crate::config::*;
+use crate::arch::driver::gicd;
+use crate::arch::driver::keyboard;
 pub use sbi::*;
-
 // 引入入口
 global_asm!(include_str!("./entry.asm"));
 
@@ -34,6 +36,13 @@ pub fn arch_init(){
 
     // 打开早期的mmu，因为不开默认全是device memory
     turn_early_mmu();
+
+
+    // AArch64: 初始化 GIC 中断控制器 + UART RX 中断
+    gicd::gic_init();
+    gicd::gic_enable_spi(crate::arch::driver::gicd::UART2_INTID);
+    keyboard::enable_uart_rx_interrupt();
+
 }
 
 
@@ -43,19 +52,31 @@ pub fn arch_init(){
 #[no_mangle]
 pub extern "C" fn app_entry_point() {
     use crate::task::TASK_MANAER;
+    use crate::config::{straper, TRAP_BOTTOM_ADDR};
+    use log::debug;
 
     set_kernel_trap_handler();
     let user_satp = TASK_MANAER.get_current_stap();
 
-    // AArch64: 直接调用 __kernel_refume
-    // 参数: x0 = TrapContext地址, x1 = 用户页表(ttbr0_el1)
+    // 计算 __kernel_refume 在 trampoline 高地址中的位置
+    // .text.traper section: straper(低地址) 映射到 TRAP_BOTTOM_ADDR(高地址)
+    extern "C" { fn __kernel_refume(); }
+    let refume_offset = __kernel_refume as usize - straper as usize;
+    let refume_va = TRAP_BOTTOM_ADDR + refume_offset;
+
+    debug!("app_entry: user_satp={:#x}, refume_va={:#x}", user_satp, refume_va);
+
+    // 跳到 trampoline 高地址执行 __kernel_refume
+    // 在那里切换 TTBR0/TTBR1 到用户页表后，当前代码（低地址）不可达，
+    // 但 trampoline（高地址）在用户页表中也有映射，所以不会崩
     unsafe {
         asm!(
             "mov x0, {trap_cx}",
             "mov x1, {user_ttbr0}",
-            "b __kernel_refume",
+            "br {refume_va}",
             trap_cx = in(reg) TRAP_CONTEXT_ADDR,
             user_ttbr0 = in(reg) user_satp,
+            refume_va = in(reg) refume_va,
             options(noreturn)
         );
     }

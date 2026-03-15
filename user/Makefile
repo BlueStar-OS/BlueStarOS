@@ -3,10 +3,14 @@
 # - make img: create ../kernel/disk.img (MBR 4 partitions), format p1 ext4 / p2 FAT16 / p3 FAT32 / p4 VFAT, then mount p1 and copy binaries to /test
 
 TARGET := riscv64gc-unknown-none-elf
+AARCH64_TARGET := aarch64-unknown-none-softfloat
 RV_MUSL_GCC := riscv64-linux-musl-gcc
+AARCH64_MUSL_GCC := aarch64-linux-gnu-gcc
 CTEST := $(patsubst ctest/%.c,%,$(wildcard ctest/*.c))
 CTEST_OUT_DIR := test
+AARCH64_CTEST_OUT_DIR := test-aarch64
 BUILD_DIR := target/$(TARGET)/release
+AARCH64_BUILD_DIR := target/$(AARCH64_TARGET)/release
 BINS := $(patsubst src/bin/%.rs,%,$(wildcard src/bin/*.rs))
 KERNEL_IMG := ../kernel/disk.img
 SDCARD_IMG := ../kernel/sdcard.img
@@ -14,9 +18,9 @@ OSCOMP_ELF_DIR := ../kernel/testsuits-for-oskernel/riscv-syscalls-testing/user/b
 
 .ONESHELL:
 
-.PHONY: all build img consent_img makeimg clean FORCE
+.PHONY: all build build-aarch64 img consent_img makeimg clean FORCE
 
-all: build
+all: build build-aarch64
 
 build: FORCE
 	@mv carg .cargo
@@ -27,6 +31,18 @@ build: FORCE
 		$(RV_MUSL_GCC) -static -march=rv64gc -mabi=lp64d -o $(CTEST_OUT_DIR)/$$t ctest/$$t.c; \
 	done
 	@mv .cargo carg
+
+build-aarch64: FORCE
+	@echo "Building aarch64 user binaries..."
+	@mkdir -p .cargo
+	@printf '[build]\ntarget = "aarch64-unknown-none-softfloat"\n\n[target.aarch64-unknown-none-softfloat]\nrustflags = [\n    "-Clink-args=-Tsrc/linker-aarch64.ld",\n]\n\n[source.crates-io]\nreplace-with = "vendored-sources"\n\n[source.vendored-sources]\ndirectory = "vendor"\n' > .cargo/config.toml
+	cargo build --release --target $(AARCH64_TARGET) --offline
+	@mkdir -p $(AARCH64_CTEST_OUT_DIR)
+	@for t in $(CTEST); do \
+		echo "[ctest-aarch64] CC $$t"; \
+		$(AARCH64_MUSL_GCC) -static -o $(AARCH64_CTEST_OUT_DIR)/$$t ctest/$$t.c; \
+	done
+	@rm -rf .cargo
 
 img: build
 	@echo "Creating $(KERNEL_IMG)..."
@@ -136,5 +152,6 @@ consent_img: build
 
 clean:
 	cargo clean
+	rm -rf $(CTEST_OUT_DIR) $(AARCH64_CTEST_OUT_DIR)
 	rm -f $(KERNEL_IMG)
 	rm -f $(SDCARD_IMG)

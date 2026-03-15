@@ -61,14 +61,25 @@ pub fn init() {
     debug!("[DTB] DTB pointer at {:#x}", dtb_ptr);
 
     // Create slice from DTB
-    // Note: We don't know the actual size, so use a reasonable maximum
     let dtb_slice = unsafe {
         core::slice::from_raw_parts(dtb_ptr as *const u8, DTB_MAX_SIZE)
     };
 
     match DtbParser::new(dtb_slice) {
         Ok(parser) => {
-            trace_dtb(&parser);
+            match parser.parse() {
+                Ok(tree) => {
+                    // 日志输出设备树信息
+                    trace_device_tree(&tree);
+                    // 执行设备探测（GIC/UART 等注册 MMIO）
+                    probe::run_probes(&tree);
+                    // 扫描 memory 节点，注册到 KERNEL_MAIN_MEMORY
+                    scan_and_register_memory(&tree);
+                }
+                Err(e) => {
+                    warn!("[DTB] Failed to parse: {:?}", e);
+                }
+            }
         }
         Err(e) => {
             warn!("[DTB] Parse error: {:?}", e);
@@ -76,38 +87,31 @@ pub fn init() {
     }
 }
 
-/// Parse and trace DTB content
-pub fn trace_dtb(parser: &DtbParser) {
-    debug!("[DTB] ===== Device Tree Blob =====");
-    debug!("[DTB] Header:");
-    debug!("[DTB]   Magic: {:#x}", parser.magic());
-    debug!("[DTB]   Version: {}", parser.version());
-    debug!("[DTB]   Total Size: {} bytes", parser.totalsize());
-    debug!("[DTB]");
+/// 扫描 DTB 中的 memory 节点，注册到 KERNEL_MAIN_MEMORY
+fn scan_and_register_memory(tree: &DeviceTree) {
+    use crate::memory::memorymodel::{register_main_memory_region, finalize_main_memory};
 
-    // Parse the tree
-    match parser.parse() {
-        Ok(tree) => {
-            // Trace reservations
-            if !tree.reservations.is_empty() {
-                debug!("[DTB] Memory Reservations:");
-                for (i, rsv) in tree.reservations.iter().enumerate() {
-                    debug!("[DTB]   [{}] {:#x}-{:#x} ({} KB)",
-                           i, rsv.address, rsv.address + rsv.size, rsv.size / 1024);
-                }
-                debug!("[DTB]");
+    let scanner = DeviceScanner::new(tree);
+    let memory_regions = scanner.find_memory();
+
+    if memory_regions.is_empty() {
+        warn!("[DTB] 未找到 memory 节点");
+        return;
+    }
+
+    for mem in &memory_regions {
+        for reg in &mem.reg {
+            if reg.size == 0 {
+                continue;
             }
-
-            // Trace device tree
-            trace_device_tree(&tree);
-
-            // 执行设备探测
-            probe::run_probes(&tree);
-        }
-        Err(e) => {
-            warn!("[DTB] Failed to parse: {:?}", e);
+            let start = reg.address as usize;
+            let end = start + reg.size as usize;
+            register_main_memory_region(start, end);
         }
     }
+
+    finalize_main_memory();
+    info!("[DTB] 物理内存注册完成");
 }
 
 /// Trace device tree content

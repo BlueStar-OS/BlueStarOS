@@ -27,6 +27,7 @@ use crate::fs::vfs::VFS_DT_REG;
 use crate::memory::*;
 use crate::shutdown;
 use crate::task::Signal;
+use crate::task::signal::OsSignal;
 use crate::task::file_loader;
 use crate::arch::task::*;
 use log::debug;
@@ -67,7 +68,7 @@ pub struct ProcessIdAlloctor{
 
 #[derive(Clone)]
 pub struct TaskControlBlock{
-        pub signal:Vec<Signal>,
+        pub signal:VecDeque<OsSignal>,
         pub pid:ProcessId,                              //进程id
         pub memory_set:MapSet,                          //程序地址空间
         pub task_statut:TaskStatus,                         //程序运行状态
@@ -368,7 +369,7 @@ impl TaskControlBlock {
         file_descriptor_table.push(Some(stderr_file()));
         
         let task_control_block = TaskControlBlock {
-            signal:Vec::new(),
+            signal:VecDeque::new(),
             pid:ProcessId_ALLOCTOR.lock().alloc_id().expect("No Process ID Can use"),
             memory_set: memset,
             task_statut: TaskStatus::Ready,
@@ -498,7 +499,7 @@ impl TaskManager {//全局唯一
     }
 
 
-    /// 处理当前task的signal 返回是否超过
+    /// 处理当前task的signal
     pub fn resolve_current_task_signal(&self){
         let inner = self.task_que_inner.lock();
         if inner.task_queen.is_empty() {
@@ -512,23 +513,35 @@ impl TaskManager {//全局唯一
         }
         let current_task = inner.task_queen[current].clone();
         drop(inner);
-        let signal = &mut current_task.lock().signal;
+
+        let pid = current_task.lock().pid.0;
+        let mut task_lock =current_task.lock();
+        let signal:VecDeque<OsSignal> = task_lock.signal.drain(..).collect();
+        drop(task_lock);
+        
+
         if signal.is_empty() {
             return;
         }
 
-        for sig in signal.drain(..) {
-            match sig{
-                Signal::SIGKILL=>{
+        for sig in signal {
+            crate::kprintln!("[Signal] PID {} reviec signal {:?}", pid, sig.signal);
+            // release lock
+            match sig.signal {
+                Signal::SIGKILL => {
                     TASK_MANAER.kail_current_task_and_run_next();
                 }
-                _=>{
-                    //空操作
-                    warn!("Unsupport signal!");
+                Signal::SIGINT | Signal::SIGTERM => {
+                    TASK_MANAER.kail_current_task_and_run_next();
+                }
+                Signal::SIGTSTP => {
+                    // 暂停信号，目前仅打印
+                }
+                _ => {
+                    warn!("未处理的信号: {:?}", sig.signal);
                 }
             }
         }
-        debug!("Process pid:{} signal resolved",current_task.lock().pid.0);
     }
 
     pub fn mark_current_zombie(&self, exit_code: isize) {
@@ -877,6 +890,8 @@ impl TaskManager {//全局唯一
 
         inner.current = task_index;
         drop(inner);
+       
+        // 被换出的任务的ra会设置为下一条指令    
         unsafe {
             __switch(swaped_task_cx, need_swap_in);
         }
@@ -912,6 +927,23 @@ impl TaskManager {//全局唯一
       };
       let kernel_task_cx=TaskContext::zero_init();
       drop(inner);//越早越好
+
+      // 调试：打印 __switch 参数
+      debug!("run_first_task: task_cx_ptr={:#x}", task_cx_ptr as usize);
+      debug!("run_first_task: task sp={:#x}, lr(x30)={:#x}",
+             unsafe { (*task_cx_ptr).kernel_sp },
+             unsafe { core::ptr::read((task_cx_ptr as *const u8).add(11*8) as *const usize) }); // x30 offset = 11*8
+
+      // 读取当前 TTBR0/TTBR1/TCR
+      unsafe {
+          let ttbr0: usize;
+          let ttbr1: usize;
+          let tcr: usize;
+          core::arch::asm!("mrs {}, ttbr0_el1", out(reg) ttbr0);
+          core::arch::asm!("mrs {}, ttbr1_el1", out(reg) ttbr1);
+          core::arch::asm!("mrs {}, tcr_el1", out(reg) tcr);
+          debug!("run_first_task: ttbr0={:#x} ttbr1={:#x} tcr={:#x}", ttbr0, ttbr1, tcr);
+      }
       // 调用 __switch 切换到第一个任务
       // __switch 会：
       // 1. 保存 _unused 的上下文（虽然我们不会再用到）
@@ -1081,6 +1113,8 @@ lazy_static! {
         debug!("Initializing TASK_MANAGER...");
 
         let mut task_deque = VecDeque::new();
+        
+
         
         if CONSENT {
             let init_task = TaskControlBlock::new("/cinit", 1, None);

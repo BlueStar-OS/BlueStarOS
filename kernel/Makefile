@@ -8,12 +8,11 @@ LOG ?= DEBUG
 ifeq ($(ARCH), riscv64)
 TARGET := riscv64gc-unknown-none-elf
 KERNEL_ENTRY_PA := 0x80200000
-SBI ?= rustsbi
-BOOTLOADER := ./bootloader/$(SBI)-qemu.bin
+BOOTLOADER := ./bootloader/rustsbi-prototyper-jump.bin
 QEMU_MACHINE := virt
 QEMU_CPU :=
-QEMU_BIOS := -bios $(BOOTLOADER)
-QEMU_KERNEL = -device loader,file=$(KERNEL_BIN),addr=$(KERNEL_ENTRY_PA)
+QEMU_BIOS := 
+QEMU_KERNEL = -kernel $(KERNEL_ELF)
 # 驱动 features
 DRIVER_FEATURES ?= qemu_plat
 else ifeq ($(ARCH), aarch64)
@@ -99,6 +98,9 @@ run-inner: build
 		-net none \
 		-device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0 \
 		-device virtio-gpu-device,bus=virtio-mmio-bus.1 \
+		-device sdhci-pci \
+		-device sd-card,drive=emmc0 \
+		-drive id=emmc0,file=emmc.img,format=raw,if=none \
 		-nographic
 
 run-consent-inner: user-consent-img

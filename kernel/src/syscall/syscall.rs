@@ -7,6 +7,7 @@ use alloc::sync::Arc;
 use alloc::vec::Vec;
 use alloc::string::String;
 use log::{debug, error, warn};
+use crate::error::BlueErr;
 use crate::shutdown;
 use crate::sync::UPSafeCell;
 use crate::task::{INIT_PID, ProcessId, TaskControlBlock, TaskStatus};

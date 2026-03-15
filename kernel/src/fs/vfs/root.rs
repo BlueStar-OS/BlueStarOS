@@ -8,8 +8,6 @@ use spin::Mutex;
 use crate::config::{CONSENT, MB};
 use crate::fs::vfs::{MountFs, OpenFlags, VfsFsError, vfs_open};
 #[cfg(feature = "ext4")]
-use crate::driver::VirtBlk;
-#[cfg(feature = "ext4")]
 use crate::fs::fs_backend::{Ext4BlockDevice, Ext4Fs};
 #[cfg(feature = "ext4")]
 use crate::fs::fs_backend::RamFs;
@@ -18,6 +16,8 @@ use crate::fs::fs_backend::*;
 use crate::fs::partition::{DevicePartition};
 #[cfg(feature = "ext4")]
 use crate::fs::partition::mbr::parsing_mbr_partition;
+#[cfg(feature = "ext4")]
+use crate::fs::partition::gpt::{parsing_gpt_header, parsing_gpt_entries};
 #[cfg(feature = "ext4")]
 use crate::fs::vfs::VBLOCK;
 #[cfg(feature = "ext4")]
@@ -164,7 +164,28 @@ impl RootFs {
                 .downcast_mut::<RamFs>()
                 .ok_or(VfsFsError::NotSupported)?;
 
-            let blk = Arc::new(Mutex::new(VirtBlk::new()));
+            // 根据平台选择块设备
+            #[cfg(target_arch = "aarch64")]
+            let blk: Arc<Mutex<dyn crate::fs::vfs::BlueBlk>> = {
+                use crate::arch::driver::emmc_blk::kernel_impl::init_emmc_clk;
+                use crate::arch::driver::emmc_blk::EmmcBlk;
+                use crate::arch::driver::emmc_blk::EMMC_DWCMSHC_ADDR;
+                let emmc_base = unsafe {
+                    EMMC_DWCMSHC_ADDR
+                };
+                init_emmc_clk();
+                if emmc_base==0 {
+                    panic!("EMMC_DWCMSHC_ADDR is zero address,please register EMMC_DWCMSHC_ADDR on dtb probe!");
+                }
+                let emmc =EmmcBlk::new(emmc_base) //香橙派5 plus emmc地址
+                    .expect("eMMC init failed");
+                Arc::new(Mutex::new(emmc))
+            };
+            #[cfg(not(target_arch = "aarch64"))]
+            #[cfg(feature = "ext4")]
+            use crate::arch::driver::virtio_blk::VirtBlk;
+            #[cfg(not(target_arch = "aarch64"))]
+            let blk: Arc<Mutex<dyn crate::fs::vfs::BlueBlk>> = Arc::new(Mutex::new(VirtBlk::new()));
             let total_sectors = blk.lock().capacity_in_sectors();
 
             let whole = Arc::new(VBLOCK::new(
@@ -178,21 +199,67 @@ impl RootFs {
 
             let mut mbr: [u8; SECTOR_SIZE] = [0; SECTOR_SIZE];
             blk.lock()
-                .0
-                .lock()
                 .read_block(0, &mut mbr)
                 .map_err(|_| VfsFsError::IO)?;
 
-            let parts = parsing_mbr_partition(mbr).map_err(|_| VfsFsError::Invalid)?;
-            if parts.len() == 0{
-                // No partition
-                return Err(VfsFsError::Invalid);
-            }
-            for (idx, entry) in parts.into_iter().enumerate() {
-                let dev = Arc::new(VBLOCK::new(blk.clone(), DevicePartition::MBR(entry)))
-                    as Arc<dyn crate::fs::vfs::File>;
-                let path = alloc::format!("/vda{}", idx + 1);
-                ramfs.mkdev(path.as_str(), dev)?;
+            let parts = parsing_mbr_partition(mbr);
+            let mbr_ok = parts.as_ref().map_or(false, |v| !v.is_empty());
+            debug!("MBR parse result: ok={}, count={}", mbr_ok,
+                   parts.as_ref().map_or(0, |v| v.len()));
+
+            if mbr_ok {
+                // MBR 分区表有效
+                let parts = parts.unwrap();
+                for (idx, entry) in parts.into_iter().enumerate() {
+                    debug!("MBR partition {}: start_lba={}, sectors={}", idx, entry.start_lbn, entry.len);
+                    let dev = Arc::new(VBLOCK::new(blk.clone(), DevicePartition::MBR(entry)))
+                        as Arc<dyn crate::fs::vfs::File>;
+                    let path = alloc::format!("/vda{}", idx + 1);
+                    ramfs.mkdev(path.as_str(), dev)?;
+                }
+            } else {
+                // MBR 失败，尝试 GPT
+                debug!("Trying GPT partition table...");
+                let mut lba1: [u8; SECTOR_SIZE] = [0; SECTOR_SIZE];
+                blk.lock()
+                    .read_block(1, &mut lba1)
+                    .map_err(|_| VfsFsError::IO)?;
+
+                let (entry_lba, num_entries, entry_size) = match parsing_gpt_header(&lba1) {
+                    Ok(v) => v,
+                    Err(e) => {
+                        error!("GPT header parse failed: {}", e);
+                        return Err(VfsFsError::Invalid);
+                    }
+                };
+                debug!("GPT header: entry_lba={}, num_entries={}, entry_size={}",
+                       entry_lba, num_entries, entry_size);
+
+                // 读取分区条目所占的扇区
+                let entries_bytes = num_entries as usize * entry_size as usize;
+                let entry_sectors = (entries_bytes + SECTOR_SIZE - 1) / SECTOR_SIZE;
+                let mut entry_buf = alloc::vec![0u8; entry_sectors * SECTOR_SIZE];
+                for s in 0..entry_sectors {
+                    blk.lock()
+                        .read_block(
+                            entry_lba as usize + s,
+                            &mut entry_buf[s * SECTOR_SIZE..(s + 1) * SECTOR_SIZE],
+                        )
+                        .map_err(|_| VfsFsError::IO)?;
+                }
+
+                let gpt_parts = parsing_gpt_entries(&entry_buf, num_entries, entry_size);
+                debug!("GPT found {} partitions", gpt_parts.len());
+                if gpt_parts.is_empty() {
+                    return Err(VfsFsError::Invalid);
+                }
+                for (idx, gp) in gpt_parts.into_iter().enumerate() {
+                    debug!("GPT partition {}: start_lba={}, sectors={}", idx, gp.start_lba, gp.sectors);
+                    let dev = Arc::new(VBLOCK::new(blk.clone(), DevicePartition::GPT(gp)))
+                        as Arc<dyn crate::fs::vfs::File>;
+                    let path = alloc::format!("/vda{}", idx + 1);
+                    ramfs.mkdev(path.as_str(), dev)?;
+                }
             }
             Ok(())
         }
@@ -281,26 +348,38 @@ impl RootFs {
             return;
         }
 
-        // select first vblock use this fs and init mainfs,mount to /,umount ramfs and remount to /dev
-        let vda1 = vfs_open("/vda1", OpenFlags::RDWR).expect("Can't find any vblock device");
-
         #[cfg(feature = "ext4")]
         {
-            //初始化全局虚拟文件系统
-
             use alloc::string::ToString;
-
             use crate::fs::vfs::vfs_mkdir;
-            let ext4_wrapping_blockdev = Ext4BlockDevice::new(vda1);
-            let old_fs:Arc<Mutex<dyn VfsFs>>;
-        {
-            let fs = Arc::new(Mutex::new(Ext4Fs::new(ext4_wrapping_blockdev)));
-            fs.lock().mount().expect("ext4 mount failed");
-            let mut rootfs_guard = ROOTFS.lock();
-            let root_mount_point = &mut rootfs_guard.as_mut().expect("root vfs not init").mount_poinr;
-            old_fs = root_mount_point.remove(&MountPath("/".to_string())).expect("Ramfs not mount at /");
-            root_mount_point.insert(MountPath("/".to_string()), fs.clone() as Arc<Mutex<dyn VfsFs>>);
-        }   
+
+            // 逐个探测分区，找到能挂载 ext4 的
+            let mut mounted_fs: Option<Arc<Mutex<Ext4Fs>>> = None;
+            for idx in 1..=8 {
+                let path = alloc::format!("/vda{}", idx);
+                let vda = match vfs_open(path.as_str(), OpenFlags::RDWR) {
+                    Ok(f) => f,
+                    Err(_) => break,
+                };
+                let ext4_dev = Ext4BlockDevice::new(vda);
+                let fs = Arc::new(Mutex::new(Ext4Fs::new(ext4_dev)));
+                if fs.lock().mount().is_ok() {
+                    debug!("Found ext4 on {}", path);
+                    mounted_fs = Some(fs);
+                    break;
+                }
+                debug!("{} is not ext4, skipping", path);
+            }
+
+            let fs = mounted_fs.expect("No ext4 partition found on any vda*");
+
+            let old_fs: Arc<Mutex<dyn VfsFs>>;
+            {
+                let mut rootfs_guard = ROOTFS.lock();
+                let root_mount_point = &mut rootfs_guard.as_mut().expect("root vfs not init").mount_poinr;
+                old_fs = root_mount_point.remove(&MountPath("/".to_string())).expect("Ramfs not mount at /");
+                root_mount_point.insert(MountPath("/".to_string()), fs as Arc<Mutex<dyn VfsFs>>);
+            }
             //make dev dir
             vfs_mkdir("/dev").expect("/dev create failed!");
             let mut rootfs_guard = ROOTFS.lock();

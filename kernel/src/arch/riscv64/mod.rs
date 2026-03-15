@@ -5,17 +5,30 @@ pub mod panic;
 pub mod trap;
 pub mod sbi;
 pub mod time;
+pub mod driver;
+
+use riscv::register::sip;
 // 重新导出，让外部可以通过 crate::arch::TaskContext 访问
 pub use task::TaskContext;
 pub use task::__switch;
 pub use trap::TrapContext;
 pub use sbi::*;
 
+
+
+
+
+
+
 use riscv::register::{stvec, utvec::TrapMode};
 use crate::config::TRAP_BOTTOM_ADDR;
 use core::{arch::global_asm,  panicking::panic};
 use crate::{config::*, task::TASK_MANAER, time::set_next_timeInterupt};
 use log::{debug, error, };
+
+extern "C" {
+    fn __kernel_mode_trap();
+}
 use riscv::register::{scause::{self, Exception, Trap}, sie::Sie, sscratch, sstatus::{self, SPP, Sstatus}, stval};
 use crate::syscall::*;//系统调用
 use riscv::register::sie;
@@ -31,16 +44,27 @@ use lazy_static::lazy_static;
 use crate::trap::recycle_pending_kstacks;
 use crate::trap::pagefaultHandler::PageFaultHandler;
 use crate::kprintln;
+use crate::arch::driver::keyboard;
+
+
+
 
 // 引入trap
 global_asm!(include_str!("trap.asm"));
+
+// 引入内核态 trap 处理
+global_asm!(include_str!("kernel_trap.asm"));
 
 // 引入入口
 global_asm!(include_str!("./entry.asm"));
 
 /// 平台初始化函数
 pub fn arch_init(){
-
+    // riscv64: 初始化 PLIC + 键盘中断
+    driver::plic::plic_init();
+    keyboard::enable_uart_rx_interrupt();
+    enable_external_interrupt();
+    //上面的是纯寄存器操作,是安全的
 }
 
 /// 设置内核陷阱处理程序向量
@@ -51,14 +75,14 @@ pub fn set_kernel_trap_handler() {
     }
 }
 
-/// 设置内核禁止陷阱处理
-pub fn set_kernel_forbid() {
+/// 设置内核态 trap 处理（支持在内核态处理外部中断）
+pub fn set_kernel_trap() {
     unsafe {
-        stvec::write(kernel_traped_forbid as usize, TrapMode::Direct);
+        stvec::write(__kernel_mode_trap as usize, TrapMode::Direct);
     }
 }
 
-///愿意处理全局中断。   这个状态会被trapcontext读取
+///让在用户态愿意处理全局中断。   这个状态会被trapcontext读取
 pub fn rather_global_interrupt(){
         let sstatus_raw = sstatus::read();
     
@@ -76,16 +100,18 @@ pub fn rather_global_interrupt(){
 ///设置sstatus的sie开启全局中断使能，设置sie寄存器的第五位（从0开始）开启具体时钟中断 关键雷区，在内核不开sie，仅仅设置stie，在第一个任务sret会恢复到sie上，从而开启中断
 pub fn enable_timer_interupt(){
     unsafe {
-     //sstatus::set_sie(); //先暂时不开内核全局中断使能   内核中断会错误
+     // 不要在这里开 sstatus::set_sie()！
+     // 内核态全局 SIE 只在需要等待中断时局部开启（如 get_char）
+     // 用户态的 SIE 通过 sret 时 SPIE→SIE 自动恢复
      sie::set_stimer(); 
     }
     debug!("TIMER INTERUPT ENABLE!");
 }
 
-///设置sstatus的外部中断使能
+///开启sstatus的外部中断使能
 pub fn enable_external_interrupt(){
     unsafe {
-        sie::set_sext();//全局中断使能未开启
+        sie::set_sext();//全局中断使能开启,允许外部中断响应，但是需要开启sstatus::set_sie()开关才能真正响应，使能是副开关
     }
 }
 
@@ -136,10 +162,30 @@ use riscv::register::sepc;
 ///handler必须返回到trap里面去
 pub extern "C" fn kernel_trap_handler(){//内核专属trap（目前不应该被调用）
     
+
+    // let scauses = scause::read();
+    // let sepc_val = sepc::read();
+    // let stval_val = stval::read();
+    // let sstatus_val = sstatus::read();
+    // let satp_val = satp::read();
+    // let sie = sie::read();
+    // let sip = sip::read();
+
+    // kprintln!(
+    //     "UnSupport Kernel Trap: cause={:?} sepc={:#x} stval={:#x} sstatus={:#x} satp={:#x} sie={:#x} sip={:#x}",
+    //     scauses.cause(),
+    //     sepc_val,
+    //     stval_val,
+    //     sstatus_val.bits(),
+    //     satp_val.bits(),
+    //     sie.bits(),
+    //     sip.bits()
+    // );
+
     // 回收内核栈
     recycle_pending_kstacks();
-    
-    set_kernel_forbid();
+
+    set_kernel_trap();
     let scauses = scause::read();
     let sepc_val = sepc::read();
     let stval_val = stval::read();
@@ -189,7 +235,6 @@ pub extern "C" fn kernel_trap_handler(){//内核专属trap（目前不应该被�
             PageFaultHandler(VirAddr(stval_val),scauses);
         }
         Trap::Interrupt(Interrupt::SupervisorTimer)=>{
-
             // 处理进程信号
             TASK_MANAER.resolve_current_task_signal();
            
@@ -198,8 +243,17 @@ pub extern "C" fn kernel_trap_handler(){//内核专属trap（目前不应该被�
             TASK_MANAER.suspend_and_run_task();
         }
         Trap::Interrupt(Interrupt::SupervisorExternal)=>{
-            //外部中断，键盘等
-            panic!("externnal interrupt,but rust sbi make complete abtract!");
+
+            // 外部中断：PLIC claim → 分发 → complete
+            let irq = driver::plic::plic_claim();
+            if irq == driver::plic::UART0_IRQ {
+                keyboard::keyboard_interrupt_handler();
+            } else if irq != 0 {
+                warn!("未知外部中断 IRQ={}", irq);
+            }
+            if irq != 0 {
+                driver::plic::plic_complete(irq);
+            }
         }
         _=>{
             panic!("Unknown trap from user: {:?}", scauses.cause())
@@ -212,6 +266,40 @@ pub fn no_return_start()->!{
     panic("Start Function you ret ,WTF????");
 }
 
+/// 内核态 trap handler
+/// 当内核态开启 SIE 时（如 get_char 等待 I/O），中断会进入这里
+/// 只处理外部中断和定时器中断，其他情况 panic
+#[no_mangle]
+pub extern "C" fn kernel_mode_trap_handler() {
+    let scauses = scause::read();
+
+    match scauses.cause() {
+        Trap::Interrupt(Interrupt::SupervisorExternal) => {
+            let irq = driver::plic::plic_claim();
+            if irq == driver::plic::UART0_IRQ {
+                keyboard::keyboard_interrupt_handler();
+            }
+            if irq != 0 {
+                driver::plic::plic_complete(irq);
+            }
+        }
+        Trap::Interrupt(Interrupt::SupervisorTimer) => {
+            // 处理进程信号
+            TASK_MANAER.resolve_current_task_signal();
+
+            set_next_timeInterupt();
+            // 内核态 timer 中断不做调度
+        }
+        _ => {
+            let sepc_val = sepc::read();
+            let stval_val = stval::read();
+            panic!(
+                "Unexpected kernel trap: cause={:?} sepc={:#x} stval={:#x}",
+                scauses.cause(), sepc_val, stval_val
+            );
+        }
+    }
+}
 
 
 #[no_mangle]

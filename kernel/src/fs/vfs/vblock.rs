@@ -2,19 +2,30 @@ use alloc::sync::Arc;
 use spin::Mutex;
 use spin::Mutex as SpinMutex;
 
-use crate::driver::VirtBlk;
 use crate::fs::partition::DevicePartition;
 use crate::fs::vfs::{File, VfsFsError, VfsStat, VFS_DT_REG};
 use crate::SECTOR_SIZE;
-///BLOCK_DEV
-pub struct VBLOCK{
-    blockdevice:Arc<Mutex<VirtBlk>>,
-    partition:DevicePartition,
+
+/// 块设备抽象 trait
+/// 外层 Mutex 保证独占访问，方法使用 &mut self
+pub trait BlueBlk: Send + Sync {
+    /// 读取 LBA 扇区到 buf（buf 长度必须 >= SECTOR_SIZE）
+    fn read_block(&mut self, lba: usize, buf: &mut [u8]) -> Result<(), VfsFsError>;
+    /// 将 buf 写入 LBA 扇区（buf 长度必须 >= SECTOR_SIZE）
+    fn write_block(&mut self, lba: usize, buf: &[u8]) -> Result<(), VfsFsError>;
+    /// 返回设备总扇区数
+    fn capacity_in_sectors(&self) -> u64;
+}
+
+/// 块设备文件抽象，支持分区偏移
+pub struct VBLOCK {
+    blockdevice: Arc<Mutex<dyn BlueBlk>>,
+    partition: DevicePartition,
     offset: SpinMutex<u64>,
 }
 
 impl VBLOCK {
-    pub fn new(blockdevice: Arc<Mutex<VirtBlk>>, partition: DevicePartition) -> Self {
+    pub fn new(blockdevice: Arc<Mutex<dyn BlueBlk>>, partition: DevicePartition) -> Self {
         Self {
             blockdevice,
             partition,
@@ -72,10 +83,7 @@ impl File for VBLOCK {
             let mut sector: [u8; SECTOR_SIZE] = [0; SECTOR_SIZE];
             self.blockdevice
                 .lock()
-                .0
-                .lock()
-                .read_block(lba, &mut sector)
-                .map_err(|_| VfsFsError::IO)?;
+                .read_block(lba, &mut sector)?;
 
             buf[written..written + to_copy]
                 .copy_from_slice(&sector[in_off..in_off + to_copy]);
@@ -127,20 +135,14 @@ impl File for VBLOCK {
             if to_copy != SECTOR_SIZE {
                 self.blockdevice
                     .lock()
-                    .0
-                    .lock()
-                    .read_block(lba, &mut sector)
-                    .map_err(|_| VfsFsError::IO)?;
+                    .read_block(lba, &mut sector)?;
             }
 
             sector[in_off..in_off + to_copy]
                 .copy_from_slice(&buf[read_pos..read_pos + to_copy]);
             self.blockdevice
                 .lock()
-                .0
-                .lock()
-                .write_block(lba, &sector)
-                .map_err(|_| VfsFsError::IO)?;
+                .write_block(lba, &sector)?;
 
             read_pos += to_copy;
             remaining -= to_copy;

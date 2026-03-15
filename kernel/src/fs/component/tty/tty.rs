@@ -3,7 +3,11 @@ use alloc::sync::Arc;
 use log::error;
 use crate::task::TASK_MANAER;
 use crate::fs::vfs::{File, OpenFlags, VfsFsError};
-use crate::driver::uart;
+use crate::arch::driver::uart;
+#[cfg(target_arch = "riscv64")]
+use riscv::register::sstatus;
+#[cfg(target_arch = "riscv64")]
+use riscv::register::sie;
 
 
 pub const FD_TYPE_STDIN: usize = 0;
@@ -24,12 +28,36 @@ pub struct Stderr;
 impl Stdin {
     ///调用栈顶必须为traphandler！！！，因为其中有TASK_MANAER.suspend_and_run_task();
     pub fn get_char() -> u8 {
-        // 使用UART驱动读取字符，没有字符就挂起
         loop {
+            // 先检查中断缓冲区
+            #[cfg(target_arch = "riscv64")]
+            if let Some(c) = crate::arch::driver::keyboard::read_input() {
+                return c;
+            }
+            #[cfg(target_arch = "aarch64")]
+            if let Some(c) = crate::arch::driver::keyboard::read_input() {
+                return c;
+            }
+            // 非 riscv64/aarch64：轮询
+            #[cfg(not(any(target_arch = "riscv64", target_arch = "aarch64")))]
             if let Some(cha) = uart::getc() {
                 return cha;
             }
-            TASK_MANAER.suspend_and_run_task(); // 没有字符就切换任务
+            // 等待中断：开全局中断 + wfi
+            #[cfg(target_arch = "riscv64")]
+            unsafe {
+                sstatus::set_sie();    // 开全局中断
+                core::arch::asm!("wfi"); //等待中断
+                sstatus::clear_sie();  // 关全局中断
+            }
+            #[cfg(target_arch = "aarch64")]
+            unsafe {
+                core::arch::asm!("msr daifclr, #2"); // 开 IRQ
+                core::arch::asm!("wfi");              // 等待中断
+                core::arch::asm!("msr daifset, #2"); // 关 IRQ
+            }
+            // wfi 返回后让出 CPU
+            TASK_MANAER.suspend_and_run_task();
         }
     }
 }

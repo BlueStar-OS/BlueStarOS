@@ -45,6 +45,7 @@ pub const WNOHANG:i32 = 1;
 
 
 /// syscall 封装：Linux ABI 版本（最多 6 个参数）
+#[cfg(target_arch = "riscv64")]
 pub fn sys_call(id: usize, args: [usize; 6]) -> isize {
     let mut ret: isize;
     unsafe {
@@ -57,6 +58,25 @@ pub fn sys_call(id: usize, args: [usize; 6]) -> isize {
             in("x14") args[4],
             in("x15") args[5],
             in("x17") id
+        );
+    }
+    ret
+}
+
+/// syscall 封装：Linux ABI aarch64 版本
+#[cfg(target_arch = "aarch64")]
+pub fn sys_call(id: usize, args: [usize; 6]) -> isize {
+    let mut ret: isize;
+    unsafe {
+        core::arch::asm!(
+            "svc #0",
+            inlateout("x0") args[0] => ret,
+            in("x1") args[1],
+            in("x2") args[2],
+            in("x3") args[3],
+            in("x4") args[4],
+            in("x5") args[5],
+            in("x8") id
         );
     }
     ret
@@ -160,17 +180,28 @@ pub fn sys_getppid() -> isize {
     sys_call(SYS_GETPPID, [0, 0, 0, 0, 0, 0])
 }
 
+// 只读方式打开文件
 pub const O_RDONLY: usize = 0;
+// 只写方式打开文件
 pub const O_WRONLY: usize = 1;
+// 读写方式打开文件
 pub const O_RDWR: usize = 2;
+// 如果文件不存在则创建文件
 pub const O_CREAT: usize = 0x40;
+// 同 O_CREAT，另一种命名
 pub const O_CREATE: usize = O_CREAT;
+// 打开文件时清空文件内容
 pub const O_TRUNC: usize = 1 << 9;
+// 以追加模式打开文件
 pub const O_APPEND: usize = 1 << 10;
+// 要求打开的是目录
 pub const O_DIRECTORY: usize = 0x0200000;
 
+// 文件偏移量设置为 offset
 pub const SEEK_SET: usize = 0;
+// 文件偏移量设置为当前位置加上 offset
 pub const SEEK_CUR: usize = 1;
+// 文件偏移量设置为文件长度加上 offset
 pub const SEEK_END: usize = 2;
 
 pub fn sys_open(path: &str, flags: usize) -> isize {

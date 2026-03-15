@@ -54,8 +54,8 @@ pub const  MB:usize=1024*1024;
 pub const  PAGE_SIZE:usize=4096;//每个页面大小4kb
 
 
-pub const MEMORY_SIZE:usize=128*MB;//总可用空闲物理内存大小
-pub const KERNEL_HEAP_SIZE:usize=64*MB;//内核堆大小，64mb足以了，后期可以调整，主要是init程序加载时的vec比较大。
+
+pub const KERNEL_HEAP_SIZE:usize=16*MB;//内核堆大小，16mb足以了，后期可以调整，主要是init程序加载时的vec比较大。
 
 
 pub const KERNEL_STACK_SIZE:usize=PAGE_SIZE*6;//应用内核栈有四个页面的大小

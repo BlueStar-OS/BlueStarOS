@@ -82,9 +82,12 @@ impl TrapContext {
 
 /// 设置内核陷阱处理程序向量
 pub fn set_kernel_trap_handler() {
-    // 设置aarch64 异常向量表地址
+    use crate::config::TRAP_BOTTOM_ADDR;
+    // VBAR_EL1 必须指向高地址 trampoline，因为：
+    // 用户态 trap 时 TTBR0=用户页表（没有内核代码），
+    // 但 TTBR1 有 TRAP_BOTTOM_ADDR 映射（内核和用户页表都有）
     unsafe {
-         let vector_table = __aarch64_vector as usize;
+         let vector_table = TRAP_BOTTOM_ADDR;
          asm!("msr vbar_el1, {}", in(reg) vector_table);
     }
 }
@@ -95,4 +98,5 @@ pub fn set_kernel_forbid() {
     unsafe {
         // 临时空实现
     }
+    panic!("kernel trap");
 }

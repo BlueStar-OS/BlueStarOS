@@ -271,6 +271,10 @@ impl EMmcHost {
             delay_us(1000);
         }
 
+        // RK3588: reset 后使能内部时钟 (MISC_INTCLK_EN)
+        let extra = self.read_reg(DECMSHC_EMMC_MISC_CON);
+        self.write_reg(DECMSHC_EMMC_MISC_CON, extra | MISC_INTCLK_EN);
+
         Ok(())
     }
 

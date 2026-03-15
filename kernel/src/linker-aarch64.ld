@@ -3,7 +3,7 @@ ENTRY(_blue_start)
 
 /* U-Boot loads kernel to 0x02000000 */
 BASE_ADDRESS = 0x40080000;
-/* BASE_ADDRESS = 0x02000000; */
+/* BASE_ADDRESS = 0x02000000;  */
 SECTIONS
 {
     . = BASE_ADDRESS;

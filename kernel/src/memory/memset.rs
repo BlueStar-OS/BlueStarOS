@@ -1085,7 +1085,7 @@ impl MapSet {
             if ph.get_type().unwrap() == xmas_elf::program::Type::Load {
                 let start_va: VirAddr = VirAddr(ph.virtual_addr() as usize);
                 let end_va: VirAddr = VirAddr((ph.virtual_addr() + ph.mem_size()) as usize);
-                let mut map_perm = MapAreaFlags::U;
+                let mut map_perm = MapAreaFlags::U | MapAreaFlags::A;
                 let ph_flags = ph.flags();
                 if ph_flags.is_read() {
                     map_perm |= MapAreaFlags::R;
@@ -1096,6 +1096,7 @@ impl MapSet {
                 if ph_flags.is_execute() {
                     map_perm |= MapAreaFlags::X;
                 }
+
                 
                 debug!("  [{}] Mapping segment: [{:#x}, {:#x}), perm: {:?}", 
                        i, start_va.0, end_va.0, map_perm);
@@ -1126,7 +1127,7 @@ impl MapSet {
         memory_set.add_area(
             VirNumRange(userstack_start_vpn,userstack_end_vpn),
             MapType::Maped,
-            MapAreaFlags::W | MapAreaFlags::R | MapAreaFlags::U,
+            MapAreaFlags::W | MapAreaFlags::R | MapAreaFlags::U | MapAreaFlags::A,
             None,
             None,
             
@@ -1137,7 +1138,7 @@ impl MapSet {
         memory_set.add_area(
             VirNumRange(userheap_start_end_vpn, userheap_start_end_vpn),
             MapType::Maped,
-            MapAreaFlags::R | MapAreaFlags::W | MapAreaFlags::U,
+            MapAreaFlags::R | MapAreaFlags::W | MapAreaFlags::U | MapAreaFlags::A,
             None,
             None,
         );
@@ -1222,7 +1223,7 @@ impl MapSet {
         KERNEL_SPACE.lock().add_area(
             VirNumRange(strat_kernel_vpn, end_kernel_vpn),
             MapType::Maped,
-            MapAreaFlags::R | MapAreaFlags::W,
+            MapAreaFlags::R | MapAreaFlags::W | MapAreaFlags::A,
             None,
             None,
         );
@@ -1243,7 +1244,7 @@ impl MapSet {
     ///在目前的地址空间页表里面映射陷阱
     pub fn map_traper(&mut self,){
         let kernel_trape:usize=straper as usize;//内核陷阱起始物理地址
-        self.table.map(VirAddr(TRAP_BOTTOM_ADDR).into(), PhysiAddr(kernel_trape as usize).into(), PTEFlags::X | PTEFlags::R);
+        self.table.map(VirAddr(TRAP_BOTTOM_ADDR).into(), PhysiAddr(kernel_trape as usize).into(), PTEFlags::X | PTEFlags::R | PTEFlags::A);
 
        
     }
@@ -1255,7 +1256,7 @@ impl MapSet {
             VirNumRange(trapcontext_addr.strict_into_virnum(),
             trapcontext_addr.strict_into_virnum()),
             MapType::Maped,
-            MapAreaFlags::R | MapAreaFlags::W,
+            MapAreaFlags::R | MapAreaFlags::W | MapAreaFlags::A,
             None,
             None,
         );
@@ -1342,17 +1343,27 @@ impl MapSet {
 
 
 
-        //映射硬件段 (MMIO设备，必须使用设备内存属性!)
-        let hardware_range = VirNumRange::new(VirAddr(0x0 as usize), VirAddr(0x10010000 as usize));//range封装过
-        mem_set.add_area(
-            hardware_range,
-            MapType::Indentical,
-            MapAreaFlags::V | MapAreaFlags::R | MapAreaFlags::W | MapAreaFlags::A | MapAreaFlags::G | MapAreaFlags::DEV,
-            None,
-            None,
-        );
-
-        debug!("[MEMMAP] Hardware (Device): {:#x}-{:#x}, flags: V|R|W|A|G|DEV", 0x0, 0x10010000);
+        //映射 MMIO 设备区域（从 KERNEL_MEMORY_SPACE_LIST 注册表读取）
+        {
+            let mmio_list = crate::memory::KERNEL_MEMORY_SPACE_LIST.lock();
+            if mmio_list.is_empty() {
+                // panic
+                panic!("[MMIO]: MMIO list is empty , you are forget registe mmio memory?");
+            } else {
+                for entry in mmio_list.iter() {
+                    mem_set.add_area(
+                        entry.range,
+                        MapType::Indentical,
+                        entry.flags | MapAreaFlags::A,
+                        None,
+                        None,
+                    );
+                    let start_addr: VirAddr = entry.range.0.into();
+                    let end_addr: VirAddr = entry.range.1.into();
+                    debug!("[MEMMAP] MMIO (Device): {:#x}-{:#x}", start_addr.0, end_addr.0);
+                }
+            }
+        }
 
         //映射代码段
         let text_range = VirNumRange::new(VirAddr(stext as usize), VirAddr(etext as usize));//range封装过
@@ -1462,26 +1473,49 @@ impl MapSet {
         debug!("[MEMMAP] BSS (heap): {:#x}-{:#x}, flags: V|R|W|A|G", estack as usize, ekernel as usize);
 
 
-        // 映射物理内存(必须手动构造range区间)，phystart需要向上取整,end需要手动-1 range
-        let phys_start =VirAddr(ekernel as usize).floor_up();
-        let phys_end =VirAddr(ekernel as usize + MEMORY_SIZE-PAGE_SIZE).floor_down(); //ekernel 为结束地址 end需要手动-1 range
-        let phys_range = VirNumRange(phys_start,phys_end);
-        mem_set.add_area(
-            phys_range,
-            MapType::Indentical,
-            MapAreaFlags::V | MapAreaFlags::W | MapAreaFlags::R | MapAreaFlags::A | MapAreaFlags::G,
-            None,
-            None,
-        );
-        debug!("[MEMMAP] Physical Memory: {:#x}-{:#x}, flags: V|R|W|A|G", phys_start.0 << 12, phys_end.0 << 12);
+        // 映射物理内存（从 KERNEL_MAIN_MEMORY 注册表读取，支持多段不连续内存）
+        {
+            use crate::memory::memorymodel::KERNEL_MAIN_MEMORY;
+            let mem_info = KERNEL_MAIN_MEMORY.lock();
+
+            if mem_info.is_initialized() && !mem_info.regions().is_empty() {
+                for region in mem_info.regions() {
+                    // 跳过 kernel image 之前的部分（已被前面的段映射覆盖）
+                    let effective_start = if region.start < ekernel as usize {
+                        ekernel as usize
+                    } else {
+                        region.start
+                    };
+
+                    if effective_start >= region.end {
+                        continue;
+                    }
+
+                    let phys_start = VirAddr(effective_start).floor_up();
+                    let phys_end = VirAddr(region.end - PAGE_SIZE).floor_down();
+                    let phys_range = VirNumRange(phys_start, phys_end);
+                    mem_set.add_area(
+                        phys_range,
+                        MapType::Indentical,
+                        MapAreaFlags::V | MapAreaFlags::W | MapAreaFlags::R | MapAreaFlags::A | MapAreaFlags::G,
+                        None,
+                        None,
+                    );
+                    debug!("[MEMMAP] Physical Memory: {:#x}-{:#x}",
+                           phys_start.0 << 12, phys_end.0 << 12);
+                }
+            } else {
+                // 物理内存Machine info没初始化    
+                panic!("[Machine Memory]: Are you forget input dtb file to kernel?");
+            }
+        }
 
         //设置brk Error
         mem_set.brk = VirAddr(ebss as usize + 1);
 
         //内核地址空间映射完成
-        let vdr:VirAddr=phys_end.into();
-        debug!("[MEMMAP] ✓ Kernel address space mapped: Total {} MB, Kernel size {} MB",(vdr.0 -skernel as usize)/MB,(ekernel as usize -skernel as usize)/MB);
-        
+        debug!("[MEMMAP] Kernel address space mapped, Kernel size {} MB",(ekernel as usize -skernel as usize)/MB);
+
         mem_set
 
     

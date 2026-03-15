@@ -180,6 +180,9 @@ pub extern "C" fn sync_el0_64() {
     use crate::trap::recycle_pending_kstacks;
     use crate::arch::set_kernel_forbid;
 
+
+    error!("User trap!");
+
     // 回收内核栈
     recycle_pending_kstacks();
 
@@ -255,6 +258,33 @@ pub extern "C" fn sync_el0_64() {
     app_entry_point();
 }
 
+/// GIC 中断分发 — claim → dispatch → EOI
+fn gic_handle_irq() {
+    use crate::arch::driver::gicd::{gic_read_iar, gic_write_eoir, TIMER_PPI_INTID, UART2_INTID};
+
+    loop {
+        let irqnr = gic_read_iar();
+        // 1020-1023 = spurious，没有更多 pending 中断
+        if irqnr >= 1020 {
+            break;
+        }
+        match irqnr {
+            TIMER_PPI_INTID => {
+                // EL1 Physical Timer PPI
+                set_next_timeInterupt();
+            }
+            UART2_INTID => {
+                // UART2 SPI — 键盘输入
+                crate::arch::driver::keyboard::keyboard_interrupt_handler();
+            }
+            _ => {
+                warn!("未知中断 INTID={}", irqnr);
+            }
+        }
+        gic_write_eoir(irqnr);
+    }
+}
+
 /// 用户态IRQ中断处理
 #[no_mangle]
 pub extern "C" fn irq_el0_64() {
@@ -263,11 +293,11 @@ pub extern "C" fn irq_el0_64() {
     // 回收内核栈
     recycle_pending_kstacks();
 
+    // GIC claim → dispatch → EOI
+    gic_handle_irq();
+
     // 处理进程信号
     TASK_MANAER.resolve_current_task_signal();
-
-    // 设置下一次时钟中断
-    set_next_timeInterupt();
 
     // 挂起当前任务并运行下一个
     TASK_MANAER.suspend_and_run_task();
@@ -300,9 +330,11 @@ pub extern "C" fn sync_el1_spx() {
 }
 
 /// 内核态IRQ中断处理（使用SP_EL1）
+/// 由 __kernel_irq_entry 汇编入口保存/恢复寄存器后调用
 #[no_mangle]
 pub extern "C" fn irq_el1_spx() {
-    panic!("IRQ in kernel (SP_EL1)");
+    // 内核态只处理中断，不做任务调度
+    gic_handle_irq();
 }
 
 /// 内核态FIQ中断处理（使用SP_EL1）

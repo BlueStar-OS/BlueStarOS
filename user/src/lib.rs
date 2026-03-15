@@ -36,12 +36,22 @@ static mut USER_HEAP_SPACE:[usize;USER_HEAP_SIZE]=[0;USER_HEAP_SIZE];
 #[global_allocator]
 static mut USER_HEAP_ALLOCTER:LockedHeap=LockedHeap::empty();
 
+#[cfg(target_arch = "riscv64")]
 global_asm!(r#"
     .section .text.entry
     .globl _start
 _start:
     mv a0, sp
     call __user_start
+"#);
+
+#[cfg(target_arch = "aarch64")]
+global_asm!(r#"
+    .section .text.entry
+    .globl _start
+_start:
+    mov x0, sp
+    bl __user_start
 "#);
 
 #[no_mangle]

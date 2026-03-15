@@ -19,6 +19,7 @@ mod driver;  // driver 必须在 console 之前加载，因为 console 依赖 dr
 mod console;
 mod panic;
 mod config;
+mod error;
 mod logger;
 mod memory;
 mod sync;
@@ -29,7 +30,6 @@ mod task;
 mod fs;
 use crate::arch::*;
 use crate::driver::dtb;
-use crate::driver::uart::putc;
 use crate::sync::UPSafeCell;
 use log::*;
 use crate::fs::vfs::*;
@@ -60,22 +60,28 @@ pub fn kernel_init(){
     clear_bss();//清空bss
 
     kprintln!("Arch PlatForm init");
+
+    
+    
+   
+
     //平台初始化 必须放在clearbss之后！ 因为其中有bss的静态初始化页表相关
     arch_init();
-    
-    //内核堆，分配器初始化
+
+
+     //内核堆，分配器初始化
     allocator_init();
-    
+
     // 初始化设备树,运行设备探针
     dtb::init();
 
-
+    
 
     kprintln!("Logger start inited");
     logger::init();//日志初始化 - 必须先初始化日志才能使用 debug!
     kprintln!("Logger inited");
     kprintln!("Inital Physical Memory Alloctor");
-    init_frame_allocator(ekernel as usize,ekernel as usize +MEMORY_SIZE);//物理内存页分配器初始化
+    init_frame_allocator_from_dtb(ekernel as usize);//物理内存页分配器初始化（从DTB探测）
     kernel_info_debug();//打印内核日志
     
 }
@@ -87,7 +93,6 @@ pub fn blue_main() -> ! {//永远不会返回
     
     
     kprintln!("Welcome to BlueStarOS!");
-
     kernel_init(); //bss，日志，分配器初始化
 
     debug!("Kernel init success!");
@@ -96,10 +101,14 @@ pub fn blue_main() -> ! {//永远不会返回
 
 
     KERNEL_SPACE.lock().activate();//激活地址空间
-    
+
+
+    // 下面需要在内核空间开启之后执行，因为涉及内核态中断访问trap
     rather_global_interrupt();//愿意处理全局中断使能
     enable_timer_interupt();//开启全局时间中断使能
     set_next_timeInterupt();//第一次开启时钟中断
+
+
     
     debug!("stext {:#x}",__kernel_trap as usize);
 

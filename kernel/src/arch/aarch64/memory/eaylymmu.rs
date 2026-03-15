@@ -155,7 +155,7 @@ pub unsafe fn early_mmu_init() {
             BLOCK_NORMAL
         } else if i < HI_MMIO_END_IDX {
             // 0x08000000 - 0x0FFFFFFF: Device
-            BLOCK_NORMAL
+            BLOCK_DEVICE
         } else {
             // 0x10000000 - 0x3FFFFFFF: Normal
             BLOCK_NORMAL

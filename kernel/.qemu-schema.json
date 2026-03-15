@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "args": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "fail_regex": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "success_regex": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "to_bin": {
+      "description": "objcopy output as binary",
+      "type": "boolean"
+    },
+    "uefi": {
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "args",
+    "uefi",
+    "to_bin",
+    "success_regex",
+    "fail_regex"
+  ],
+  "title": "QemuConfig",
+  "type": "object"
+}

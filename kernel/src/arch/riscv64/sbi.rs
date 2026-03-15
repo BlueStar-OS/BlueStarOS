@@ -2,7 +2,7 @@ use core::arch::asm;
 
 use log::error;
 
-use crate::fs::vfs::{ROOTFS, VfsFs};
+use crate::{fs::vfs::{ROOTFS, VfsFs}, kprintln};
 
 
 const SET_TIMER:usize=0;
@@ -37,8 +37,7 @@ pub fn shutdown()->!{
         
 
     sbi_call(SHUTDOWN_CALLID, 0, 0, 0);
-
-    
+   
     loop {
         unsafe { asm!("wfi") };
     }
