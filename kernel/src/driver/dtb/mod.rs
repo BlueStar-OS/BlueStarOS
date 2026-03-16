@@ -21,25 +21,26 @@
 //! let memory = scanner.find_memory();
 //! ```
 
+mod devices;
 mod fdt;
 mod node;
 mod parser;
-mod devices;
 mod probe;
 
-pub use fdt::{FdtHeader, FdtError, MemReservation, FDT_MAGIC};
-pub use node::{DeviceNode, DeviceTree, Property, RegBlock, AddressRange};
-pub use parser::DtbParser;
 pub use devices::{
-    CpuInfo, MemoryInfo, MmioDevice, InterruptController,
-    GpioController, ClockController, BusBridge, BusType,
-    DeviceScanner,
+    BusBridge, BusType, ClockController, CpuInfo, DeviceScanner, GpioController,
+    InterruptController, MemoryInfo, MmioDevice,
 };
-pub use probe::{ProbeEntry, ProbePriority, ProbeCallback};
+pub use fdt::{FdtError, FdtHeader, MemReservation, FDT_MAGIC};
+pub use node::{AddressRange, DeviceNode, DeviceTree, Property, RegBlock};
+pub use parser::DtbParser;
+pub use probe::{ProbeCallback, ProbeEntry, ProbePriority};
 
-use log::{debug, trace, info, warn};
+use lazy_static::lazy_static;
+use log::{debug, info, trace, warn};
 
 use crate::kprintln;
+use crate::sync::UPSafeCell;
 
 // Import DTB pointer from assembly (defined in entry.asm)
 extern "C" {
@@ -50,8 +51,18 @@ extern "C" {
 /// Maximum DTB size to map (1MB)
 const DTB_MAX_SIZE: usize = 0x100000;
 
+lazy_static! {
+    /// 缓存解析后的设备树。
+    ///
+    /// 设备树解析本身不依赖页帧分配器，但很多设备 probe 会依赖。
+    /// 因此这里先缓存，等 frame allocator 初始化完成后再统一 probe。
+    static ref PARSED_DEVICE_TREE: UPSafeCell<Option<DeviceTree>> = UPSafeCell::new(None);
+}
+
 /// Initialize DTB parsing
 pub fn init() {
+    crate::fs::vfs::clear_global_block_devices();
+
     // Get DTB pointer from assembly
     let dtb_ptr = unsafe { _dtb_pointer };
 
@@ -63,20 +74,21 @@ pub fn init() {
     kprintln!("[DTB] DTB pointer at {:#x}", dtb_ptr);
 
     // Create slice from DTB
-    let dtb_slice = unsafe {
-        core::slice::from_raw_parts(dtb_ptr as *const u8, DTB_MAX_SIZE)
-    };
+    let dtb_slice = unsafe { core::slice::from_raw_parts(dtb_ptr as *const u8, DTB_MAX_SIZE) };
 
     match DtbParser::new(dtb_slice) {
         Ok(parser) => {
             match parser.parse() {
                 Ok(tree) => {
-                    // 日志输出设备树信息
-                    trace_device_tree(&tree);
-                    // 执行设备探测（GIC/UART 等注册 MMIO）
-                    probe::run_probes(&tree);
                     // 扫描 memory 节点，注册到 KERNEL_MAIN_MEMORY
                     scan_and_register_memory(&tree);
+                    // 日志输出设备树信息
+                    trace_device_tree(&tree);
+                    // 这里只做早期安全的解析和注册，不直接做设备 probe。
+                    //
+                    // 原因是块设备驱动可能在 probe 时申请连续页帧，
+                    // 而 frame allocator 此时还没有初始化完成。
+                    *PARSED_DEVICE_TREE.lock() = Some(tree);
                 }
                 Err(e) => {
                     warn!("[DTB] Failed to parse: {:?}", e);
@@ -91,13 +103,13 @@ pub fn init() {
 
 /// 扫描 DTB 中的 memory 节点，注册到 KERNEL_MAIN_MEMORY
 fn scan_and_register_memory(tree: &DeviceTree) {
-    use crate::memory::memorymodel::{register_main_memory_region, finalize_main_memory};
+    use crate::memory::memorymodel::{finalize_main_memory, register_main_memory_region};
 
     let scanner = DeviceScanner::new(tree);
     let memory_regions = scanner.find_memory();
 
     if memory_regions.is_empty() {
-        warn!("[DTB] 未找到 memory 节点");
+        panic!("[DTB] 未找到 memory 节点");
         return;
     }
 
@@ -113,7 +125,21 @@ fn scan_and_register_memory(tree: &DeviceTree) {
     }
 
     finalize_main_memory();
-    info!("[DTB] 物理内存注册完成");
+    debug!("[DTB] 物理内存注册完成");
+}
+
+/// 在 frame allocator 初始化完成后执行设备探测。
+///
+/// 这一阶段才允许驱动真正初始化 virtio 队列、申请连续页帧、
+/// 注册全局块设备等依赖内存分配器的动作。
+pub fn run_device_probes() {
+    let tree_guard = PARSED_DEVICE_TREE.lock();
+    let Some(tree) = tree_guard.as_ref() else {
+        warn!("[DTB] run_device_probes called before DTB init");
+        return;
+    };
+
+    probe::run_probes(tree);
 }
 
 /// Trace device tree content
@@ -136,12 +162,17 @@ fn trace_device_tree(tree: &DeviceTree) {
     // CPUs
     let cpus = scanner.find_cpus();
     if !cpus.is_empty() {
-       debug!("[DTB] === CPUs ===");
+        debug!("[DTB] === CPUs ===");
         for cpu in &cpus {
-            debug!("[DTB] {}: {}, reg={:#x}",
-                   cpu.name,
-                   cpu.compatible.first().map(|s| s.as_str()).unwrap_or("unknown"),
-                   cpu.reg);
+            debug!(
+                "[DTB] {}: {}, reg={:#x}",
+                cpu.name,
+                cpu.compatible
+                    .first()
+                    .map(|s| s.as_str())
+                    .unwrap_or("unknown"),
+                cpu.reg
+            );
         }
         debug!("[DTB]");
     }
@@ -149,12 +180,17 @@ fn trace_device_tree(tree: &DeviceTree) {
     // Memory
     let memory = scanner.find_memory();
     if !memory.is_empty() {
-       debug!("[DTB] === Memory ===");
+        debug!("[DTB] === Memory ===");
         for mem in &memory {
             for reg in &mem.reg {
                 let size_mb = reg.size / (1024 * 1024);
-               debug!("[DTB] {}: {:#x}-{:#x} ({} MB)",
-                       mem.name, reg.address, reg.address + reg.size, size_mb);
+                debug!(
+                    "[DTB] {}: {:#x}-{:#x} ({} MB)",
+                    mem.name,
+                    reg.address,
+                    reg.address + reg.size,
+                    size_mb
+                );
             }
         }
         debug!("[DTB]");
@@ -165,12 +201,20 @@ fn trace_device_tree(tree: &DeviceTree) {
     if !ics.is_empty() {
         debug!("[DTB] === Interrupt Controllers ===");
         for ic in &ics {
-            debug!("[DTB] {}: {}",
-                   ic.name,
-                   ic.compatible.first().map(|s| s.as_str()).unwrap_or("unknown"));
+            debug!(
+                "[DTB] {}: {}",
+                ic.name,
+                ic.compatible
+                    .first()
+                    .map(|s| s.as_str())
+                    .unwrap_or("unknown")
+            );
             for reg in &ic.reg {
-                debug!("[DTB]   reg: {:#x}-{:#x}",
-                       reg.address, reg.address + reg.size);
+                debug!(
+                    "[DTB]   reg: {:#x}-{:#x}",
+                    reg.address,
+                    reg.address + reg.size
+                );
             }
             debug!("[DTB]   #interrupt-cells: {}", ic.interrupt_cells);
         }
@@ -182,12 +226,20 @@ fn trace_device_tree(tree: &DeviceTree) {
     if !gpios.is_empty() {
         debug!("[DTB] === GPIO Controllers ===");
         for gpio in &gpios {
-            debug!("[DTB] {}: {}",
-                   gpio.name,
-                   gpio.compatible.first().map(|s| s.as_str()).unwrap_or("unknown"));
+            debug!(
+                "[DTB] {}: {}",
+                gpio.name,
+                gpio.compatible
+                    .first()
+                    .map(|s| s.as_str())
+                    .unwrap_or("unknown")
+            );
             for reg in &gpio.reg {
-                debug!("[DTB]   reg: {:#x}-{:#x}",
-                       reg.address, reg.address + reg.size);
+                debug!(
+                    "[DTB]   reg: {:#x}-{:#x}",
+                    reg.address,
+                    reg.address + reg.size
+                );
             }
         }
         debug!("[DTB]");
@@ -198,8 +250,7 @@ fn trace_device_tree(tree: &DeviceTree) {
     if !buses.is_empty() {
         debug!("[DTB] === Buses ===");
         for bus in &buses {
-            debug!("[DTB] {}: {:?}",
-                   bus.name, bus.bus_type);
+            debug!("[DTB] {}: {:?}", bus.name, bus.bus_type);
         }
         debug!("[DTB]");
     }
@@ -209,18 +260,28 @@ fn trace_device_tree(tree: &DeviceTree) {
     if !devices.is_empty() {
         debug!("[DTB] === MMIO Devices ===");
         for dev in &devices {
-            let compatible = dev.compatible.first()
-                .map(|s| s.as_str()).unwrap_or("unknown");
+            let compatible = dev
+                .compatible
+                .first()
+                .map(|s| s.as_str())
+                .unwrap_or("unknown");
             debug!("[DTB] {}: {}", dev.name, compatible);
             for reg in &dev.reg {
-                debug!("[DTB]   reg: {:#x}-{:#x} ({} KB)",
-                       reg.address, reg.address + reg.size, reg.size / 1024);
+                debug!(
+                    "[DTB]   reg: {:#x}-{:#x} ({} KB)",
+                    reg.address,
+                    reg.address + reg.size,
+                    reg.size / 1024
+                );
             }
         }
         debug!("[DTB]");
     }
 
-    debug!("[DTB] Total devices: {}", devices.len() + ics.len() + gpios.len() + buses.len());
+    debug!(
+        "[DTB] Total devices: {}",
+        devices.len() + ics.len() + gpios.len() + buses.len()
+    );
     debug!("[DTB] ================================");
 }
 

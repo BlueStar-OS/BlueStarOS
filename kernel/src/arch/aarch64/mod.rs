@@ -1,104 +1,93 @@
 // AArch64 架构相关实现
 
-pub mod task;
-pub mod memory;
-pub mod trap;
-pub mod sbi;
-pub mod time;
 pub mod driver;
+pub mod memory;
+pub mod sbi;
+pub mod task;
+pub mod time;
+pub mod trap;
 
-use core::arch::{global_asm, asm};
+use crate::allocator_init;
+use crate::arch::driver::gicd;
+use crate::arch::driver::keyboard;
 use crate::arch::memory::early_mmu_init;
 use crate::arch::memory::eaylymmu::turn_early_mmu;
 use crate::arch::task::TaskContext;
 use crate::config::*;
-use crate::arch::driver::gicd;
-use crate::arch::driver::keyboard;
-use crate::kprintln;
-use crate::allocator_init;
+use crate::debug;
 use crate::dtb;
-use crate::logger;
 use crate::init_frame_allocator_from_dtb;
 use crate::kernel_info_debug;
-use crate::debug;
+use crate::kprintln;
+use crate::logger;
 use crate::set_next_timeInterupt;
+use core::arch::{asm, global_asm};
 
 pub use sbi::*;
 // 引入入口
 global_asm!(include_str!("./entry.asm"));
 
 // 导出trap相关类型和函数
-pub use trap::{set_kernel_trap_handler, set_kernel_forbid, TrapContext};
 pub use trap::__aarch64_vector;
+pub use trap::{set_kernel_forbid, set_kernel_trap_handler, TrapContext};
 
 // 导出任务切换函数
 pub use task::__switch;
 
-
 /// 平台初始化函数
-pub fn arch_init(){
+pub fn arch_init() {
     kprintln!("Arch PlatForm init");
-
-
-
 
     unsafe {
         // 填充静态页表
         early_mmu_init();
     }
 
-
-
     // 打开早期的mmu，因为不开默认全是device memory
     turn_early_mmu();
 
-
-     //内核堆，分配器初始化
+    //内核堆，分配器初始化
     allocator_init();
 
-    // 初始化设备树,运行设备探针
+    // 初始化设备树。
+    // 这里只做早期解析和内存区注册，不在这里直接执行设备 probe。
     dtb::init();
 
     kprintln!("Logger start inited");
-    logger::init();//日志初始化 - 必须先初始化日志才能使用 debug!
+    logger::init(); //日志初始化 - 必须先初始化日志才能使用 debug!
     kprintln!("Logger inited");
     kprintln!("Inital Physical Memory Alloctor");
-    init_frame_allocator_from_dtb(ekernel as usize);//物理内存页分配器初始化（从DTB探测）
-    kernel_info_debug();//打印内核日志
+    init_frame_allocator_from_dtb(ekernel as usize); //物理内存页分配器初始化（从DTB探测）
+                                                     // 页帧分配器准备好之后，再执行真正的设备探测。
+                                                     // 这样 virtio-blk / eMMC 等驱动在 probe 里申请页帧时不会过早 panic。
+    dtb::run_device_probes();
+    kernel_info_debug(); //打印内核日志
 
     // AArch64: 初始化 GIC 中断控制器 + UART RX 中断
     // gicd::gic_init();
     // gicd::gic_enable_spi(crate::arch::driver::gicd::UART2_INTID);
     // keyboard::enable_uart_rx_interrupt();
 
-
     kprintln!("Welcome to BlueStarOS!");
 
     debug!("Kernel init success!");
 
-    set_kernel_trap_handler();//初始化陷阱入口，必须在地址空间激活后设置虚拟地址
+    set_kernel_trap_handler(); //初始化陷阱入口，必须在地址空间激活后设置虚拟地址
 
-
-    KERNEL_SPACE.lock().activate();//激活地址空间
-
+    KERNEL_SPACE.lock().activate(); //激活地址空间
 
     // 下面需要在内核空间开启之后执行，因为涉及内核态中断访问trap
-    rather_global_interrupt();//愿意处理全局中断使能
-    enable_timer_interupt();//开启全局时间中断使能
-    set_next_timeInterupt();//第一次开启时钟中断
-
-
+    rather_global_interrupt(); //愿意处理全局中断使能
+    enable_timer_interupt(); //开启全局时间中断使能
+    set_next_timeInterupt(); //第一次开启时钟中断
 }
-
-
-
 
 /// 应用程序入口点
 /// 从内核态切换到用户态
 #[no_mangle]
 pub extern "C" fn app_entry_point() {
-    use crate::task::TASK_MANAER;
     use crate::config::{straper, TRAP_BOTTOM_ADDR};
+    use crate::task::TASK_MANAER;
     use log::debug;
 
     set_kernel_trap_handler();
@@ -106,11 +95,16 @@ pub extern "C" fn app_entry_point() {
 
     // 计算 __kernel_refume 在 trampoline 高地址中的位置
     // .text.traper section: straper(低地址) 映射到 TRAP_BOTTOM_ADDR(高地址)
-    extern "C" { fn __kernel_refume(); }
+    extern "C" {
+        fn __kernel_refume();
+    }
     let refume_offset = __kernel_refume as usize - straper as usize;
     let refume_va = TRAP_BOTTOM_ADDR + refume_offset;
 
-    debug!("app_entry: user_satp={:#x}, refume_va={:#x}", user_satp, refume_va);
+    debug!(
+        "app_entry: user_satp={:#x}, refume_va={:#x}",
+        user_satp, refume_va
+    );
 
     // 跳到 trampoline 高地址执行 __kernel_refume
     // 在那里切换 TTBR0/TTBR1 到用户页表后，当前代码（低地址）不可达，
@@ -131,8 +125,8 @@ pub extern "C" fn app_entry_point() {
 /// 内核陷阱处理函数
 #[no_mangle]
 pub extern "C" fn kernel_trap_handler() {
-    use log::error;
     use crate::trap::recycle_pending_kstacks;
+    use log::error;
 
     // 回收内核栈
     recycle_pending_kstacks();
@@ -151,7 +145,10 @@ pub extern "C" fn kernel_trap_handler() {
 
     let ec = (esr >> 26) & 0x3F;
 
-    error!("Kernel trap: EC={:#x} ESR={:#x} ELR={:#x} FAR={:#x}", ec, esr, elr, far);
+    error!(
+        "Kernel trap: EC={:#x} ESR={:#x} ELR={:#x} FAR={:#x}",
+        ec, esr, elr, far
+    );
 
     match ec {
         0x15 => {

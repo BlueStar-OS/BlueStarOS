@@ -94,8 +94,8 @@ fn virtio_mmio_probe(node: &DeviceNode, _compatible: &str) -> Result<(), &'stati
         device_id,
     });
 
-    // 块设备在 DTB 探测阶段直接初始化并注册。
-    // 这样 VFS 后续只需要遍历全局块设备表，不需要知道设备来自哪个架构驱动。
+    // 块设备在 probe 阶段直接初始化并注册到全局块设备表。
+    // 这样上层 VFS 只需要遍历 GLOBAL_BLOCKS，不需要再区分平台和设备类型。
     if device_id == VIRTIO_DEVICE_BLOCK_ID {
         let block = VirtBlk::new_from_base(base_addr)?;
         register_global_block_device(Arc::new(Mutex::new(block)));
@@ -270,7 +270,7 @@ impl Hal for VirtioHal {
 
 crate::dtb_probe! {
     compatible: "virtio,mmio",
-    priority: Low,
+    priority: Mid,
     driver: "virtio-mmio",
     probe: virtio_mmio_probe
 }
