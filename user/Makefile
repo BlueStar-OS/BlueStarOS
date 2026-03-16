@@ -1,6 +1,6 @@
 # Makefile for user workspace
 # - builds all binaries in src/bin into ELF (release, target: riscv64gc-unknown-none-elf)
-# - make img: create ../kernel/disk.img (MBR 4 partitions), format p1 ext4 / p2 FAT16 / p3 FAT32 / p4 VFAT, then mount p1 and copy binaries to /test
+# - make img: create ../kernel/disk.img (GPT 4 partitions), format p1 ext4 / p2 FAT32 / p3 ext4 / p4 FAT32, and mark p1 as `rootfs`
 
 TARGET := riscv64gc-unknown-none-elf
 AARCH64_TARGET := aarch64-unknown-none-softfloat
@@ -54,14 +54,18 @@ img: build
 		echo "Detaching loop device $$LOOPDEV"
 		sudo losetup -d $$LOOPDEV || true
 	fi
-	# 3) 写入 MBR(dos) 分区表（使用扇区单位的旧式 sfdisk 输入格式，兼容性更好）
-	printf '%s\n' \
-		'2048,122880,83,*' \
-		'124928,20480,0c' \
-		'145408,30720,83' \
-		'176128,28672,0c' \
-	| sudo sfdisk $(KERNEL_IMG)
-	# 4) 把镜像绑定为 loop 设备，并让内核扫描分区（-P 会创建 /dev/loopXp1..p4）
+	# 3) 写入 GPT 分区表，并为第一个 ext4 主分区设置名称 `rootfs`
+	#    - p1: ext4 rootfs
+	#    - p2: FAT32
+	#    - p3: ext4
+	#    - p4: FAT32
+	sudo sgdisk --zap-all $(KERNEL_IMG)
+	sudo sgdisk -og $(KERNEL_IMG)
+	sudo sgdisk -n 1:2048:+60M   -t 1:8300 -c 1:rootfs $(KERNEL_IMG)
+	sudo sgdisk -n 2:0:+10M      -t 2:0700 -c 2:datafat $(KERNEL_IMG)
+	sudo sgdisk -n 3:0:+15M      -t 3:8300 -c 3:dataext $(KERNEL_IMG)
+	sudo sgdisk -n 4:0:0         -t 4:0700 -c 4:sharefat $(KERNEL_IMG)
+	# 4) 把镜像绑定为 loop 设备，并让内核扫描 GPT 分区（-P 会创建 /dev/loopXp1..p4）
 	LOOPDEV=$$(sudo losetup -Pf --show $(KERNEL_IMG))
 	echo "Using loop device: $$LOOPDEV"
 	# 5) 对每个分区单独 mkfs（mkfs 作用在分区范围上，而不是整盘）

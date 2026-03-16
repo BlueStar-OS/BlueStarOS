@@ -1,7 +1,8 @@
 //! GPT 分区表解析
 
-use alloc::vec::Vec;
 use crate::config::SECTOR_SIZE;
+use alloc::string::String;
+use alloc::vec::Vec;
 
 const GPT_SIGNATURE: u64 = 0x5452_4150_2049_4645; // "EFI PART"
 
@@ -33,13 +34,48 @@ struct GptEntry {
     _name: [u16; 36],
 }
 
-pub struct GptPartition {
+/// GPT GUID 原始 16 字节表示。
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Guid(pub [u8; 16]);
+
+/// GPT 分区名。
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum GptPartitionName {
+    Unnamed,
+    Named(String),
+}
+
+/// GPT 分区元数据。
+#[derive(Clone, Debug)]
+pub struct GptPartitionMetadata {
+    pub type_guid: Guid,
+    pub part_guid: Guid,
+    pub name: GptPartitionName,
+    pub attrs: u64,
+}
+
+/// 单个 GPT 分区条目。
+#[derive(Clone, Debug)]
+pub struct GptPartitionEntry {
     pub start_lba: u64,
     pub sectors: u64,
+    pub metadata: GptPartitionMetadata,
 }
 
 fn is_zero_guid(guid: &[u8; 16]) -> bool {
     guid.iter().all(|&b| b == 0)
+}
+
+fn parse_gpt_name(name: &[u16; 36]) -> GptPartitionName {
+    let end = name.iter().position(|ch| *ch == 0).unwrap_or(name.len());
+    if end == 0 {
+        return GptPartitionName::Unnamed;
+    }
+
+    match String::from_utf16(&name[..end]) {
+        Ok(v) if !v.is_empty() => GptPartitionName::Named(v),
+        _ => GptPartitionName::Unnamed,
+    }
 }
 
 /// 解析 LBA 1 的 GPT 头，返回 (分区条目起始LBA, 条目数, 条目大小)
@@ -48,11 +84,15 @@ pub fn parsing_gpt_header(lba1: &[u8; SECTOR_SIZE]) -> Result<(u64, u32, u32), &
     if header.signature != GPT_SIGNATURE {
         return Err("invalid GPT signature");
     }
-    Ok((header.partition_entry_lba, header.num_partition_entries, header.partition_entry_size))
+    Ok((
+        header.partition_entry_lba,
+        header.num_partition_entries,
+        header.partition_entry_size,
+    ))
 }
 
 /// 从分区条目原始数据解析分区列表
-pub fn parsing_gpt_entries(data: &[u8], num: u32, entry_size: u32) -> Vec<GptPartition> {
+pub fn parsing_gpt_entries(data: &[u8], num: u32, entry_size: u32) -> Vec<GptPartitionEntry> {
     let mut parts = Vec::new();
     for i in 0..num as usize {
         let off = i * entry_size as usize;
@@ -63,9 +103,16 @@ pub fn parsing_gpt_entries(data: &[u8], num: u32, entry_size: u32) -> Vec<GptPar
         if is_zero_guid(&e.type_guid) || e.ending_lba < e.starting_lba {
             continue;
         }
-        parts.push(GptPartition {
+        let slic = e._name;
+        parts.push(GptPartitionEntry {
             start_lba: e.starting_lba,
             sectors: e.ending_lba - e.starting_lba + 1,
+            metadata: GptPartitionMetadata {
+                type_guid: Guid(e.type_guid),
+                part_guid: Guid(e.unique_guid),
+                name: parse_gpt_name(&slic),
+                attrs: e.attributes,
+            },
         });
     }
     parts

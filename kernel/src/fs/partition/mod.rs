@@ -1,26 +1,44 @@
-use crate::fs::partition::mbr::mbr_entry;
-use crate::fs::partition::gpt::GptPartition;
+use crate::fs::partition::gpt::GptPartitionMetadata;
+use crate::fs::partition::mbr::MbrPartitionMetadata;
 
+/// 通用分区描述。
+///
+/// 设计目标：
+/// 1. 用统一入口表达 Raw / MBR / GPT 三类分区；
+/// 2. 每种分区方案把自己的元数据收敛到对应变体中；
+/// 3. 后续按分区标识选择根文件系统时，可以直接读取这里的元数据。
+#[derive(Clone, Debug)]
 pub enum DevicePartition {
-    MBR(mbr_entry),
-    GPT(GptPartition),
-    Raw { base_lba: u64, sectors: u64 },
+    Raw {
+        base_lba: u64,
+        sectors: u64,
+    },
+    Mbr {
+        base_lba: u64,
+        sectors: u64,
+        metadata: MbrPartitionMetadata,
+    },
+    Gpt {
+        base_lba: u64,
+        sectors: u64,
+        metadata: GptPartitionMetadata,
+    },
 }
 
 impl DevicePartition {
     pub fn base_lba(&self) -> u64 {
         match self {
-            DevicePartition::MBR(e) => e.start_lbn as u64,
-            DevicePartition::GPT(e) => e.start_lba,
-            DevicePartition::Raw { base_lba, .. } => *base_lba,
+            DevicePartition::Raw { base_lba, .. }
+            | DevicePartition::Mbr { base_lba, .. }
+            | DevicePartition::Gpt { base_lba, .. } => *base_lba,
         }
     }
 
     pub fn sectors(&self) -> u64 {
         match self {
-            DevicePartition::MBR(e) => e.len as u64,
-            DevicePartition::GPT(e) => e.sectors,
-            DevicePartition::Raw { sectors, .. } => *sectors,
+            DevicePartition::Raw { sectors, .. }
+            | DevicePartition::Mbr { sectors, .. }
+            | DevicePartition::Gpt { sectors, .. } => *sectors,
         }
     }
 }

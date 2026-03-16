@@ -46,7 +46,6 @@ impl VBLOCK {
     }
 }
 
-
 impl File for VBLOCK {
     fn getdents64(&self, _max_len: usize) -> Result<alloc::vec::Vec<u8>, VfsFsError> {
         Err(VfsFsError::NotSupported)
@@ -81,12 +80,9 @@ impl File for VBLOCK {
             let to_copy = core::cmp::min(remaining, SECTOR_SIZE - in_off);
 
             let mut sector: [u8; SECTOR_SIZE] = [0; SECTOR_SIZE];
-            self.blockdevice
-                .lock()
-                .read_block(lba, &mut sector)?;
+            self.blockdevice.lock().read_block(lba, &mut sector)?;
 
-            buf[written..written + to_copy]
-                .copy_from_slice(&sector[in_off..in_off + to_copy]);
+            buf[written..written + to_copy].copy_from_slice(&sector[in_off..in_off + to_copy]);
             written += to_copy;
             remaining -= to_copy;
         }
@@ -133,16 +129,11 @@ impl File for VBLOCK {
 
             let mut sector: [u8; SECTOR_SIZE] = [0; SECTOR_SIZE];
             if to_copy != SECTOR_SIZE {
-                self.blockdevice
-                    .lock()
-                    .read_block(lba, &mut sector)?;
+                self.blockdevice.lock().read_block(lba, &mut sector)?;
             }
 
-            sector[in_off..in_off + to_copy]
-                .copy_from_slice(&buf[read_pos..read_pos + to_copy]);
-            self.blockdevice
-                .lock()
-                .write_block(lba, &sector)?;
+            sector[in_off..in_off + to_copy].copy_from_slice(&buf[read_pos..read_pos + to_copy]);
+            self.blockdevice.lock().write_block(lba, &sector)?;
 
             read_pos += to_copy;
             remaining -= to_copy;
