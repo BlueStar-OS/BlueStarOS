@@ -1,38 +1,46 @@
-
-use core::mem::size_of;
-use core::usize;
-use alloc::collections::vec_deque::VecDeque;
-use alloc::boxed::Box;
-use alloc::sync::Arc;
-use alloc::vec::Vec;
-use alloc::string::String;
-use log::{debug, error, warn};
+use crate::alloc::string::ToString;
+use crate::arch::memory::*;
+use crate::arch::task::TaskContext;
+use crate::arch::TrapContext;
+use crate::config::SECTOR_SIZE;
 use crate::error::BlueErr;
+use crate::fs::component::pipe::pipe::{make_pipe, PipeHandle};
+use crate::fs::fs_backend::fat32::Fat32Fs;
+use crate::fs::fs_backend::{Ext4BlockDevice, Ext4Fs};
+use crate::fs::vfs::File;
+use crate::fs::vfs::{self, normalize_path, VfsFsError};
+use crate::fs::vfs::{
+    vfs_fstat_kstat, vfs_getdents64, vfs_mkdir, vfs_open, vfs_stat, vfs_unlink, KStat, OpenFlags,
+    VfsStat, VFS_DT_DIR,
+};
+use crate::root::MountPath;
+use crate::root::ROOTFS;
+use crate::VfsFs;
+
+use crate::memory::{CloneFlags, MapSet};
 use crate::shutdown;
 use crate::sync::UPSafeCell;
-use crate::task::{INIT_PID, ProcessId, TaskControlBlock, TaskStatus};
-use crate::time::get_time_tick;
-use crate::{config::PAGE_SIZE, task::TASK_MANAER, time::{TimeVal, get_time_ms}};
-use crate::arch::memory::*;
-use alloc::vec;
-use crate::memory::{CloneFlags, MapSet};
-use crate::fs::vfs::{self, VfsFsError, normalize_path};
-use crate::fs::vfs::{vfs_fstat_kstat, vfs_getdents64, vfs_mkdir, vfs_open, vfs_stat, vfs_unlink, KStat, OpenFlags, VfsStat, VFS_DT_DIR};
-use crate::fs::vfs::File;
-use crate::fs::component::pipe::pipe::{make_pipe, PipeHandle};
-use crate::TRAP_CONTEXT_ADDR;
-use crate::task::ProcessId_ALLOCTOR;
-use crate::alloc::string::ToString;
-use alloc::format;
-use crate::arch::TrapContext;
-use crate::fs::vfs::{ROOTFS, MountPath, VfsFs};
-use crate::config::SECTOR_SIZE;
-use crate::fs::fs_backend::fat32::Fat32Fs;
-use crate::arch::task::TaskContext;
-use spin::Mutex;
 use crate::task::file_loader;
-#[cfg(feature = "ext4")]
-use crate::fs::fs_backend::{Ext4BlockDevice, Ext4Fs};
+use crate::task::ProcessId_ALLOCTOR;
+use crate::task::{ProcessId, TaskControlBlock, TaskStatus, INIT_PID};
+use crate::time::get_time_tick;
+use crate::TRAP_CONTEXT_ADDR;
+use crate::{
+    config::PAGE_SIZE,
+    task::TASK_MANAER,
+    time::{get_time_ms, TimeVal},
+};
+use alloc::boxed::Box;
+use alloc::collections::vec_deque::VecDeque;
+use alloc::format;
+use alloc::string::String;
+use alloc::sync::Arc;
+use alloc::vec;
+use alloc::vec::Vec;
+use core::mem::size_of;
+use core::usize;
+use log::{debug, error, warn};
+use spin::Mutex;
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default)]
@@ -44,42 +52,41 @@ struct Timespec {
 ///SYS_UNAME系统调用
 /// 传入新旧文件name
 /// utsname结构体
-const utname_field_len:usize = 65;//byte
+const utname_field_len: usize = 65; //byte
 #[repr(C)]
 #[derive(Debug)]
-struct utsname{
-    sysname:[u8;utname_field_len], //当前操作系统名
-    nodename:[u8;utname_field_len], //主机名hostname
-    release:[u8;utname_field_len], //当前发布级别
-    version:[u8;utname_field_len], //内核版本字符串
-    machine:[u8;utname_field_len], //当前硬件结构
-    domainname:[u8;utname_field_len], //NIS DOMAIN name
+struct utsname {
+    sysname: [u8; utname_field_len],    //当前操作系统名
+    nodename: [u8; utname_field_len],   //主机名hostname
+    release: [u8; utname_field_len],    //当前发布级别
+    version: [u8; utname_field_len],    //内核版本字符串
+    machine: [u8; utname_field_len],    //当前硬件结构
+    domainname: [u8; utname_field_len], //NIS DOMAIN name
 }
 
 /// sys_ioctl
-pub fn sys_ioctl()->isize{
-    return  0 ;
+pub fn sys_ioctl() -> isize {
+    return 0;
 }
 
 /// 退出当前进程组的所有线程
-pub fn sys_exit_group(exit_code:usize)->isize{
+pub fn sys_exit_group(exit_code: usize) -> isize {
     sys_exit(exit_code);
     -1
 }
 
 /// 把我的线程 ID (TID) 存在这个地址里。如果我死了，记得把这个地址清零，并唤醒在此等待的 futex。
-pub fn sys_set_tid_address(tidptr:usize)->isize{
+pub fn sys_set_tid_address(tidptr: usize) -> isize {
     // simple implent
     sys_getpid()
 }
 
-
 #[repr(C)]
-pub struct iovec{
-    iovec_base:usize,
-    iovec_len:usize
+pub struct iovec {
+    iovec_base: usize,
+    iovec_len: usize,
 }
-pub fn sys_writev(fd:i32,iov_vec:usize,iov_cnt:i32)->isize{
+pub fn sys_writev(fd: i32, iov_vec: usize, iov_cnt: i32) -> isize {
     let iovec_base = core::mem::size_of::<iovec>();
     let usize_size = core::mem::size_of::<usize>();
     // 读取iovec写入
@@ -88,18 +95,23 @@ pub fn sys_writev(fd:i32,iov_vec:usize,iov_cnt:i32)->isize{
     let mut write_re = 0;
     for i in 0..iov_cnt {
         // 处理可能跨页
-        let user_base =if let Some(re) =  tb.read_bytes_from_userspace(VirAddr(iov_vec+i as usize * iovec_base), usize_size){
+        let user_base = if let Some(re) =
+            tb.read_bytes_from_userspace(VirAddr(iov_vec + i as usize * iovec_base), usize_size)
+        {
             usize::from_le_bytes(re.try_into().unwrap())
-        }else {
+        } else {
             return -1;
         };
-        let len =if let Some(re) = tb.read_bytes_from_userspace(VirAddr(iov_vec+i as usize * iovec_base+usize_size), usize_size){
+        let len = if let Some(re) = tb.read_bytes_from_userspace(
+            VirAddr(iov_vec + i as usize * iovec_base + usize_size),
+            usize_size,
+        ) {
             usize::from_le_bytes(re.try_into().unwrap())
-        }else {
+        } else {
             return -1;
         };
         let re = sys_write(fd as usize, user_base, len);
-        write_re+=re;
+        write_re += re;
     }
     write_re
 }
@@ -140,7 +152,10 @@ pub fn sys_nanosleep(req_ptr: usize, rem_ptr: usize) -> isize {
         let rem_pa = tb.translate(VirAddr(rem_ptr));
         if let Some(pa) = rem_pa {
             unsafe {
-                *(pa.0 as *mut Timespec) = Timespec { tv_sec: 0, tv_nsec: 0 };
+                *(pa.0 as *mut Timespec) = Timespec {
+                    tv_sec: 0,
+                    tv_nsec: 0,
+                };
             }
         }
     }
@@ -148,9 +163,9 @@ pub fn sys_nanosleep(req_ptr: usize, rem_ptr: usize) -> isize {
 }
 
 #[repr(C)]
-pub struct Tms { 
-    pub tms_utime: usize, // 进程用户态消耗的tick数
-    pub tms_stime: usize, // 进程内核态消耗的tick数
+pub struct Tms {
+    pub tms_utime: usize,  // 进程用户态消耗的tick数
+    pub tms_stime: usize,  // 进程内核态消耗的tick数
     pub tms_cutime: usize, // 所有已终止子进程的用户态tick数总和
     pub tms_cstime: usize, // 所有已终止子进程的内核tick数总和
 }
@@ -165,11 +180,15 @@ pub struct Tms {
 /// 3) 在支持的情况下，行为等价于 fork：父进程返回子 pid，子进程返回 0。
 pub fn sys_clone(flags: usize, stack: usize, ptid: usize, tls: usize, ctid: usize) -> isize {
     let upper = flags & !0xffusize;
-    
-    // 没传信号处理
-    sys_fork(CloneFlags::from_bits_truncate(upper),stack,ptid,tls,ctid)
 
-    
+    // 没传信号处理
+    sys_fork(
+        CloneFlags::from_bits_truncate(upper),
+        stack,
+        ptid,
+        tls,
+        ctid,
+    )
 }
 
 pub fn sys_gettimeofday(tv_ptr: usize, _tz_ptr: usize) -> isize {
@@ -183,7 +202,7 @@ pub fn sys_gettimeofday(tv_ptr: usize, _tz_ptr: usize) -> isize {
     let satp = TASK_MANAER.get_current_stap();
     let mut tb = PageTable::crate_table_from_satp(satp);
     let phyaddr = tb.translate(VirAddr(tv_ptr));
-    if phyaddr.is_none(){
+    if phyaddr.is_none() {
         error!("[sys_gettimeofday]: invalid addr!");
         return -1;
     }
@@ -193,7 +212,8 @@ pub fn sys_gettimeofday(tv_ptr: usize, _tz_ptr: usize) -> isize {
     return 0;
 }
 
-pub fn sys_times(tms_ptr: usize) -> isize { // 返回从系统启动至今所经过的时钟滴答数
+pub fn sys_times(tms_ptr: usize) -> isize {
+    // 返回从系统启动至今所经过的时钟滴答数
     if tms_ptr == 0 {
         return -1;
     }
@@ -201,15 +221,15 @@ pub fn sys_times(tms_ptr: usize) -> isize { // 返回从系统启动至今所经
     let satp = TASK_MANAER.get_current_stap();
     let mut tb = PageTable::crate_table_from_satp(satp);
     let phyaddr = tb.translate(VirAddr(tms_ptr));
-    if phyaddr.is_none(){
+    if phyaddr.is_none() {
         error!("[sys_gettimeofday]: invalid addr!");
         return -1;
     }
-    let tms_st = Tms{
-        tms_stime:time_tick,
-        tms_utime:time_tick,
-        tms_cutime:time_tick,
-        tms_cstime:time_tick,
+    let tms_st = Tms {
+        tms_stime: time_tick,
+        tms_utime: time_tick,
+        tms_cutime: time_tick,
+        tms_cstime: time_tick,
     };
     unsafe {
         *(phyaddr.unwrap().0 as *mut Tms) = tms_st;
@@ -224,9 +244,18 @@ pub fn sys_times(tms_ptr: usize) -> isize { // 返回从系统启动至今所经
 /// 2) `source` / `mountflags` / `data` 目前不参与实际行为（仅做参数读取/基本校验）。
 /// 3) `filesystemtype` 目前仅支持 "ext4"（在 feature=ext4 下生效）。
 /// 4) 返回值遵循 POSIX：成功返回 0，失败返回 -1。
-pub fn sys_mount(source_ptr: usize, target_ptr: usize, fstype_ptr: usize, _flags: usize, _data_ptr: usize) -> isize {
+pub fn sys_mount(
+    source_ptr: usize,
+    target_ptr: usize,
+    fstype_ptr: usize,
+    _flags: usize,
+    _data_ptr: usize,
+) -> isize {
     if target_ptr == 0 || fstype_ptr == 0 {
-        error!("sys_mount: invalid args target_ptr={:#x} fstype_ptr={:#x}", target_ptr, fstype_ptr);
+        error!(
+            "sys_mount: invalid args target_ptr={:#x} fstype_ptr={:#x}",
+            target_ptr, fstype_ptr
+        );
         return -1;
     }
 
@@ -258,13 +287,19 @@ pub fn sys_mount(source_ptr: usize, target_ptr: usize, fstype_ptr: usize, _flags
         }
     };
 
-    debug!("sys_mount: source='{}' target='{}' fstype='{}'", source, target, fstype);
+    debug!(
+        "sys_mount: source='{}' target='{}' fstype='{}'",
+        source, target, fstype
+    );
 
     // 规范化 target 路径，并要求其必须是目录
     let abs_target = match normalize_path(&target) {
         Ok(p) => p,
         Err(e) => {
-            error!("sys_mount: normalize target failed target={} err={:?}", target, e);
+            error!(
+                "sys_mount: normalize target failed target={} err={:?}",
+                target, e
+            );
             return -1;
         }
     };
@@ -276,19 +311,28 @@ pub fn sys_mount(source_ptr: usize, target_ptr: usize, fstype_ptr: usize, _flags
     let st = match vfs_stat(&abs_target) {
         Ok(s) => s,
         Err(e) => {
-            error!("sys_mount: target stat failed target={} err={}", abs_target, e);
+            error!(
+                "sys_mount: target stat failed target={} err={}",
+                abs_target, e
+            );
             return -1;
         }
     };
     if st.file_type != VFS_DT_DIR {
-        error!("sys_mount: target is not dir target={} type={}", abs_target, st.file_type);
+        error!(
+            "sys_mount: target is not dir target={} type={}",
+            abs_target, st.file_type
+        );
         return -1;
     }
 
     let abs_source = match normalize_path(&source) {
         Ok(p) => p,
         Err(e) => {
-            error!("sys_mount: normalize source failed source={} err={:?}", source, e);
+            error!(
+                "sys_mount: normalize source failed source={} err={:?}",
+                source, e
+            );
             return -1;
         }
     };
@@ -297,70 +341,50 @@ pub fn sys_mount(source_ptr: usize, target_ptr: usize, fstype_ptr: usize, _flags
         return -1;
     }
 
-    fn base_disk_path(abs_source: &str) -> Option<(&str, usize)> {
-        if !abs_source.starts_with("/dev/") {
-            return None;
-        }
-        let mut end = abs_source.len();
-        while end > 0 && abs_source.as_bytes()[end - 1].is_ascii_digit() {
-            end -= 1;
-        }
-        if end == abs_source.len() {
-            return None;
-        }
-        let idx_str = &abs_source[end..];
-        let idx = idx_str.parse::<usize>().ok()?;
-        if idx == 0 {
-            return None;
-        }
-        Some((&abs_source[..end], idx))
-    }
-
-    fn read_partition_type(disk: &Arc<dyn File>, part_idx_1based: usize) -> Result<u8, VfsFsError> {
-        if part_idx_1based == 0 || part_idx_1based > 4 {
-            return Err(VfsFsError::Invalid);
-        }
-        let mut mbr = [0u8; SECTOR_SIZE];
-        disk.read_at(0, &mut mbr)?;
-        if mbr[510] != 0x55 || mbr[511] != 0xAA {
-            return Err(VfsFsError::Invalid);
-        }
-        let base = 0x1BE + (part_idx_1based - 1) * 16;
-        Ok(mbr[base + 4])
-    }
-
-    let (disk_path, part_idx) = match base_disk_path(&abs_source) {
+    let (disk_path, part_idx) = match crate::fs::vfs::vfs_split_partition_device_path(&abs_source) {
         Some(v) => v,
         None => {
-            error!("sys_mount: unsupported source path (expect /dev/xxxN) abs_source={}", abs_source);
+            error!(
+                "sys_mount: unsupported source path (expect /dev/xxxN) abs_source={}",
+                abs_source
+            );
             return -1;
         }
     };
 
-    debug!("sys_mount: parsed source abs_source={} disk_path={} part_idx={}", abs_source, disk_path, part_idx);
+    debug!(
+        "sys_mount: parsed source abs_source={} disk_path={} part_idx={}",
+        abs_source, disk_path, part_idx
+    );
 
     let disk = match vfs_open(disk_path, OpenFlags::empty()) {
         Ok(f) => f,
         Err(e) => {
-            error!("sys_mount: open disk failed disk_path={} err={}", disk_path, e);
+            error!(
+                "sys_mount: open disk failed disk_path={} err={}",
+                disk_path, e
+            );
             return -1;
         }
     };
-    let ptype = match read_partition_type(&disk, part_idx) {
+    let partition_fs_hint = match crate::fs::vfs::vfs_read_partition_type(&disk, part_idx) {
         Ok(t) => t,
         Err(e) => {
-            error!("sys_mount: read partition type failed disk_path={} part_idx={} err={}", disk_path, part_idx, e);
+            error!(
+                "sys_mount: read partition type failed disk_path={} part_idx={} err={}",
+                disk_path, part_idx, e
+            );
             return -1;
         }
     };
 
-    debug!("sys_mount: mbr partition type=0x{:02x}", ptype);
+    debug!("sys_mount: partition fs hint={:?}", partition_fs_hint);
 
-    let auto_fs = match ptype {
-        0x83 => "ext4",
-        0x0b | 0x0c => "fat32",
-        0x0e => "fat16",
-        _ => "unknown",
+    let auto_fs = match partition_fs_hint {
+        crate::fs::vfs::PartitionFsHint::Ext4 => "ext4",
+        crate::fs::vfs::PartitionFsHint::Fat32 => "fat32",
+        crate::fs::vfs::PartitionFsHint::Fat16 => "fat16",
+        crate::fs::vfs::PartitionFsHint::Unknown => "unknown",
     };
 
     let is_auto = fstype.is_empty() || fstype == "auto";
@@ -369,18 +393,27 @@ pub fn sys_mount(source_ptr: usize, target_ptr: usize, fstype_ptr: usize, _flags
         other => other,
     };
     let req_fs = if is_auto { auto_fs } else { explicit_fs };
-    debug!("sys_mount: auto_fs={} req_fs={} ptype=0x{:02x}", auto_fs, req_fs, ptype);
+    debug!(
+        "sys_mount: auto_fs={} req_fs={} hint={:?}",
+        auto_fs, req_fs, partition_fs_hint
+    );
 
     // POSIX 语义：若用户显式指定了 fstype，则按用户指定尝试挂载。
     // 只有 fstype=auto 时才依赖分区类型做自动判定。
     if is_auto {
         if req_fs == "fat16" || req_fs == "unknown" {
-            error!("sys_mount: unsupported fs req_fs={} ptype=0x{:02x}", req_fs, ptype);
+            error!(
+                "sys_mount: unsupported fs req_fs={} hint={:?}",
+                req_fs, partition_fs_hint
+            );
             return -1;
         }
     } else {
         if req_fs != "ext4" && req_fs != "fat32" {
-            error!("sys_mount: unsupported explicit fstype={} ptype=0x{:02x}", explicit_fs, ptype);
+            error!(
+                "sys_mount: unsupported explicit fstype={} hint={:?}",
+                explicit_fs, partition_fs_hint
+            );
             return -1;
         }
     }
@@ -388,7 +421,10 @@ pub fn sys_mount(source_ptr: usize, target_ptr: usize, fstype_ptr: usize, _flags
     let src_dev = match vfs_open(&abs_source, OpenFlags::empty()) {
         Ok(f) => f,
         Err(e) => {
-            error!("sys_mount: open source device failed abs_source={} err={}", abs_source, e);
+            error!(
+                "sys_mount: open source device failed abs_source={} err={}",
+                abs_source, e
+            );
             return -1;
         }
     };
@@ -453,7 +489,10 @@ pub fn sys_umount2(target_ptr: usize, _flags: usize) -> isize {
     let target = match read_c_string_from_user(target_ptr) {
         Ok(s) => s,
         Err(e) => {
-            error!("sys_umount2: invalid target ptr={:#x} err={}", target_ptr, e);
+            error!(
+                "sys_umount2: invalid target ptr={:#x} err={}",
+                target_ptr, e
+            );
             return -1;
         }
     };
@@ -474,17 +513,20 @@ pub fn sys_umount2(target_ptr: usize, _flags: usize) -> isize {
     let key = MountPath(abs_target);
 
     // 遍历进程列表确保任何进程不在挂载点路径上
-    let mp_busy = TASK_MANAER.task_que_inner.lock().task_queen.iter().any(|task|{
-        let tcwd = &task.lock().cwd;
-        tcwd.starts_with(&key.0)
-    });
+    let mp_busy = TASK_MANAER
+        .task_que_inner
+        .lock()
+        .task_queen
+        .iter()
+        .any(|task| {
+            let tcwd = &task.lock().cwd;
+            tcwd.starts_with(&key.0)
+        });
 
     if mp_busy {
-        error!("[sys_umount]: Vblock:{} busy!",&key.0);
+        error!("[sys_umount]: Vblock:{} busy!", &key.0);
         return -1;
     }
-
-
 
     let Some(fs) = rootfs.mount_poinr.remove(&key) else {
         return -1;
@@ -498,13 +540,19 @@ pub fn sys_umount2(target_ptr: usize, _flags: usize) -> isize {
     0
 }
 impl utsname {
-    pub fn new()->Self{
-        Self { sysname: [0;utname_field_len], nodename: [0;utname_field_len], release: [0;utname_field_len], version: [0;utname_field_len],
-             machine: [0;utname_field_len], domainname: [0;utname_field_len] }
+    pub fn new() -> Self {
+        Self {
+            sysname: [0; utname_field_len],
+            nodename: [0; utname_field_len],
+            release: [0; utname_field_len],
+            version: [0; utname_field_len],
+            machine: [0; utname_field_len],
+            domainname: [0; utname_field_len],
+        }
     }
 }
 ///buf:&mut utsname as *mut _ as usize
-pub fn sys_uname(buf:usize)->isize{
+pub fn sys_uname(buf: usize) -> isize {
     if buf == 0 {
         return -1;
     }
@@ -512,7 +560,7 @@ pub fn sys_uname(buf:usize)->isize{
     fn fill_field(dst: &mut [u8; utname_field_len], s: &str) {
         dst.fill(0);
         let bytes = s.as_bytes();
-        let n = core::cmp::min(bytes.len(), utname_field_len - 1);//give \0 one byte
+        let n = core::cmp::min(bytes.len(), utname_field_len - 1); //give \0 one byte
         dst[..n].copy_from_slice(&bytes[..n]);
         dst[n] = 0;
     }
@@ -571,9 +619,8 @@ pub fn sys_uname(buf:usize)->isize{
     fill_field(&mut u.machine, "riscv64");
     fill_field(&mut u.domainname, "(none)");
 
-    let bytes: &[u8] = unsafe {
-        core::slice::from_raw_parts((&u as *const utsname) as *const u8, total_len)
-    };
+    let bytes: &[u8] =
+        unsafe { core::slice::from_raw_parts((&u as *const utsname) as *const u8, total_len) };
     if !copy_to_user(user_satp, buf, bytes) {
         return -1;
     }
@@ -583,8 +630,7 @@ pub fn sys_uname(buf:usize)->isize{
 ///SYS_DUP2系统调用
 /// 返回一个符合最小fd的结果
 /// 传入需要复制的fd
-pub fn sys_dup2(old_fd:i32,new_fd:i32) ->isize{
-
+pub fn sys_dup2(old_fd: i32, new_fd: i32) -> isize {
     if old_fd < 0 || new_fd < 0 {
         return -1;
     }
@@ -622,7 +668,7 @@ pub fn sys_dup2(old_fd:i32,new_fd:i32) ->isize{
 ///SYS_DUP系统调用
 /// 返回一个符合最小fd的结果
 /// 传入需要复制的fd
-pub fn sys_dup(old_fd:i32) ->isize{
+pub fn sys_dup(old_fd: i32) -> isize {
     let current_task = {
         let inner = TASK_MANAER.task_que_inner.lock();
         inner.task_queen[inner.current].clone()
@@ -679,10 +725,10 @@ pub fn sys_getppid() -> isize {
     }
 }
 
-///SYS_BRK系统调用 
+///SYS_BRK系统调用
 /// brk->堆顶, new_brk可不对齐，由用户库处理
 /// 传入0返回当前brk地址（用户空间），其它地址->尝试brk，失败的话返回原来的brk，成功返回新的brk
-pub fn sys_brk(new_brk:VirAddr)->isize{ 
+pub fn sys_brk(new_brk: VirAddr) -> isize {
     let new_brkaddr = new_brk.0;
 
     let satp = TASK_MANAER.get_current_stap();
@@ -697,8 +743,10 @@ pub fn sys_brk(new_brk:VirAddr)->isize{
     let mut tcb = current_task.lock();
     let old_brk = tcb.memory_set.brk.0;
 
- warn!("sys_brk: request new={:#x}, current={:#x}", new_brkaddr, old_brk);
-
+    warn!(
+        "sys_brk: request new={:#x}, current={:#x}",
+        new_brkaddr, old_brk
+    );
 
     // Linux 语义：brk(0) 只查询当前 break。
     if new_brkaddr == 0 {
@@ -711,7 +759,6 @@ pub fn sys_brk(new_brk:VirAddr)->isize{
         return new_brkaddr as isize;
     }
 
-
     // expand：需要把 [old_brk, new_brk) 涉及到的新页映射出来。
     // 已经映射的旧页不需要重复映射：从包含 old_brk 的页的下一页开始。
     let mut start_vpn: VirNumber = VirAddr(old_brk.saturating_sub(1)).floor_down();
@@ -719,16 +766,16 @@ pub fn sys_brk(new_brk:VirAddr)->isize{
     loop {
         let vp = tb.find_pte_vpn(start_vpn);
         // sv39 2mb空洞
-        if vp.is_none(){
+        if vp.is_none() {
             break;
         }
-        if vp.unwrap().is_valid(){
+        if vp.unwrap().is_valid() {
             start_vpn.step();
-        }else {
+        } else {
             break;
         }
     }
-    
+
     let end_vpn: VirNumber = VirAddr(new_brkaddr - 1).floor_down();
 
     if start_vpn.0 <= end_vpn.0 {
@@ -737,7 +784,9 @@ pub fn sys_brk(new_brk:VirAddr)->isize{
         tcb.memory_set.add_area(
             crate::memory::VirNumRange(start_vpn, end_vpn),
             crate::memory::MapType::Maped,
-            crate::memory::MapAreaFlags::R | crate::memory::MapAreaFlags::W | crate::memory::MapAreaFlags::U,
+            crate::memory::MapAreaFlags::R
+                | crate::memory::MapAreaFlags::W
+                | crate::memory::MapAreaFlags::U,
             None,
             None,
         );
@@ -763,7 +812,10 @@ pub fn sys_execve(path_ptr: usize, argv_ptr: usize, envp_ptr: usize) -> isize {
     );
 
     if envp_ptr != 0 {
-        warn!("sys_execve: envp is ignored for now envp_ptr={:#x}", envp_ptr);
+        warn!(
+            "sys_execve: envp is ignored for now envp_ptr={:#x}",
+            envp_ptr
+        );
     }
 
     let path = match read_c_string_from_user_with_satp(user_satp, path_ptr) {
@@ -798,9 +850,8 @@ pub fn sys_execve(path_ptr: usize, argv_ptr: usize, envp_ptr: usize) -> isize {
                 error!("sys_execve: short read argv element addr={:#x}", elem_ptr);
                 return -1;
             }
-            let ptr_bytes: [u8; core::mem::size_of::<usize>()] = flat[..core::mem::size_of::<usize>()]
-                .try_into()
-                .unwrap();
+            let ptr_bytes: [u8; core::mem::size_of::<usize>()] =
+                flat[..core::mem::size_of::<usize>()].try_into().unwrap();
             let cptr = usize::from_ne_bytes(ptr_bytes);
             if cptr == 0 {
                 break;
@@ -841,11 +892,11 @@ pub fn sys_pipe(fds_ptr: usize) -> isize {
     let read_fd: Arc<dyn File> = Arc::new(PipeHandle::new(read_end));
     let write_fd: Arc<dyn File> = Arc::new(PipeHandle::new(write_end));
 
-    let rfd:i32 = TASK_MANAER.alloc_fd_for_current(read_fd);
+    let rfd: i32 = TASK_MANAER.alloc_fd_for_current(read_fd);
     if rfd < 0 {
         return -1;
     }
-    let wfd:i32 = TASK_MANAER.alloc_fd_for_current(write_fd);
+    let wfd: i32 = TASK_MANAER.alloc_fd_for_current(write_fd);
     if wfd < 0 {
         return -1;
     }
@@ -880,12 +931,14 @@ pub fn sys_chdir(path_ptr: usize) -> isize {
     let path = match read_c_string_from_user(path_ptr) {
         Ok(p) => p,
         Err(e) => {
-            error!("sys_chdir: invalid user path ptr={:#x}, err={}", path_ptr, e);
+            error!(
+                "sys_chdir: invalid user path ptr={:#x}, err={}",
+                path_ptr, e
+            );
             return -1;
         }
     };
 
-    
     let abs = match normalize_path(&path) {
         Ok(p) => p,
         Err(_) => return -1,
@@ -921,7 +974,8 @@ pub fn sys_getcwd(user_buf_ptr: usize, buf_len: usize) -> isize {
     }
 
     let user_satp = TASK_MANAER.get_current_stap();
-    let mut slices = PageTable::get_mut_slice_from_satp(user_satp, tmp.len(), VirAddr(user_buf_ptr));
+    let mut slices =
+        PageTable::get_mut_slice_from_satp(user_satp, tmp.len(), VirAddr(user_buf_ptr));
     let mut off = 0usize;
     for s in slices.iter_mut() {
         if off >= tmp.len() {
@@ -944,7 +998,10 @@ pub fn sys_mkdirat(dirfd: isize, path_ptr: usize, _mode: usize) -> isize {
     let path = match read_c_string_from_user(path_ptr) {
         Ok(p) => p,
         Err(e) => {
-            error!("sys_mkdir: invalid user path ptr={:#x}, err={}", path_ptr, e);
+            error!(
+                "sys_mkdir: invalid user path ptr={:#x}, err={}",
+                path_ptr, e
+            );
             return -1;
         }
     };
@@ -965,7 +1022,10 @@ pub fn sys_unlink(path_ptr: usize) -> isize {
     let path = match read_c_string_from_user(path_ptr) {
         Ok(p) => p,
         Err(e) => {
-            error!("sys_unlink: invalid user path ptr={:#x}, err={}", path_ptr, e);
+            error!(
+                "sys_unlink: invalid user path ptr={:#x}, err={}",
+                path_ptr, e
+            );
             return -1;
         }
     };
@@ -1010,7 +1070,10 @@ pub fn sys_stat(path_ptr: usize, stat_buf_ptr: usize) -> isize {
     );
 
     let bytes: &[u8] = unsafe {
-        core::slice::from_raw_parts((&kst as *const KStat) as *const u8, core::mem::size_of::<KStat>())
+        core::slice::from_raw_parts(
+            (&kst as *const KStat) as *const u8,
+            core::mem::size_of::<KStat>(),
+        )
     };
     let mut off = 0usize;
     for s in slices.iter_mut() {
@@ -1022,7 +1085,12 @@ pub fn sys_stat(path_ptr: usize, stat_buf_ptr: usize) -> isize {
         off += n;
     }
     if off != bytes.len() {
-        error!("sys_stat: short copy to user: path={} copied={} need={}", path, off, bytes.len());
+        error!(
+            "sys_stat: short copy to user: path={} copied={} need={}",
+            path,
+            off,
+            bytes.len()
+        );
         return -1;
     }
     0
@@ -1058,7 +1126,10 @@ pub fn sys_fstat(fd: usize, stat_buf_ptr: usize) -> isize {
     );
 
     let bytes: &[u8] = unsafe {
-        core::slice::from_raw_parts((&kst as *const KStat) as *const u8, core::mem::size_of::<KStat>())
+        core::slice::from_raw_parts(
+            (&kst as *const KStat) as *const u8,
+            core::mem::size_of::<KStat>(),
+        )
     };
     let mut off = 0usize;
     for s in slices.iter_mut() {
@@ -1070,7 +1141,12 @@ pub fn sys_fstat(fd: usize, stat_buf_ptr: usize) -> isize {
         off += n;
     }
     if off != bytes.len() {
-        error!("sys_fstat: short copy to user: fd={} copied={} need={}", fd, off, bytes.len());
+        error!(
+            "sys_fstat: short copy to user: fd={} copied={} need={}",
+            fd,
+            off,
+            bytes.len()
+        );
         return -1;
     }
     0
@@ -1092,13 +1168,17 @@ pub fn sys_getdents64(fd: usize, user_buf_ptr: usize, len: usize) -> isize {
     let data = match vfs_getdents64(&file, len) {
         Ok(v) => v,
         Err(e) => {
-            error!("sys_getdents64: vfs_getdents64 failed fd={} len={} err={}", fd, len, e);
+            error!(
+                "sys_getdents64: vfs_getdents64 failed fd={} len={} err={}",
+                fd, len, e
+            );
             return -1;
         }
     };
 
     let user_satp = TASK_MANAER.get_current_stap();
-    let mut slices = PageTable::get_mut_slice_from_satp(user_satp, data.len(), VirAddr(user_buf_ptr));
+    let mut slices =
+        PageTable::get_mut_slice_from_satp(user_satp, data.len(), VirAddr(user_buf_ptr));
     let mut off = 0usize;
     for s in slices.iter_mut() {
         if off >= data.len() {
@@ -1109,7 +1189,12 @@ pub fn sys_getdents64(fd: usize, user_buf_ptr: usize, len: usize) -> isize {
         off += n;
     }
     if off != data.len() {
-        error!("sys_getdents64: short copy to user fd={} copied={} need={}", fd, off, data.len());
+        error!(
+            "sys_getdents64: short copy to user fd={} copied={} need={}",
+            fd,
+            off,
+            data.len()
+        );
         return -1;
     }
     data.len() as isize
@@ -1146,7 +1231,10 @@ pub fn sys_open(path_ptr: usize, flags_bits: usize) -> isize {
     };
     let fd = TASK_MANAER.alloc_fd_for_current(opened);
     if fd < 0 {
-        error!("sys_open: alloc fd failed: path={} flags_bits={:#x}", path, flags_bits);
+        error!(
+            "sys_open: alloc fd failed: path={} flags_bits={:#x}",
+            path, flags_bits
+        );
     }
     fd as isize
 }
@@ -1168,7 +1256,10 @@ pub fn sys_lseek(fd: usize, offset: isize, whence: usize) -> isize {
     let file = match TASK_MANAER.get_current_fd(fd) {
         Some(Some(f)) => f,
         _ => {
-            warn!("sys_lseek: invalid fd={} offset={} whence={}", fd, offset, whence);
+            warn!(
+                "sys_lseek: invalid fd={} offset={} whence={}",
+                fd, offset, whence
+            );
             return -1;
         }
     };
@@ -1184,9 +1275,8 @@ pub fn sys_lseek(fd: usize, offset: isize, whence: usize) -> isize {
     }
 }
 
-
 ///SYS_FORK系统调用
-pub fn sys_fork(mode:CloneFlags,stack: usize, ptid: usize, tls: usize, ctid: usize)->isize{
+pub fn sys_fork(mode: CloneFlags, stack: usize, ptid: usize, tls: usize, ctid: usize) -> isize {
     //warn!("forlk");
     let mut inner = TASK_MANAER.task_que_inner.lock();
     let current_index = inner.current;
@@ -1199,11 +1289,9 @@ pub fn sys_fork(mode:CloneFlags,stack: usize, ptid: usize, tls: usize, ctid: usi
         parent.memory_set.clone_mapset()
     };
 
-
     // 先把浅拷贝得到的 MapSet 用 mem::replace 取出来并 forget，避免 Drop。
     let parent_pid = { current_task.lock().pid.0 };
-    let mut bad_task = current_task.lock().clone();//复制的是tbl本体不是arc
-
+    let mut bad_task = current_task.lock().clone(); //复制的是tbl本体不是arc
 
     bad_task.parent = None;
     bad_task.childrens.clear();
@@ -1219,30 +1307,29 @@ pub fn sys_fork(mode:CloneFlags,stack: usize, ptid: usize, tls: usize, ctid: usi
     debug!("Parent:pid {} child:{}", parent_pid, child_pid);
     let shallow = core::mem::replace(&mut bad_task.memory_set, MapSet::new_bare());
     core::mem::forget(shallow);
-    if new_memset.is_none(){
+    if new_memset.is_none() {
         error!("Process Memset clone failed!");
         return -1;
     }
     bad_task.memory_set = new_memset.expect("Memset should be some");
-
 
     // 为子进程分配独立的内核栈，并同步到 TaskContext/TrapContext
     let child_kernel_sp = MapSet::alloc_kernel_stack();
     // 子进程第一次被调度必须从 app_entry_point 起步，才能通过 __restore 使用 TrapContext 恢复用户态寄存器。
     // 只修改 sp 会让子进程继承父进程的内核执行流，导致 fork 返回值等寄存器语义错误。
     bad_task.task_context = TaskContext::return_trap_new(child_kernel_sp);
-    
+
     // child内核栈释放信息
     let child_kernel_range = MapSet::get_kernel_range_from_kernel_top(VirAddr(child_kernel_sp));
     bad_task.memory_set.kernel_stack_range = Some(child_kernel_range);
 
-    bad_task.task_statut = TaskStatus::Ready;//设置任务准备被调度
+    bad_task.task_statut = TaskStatus::Ready; //设置任务准备被调度
     {
         let trap_cx_ppn = bad_task
-        .memory_set
-        .table
-        .translate_byvpn(VirAddr(TRAP_CONTEXT_ADDR).strict_into_virnum())
-        .expect("trap ppn translate failed");
+            .memory_set
+            .table
+            .translate_byvpn(VirAddr(TRAP_CONTEXT_ADDR).strict_into_virnum())
+            .expect("trap ppn translate failed");
         bad_task.trap_context_ppn = trap_cx_ppn.0;
         let trap_cx_point: *mut TrapContext = (trap_cx_ppn.0 * PAGE_SIZE) as *mut TrapContext;
         unsafe {
@@ -1251,7 +1338,7 @@ pub fn sys_fork(mode:CloneFlags,stack: usize, ptid: usize, tls: usize, ctid: usi
 
             // TODO THREAD define
             // stack
-            if stack!=0{
+            if stack != 0 {
                 (*trap_cx_point).x[2] = stack;
             }
 
@@ -1264,28 +1351,25 @@ pub fn sys_fork(mode:CloneFlags,stack: usize, ptid: usize, tls: usize, ctid: usi
         }
     }
 
-    let arc_task =Arc::new(UPSafeCell::new(bad_task));
+    let arc_task = Arc::new(UPSafeCell::new(bad_task));
     /* 建立父子关系 */
     //添加child
-    current_task.lock().add_children( arc_task.clone());
+    current_task.lock().add_children(arc_task.clone());
     //warn!("sys_fork: parent pid={} add child pid={} children_len={}", parent_pid, child_pid, current_task.lock().childrens.len());
     //链接父亲
     arc_task.lock().set_father(&*current_task);
-    drop(inner);//释放TASK_MANAER锁
+    drop(inner); //释放TASK_MANAER锁
 
     /* 把克隆后的任务添加到任务队列 */
-    TASK_MANAER.task_que_inner.lock().task_queen.push_back(arc_task.clone());
+    TASK_MANAER
+        .task_que_inner
+        .lock()
+        .task_queen
+        .push_back(arc_task.clone());
 
     //父亲返回子pid，子返回0.
     return child_pid as isize;
-
-
-
 }
-
-
-
-
 
 /// 从用户空间读取 null 结尾的 C 风格字符串
 /// 最大读取长度为 4096 字节，避免读取过长的字符串
@@ -1295,7 +1379,10 @@ fn read_c_string_from_user(path_ptr: usize) -> Result<String, VfsFsError> {
     read_c_string_from_user_with_satp(user_satp, path_ptr)
 }
 
-fn read_c_string_from_user_with_satp(user_satp: usize, path_ptr: usize) -> Result<String, VfsFsError> {
+fn read_c_string_from_user_with_satp(
+    user_satp: usize,
+    path_ptr: usize,
+) -> Result<String, VfsFsError> {
     const MAX_PATH_LEN: usize = 4096;
 
     debug!(
@@ -1342,13 +1429,10 @@ fn read_c_string_from_user_with_satp(user_satp: usize, path_ptr: usize) -> Resul
 
     error!(
         "read_c_string_from_user_with_satp: no NUL within {} bytes: satp={:#x} path_ptr={:#x}",
-        MAX_PATH_LEN,
-        user_satp,
-        path_ptr
+        MAX_PATH_LEN, user_satp, path_ptr
     );
     Err(VfsFsError::Invalid)
 }
-
 
 ///mmap系统调用
 /// Linux/POSIX: mmap(addr, len, prot, flags, fd, offset)
@@ -1369,68 +1453,70 @@ fn read_c_string_from_user_with_satp(user_satp: usize, path_ptr: usize) -> Resul
 /// `offset`: 文件偏移（字节）。必须页对齐（offset % PAGE_SIZE == 0）。匿名映射时通常为 0。
 ///
 /// 当前最小实现：仅支持匿名映射（`MAP_ANONYMOUS` 且 `fd == -1`），并要求 `addr != 0`。
-pub fn sys_mmap(addr: usize, len: usize, prot: usize, flags: usize, fd: i32, offset: usize) -> isize {
+pub fn sys_mmap(
+    addr: usize,
+    len: usize,
+    prot: usize,
+    flags: usize,
+    fd: i32,
+    offset: usize,
+) -> isize {
     //warn!("enter mmap");
     let inner = TASK_MANAER.task_que_inner.lock();
     let current = inner.current;
     drop(inner);
-    let fd_backing =match TASK_MANAER.get_current_fd(fd as usize){
-        Some(v)=>v,
-        _=>None
+    let fd_backing = match TASK_MANAER.get_current_fd(fd as usize) {
+        Some(v) => v,
+        _ => None,
     };
     let inner = TASK_MANAER.task_que_inner.lock();
     let mut tcb = inner.task_queen[current].lock();
-    
-     
-    tcb.memory_set.mmap(VirAddr(addr), len, prot, flags, fd, offset,fd_backing)
-}
 
+    tcb.memory_set
+        .mmap(VirAddr(addr), len, prot, flags, fd, offset, fd_backing)
+}
 
 ///unmap系统调用
 /// startaddr:usize size:长度
-pub fn sys_munmap(start:usize,size:usize)->isize{
-    let inner=TASK_MANAER.task_que_inner.lock();
-    let current=inner.current;
+pub fn sys_munmap(start: usize, size: usize) -> isize {
+    let inner = TASK_MANAER.task_que_inner.lock();
+    let current = inner.current;
     drop(inner);
-    let  inner=TASK_MANAER.task_que_inner.lock();
-    let  memset=&mut inner.task_queen[current].lock().memory_set;
+    let inner = TASK_MANAER.task_que_inner.lock();
+    let memset = &mut inner.task_queen[current].lock().memory_set;
     memset.unmap_range(VirAddr(start), size)
     //inner自动销毁
 }
 
-
-
 ///addr:用户传入的时间结构体地址 目前映射处理错误，因为还没有任务这个概念
-fn syscall_get_time(addr:*mut TimeVal){  //考虑是否跨页面  
-      let vpn=(addr as usize)/PAGE_SIZE;
-      let offset=VirAddr(addr as usize).offset();
-      // 获取当前页表的临时视图
-      let mut table = PageTable::get_kernel_table_layer();
-      let  frame_pointer=table.get_mut_byte(VirNumber(vpn)).expect("Big Error!");
+fn syscall_get_time(addr: *mut TimeVal) {
+    //考虑是否跨页面
+    let vpn = (addr as usize) / PAGE_SIZE;
+    let offset = VirAddr(addr as usize).offset();
+    // 获取当前页表的临时视图
+    let mut table = PageTable::get_kernel_table_layer();
+    let frame_pointer = table.get_mut_byte(VirNumber(vpn)).expect("Big Error!");
 
-   //判断是否跨页 跨页需要特殊处理
-   let len=size_of::<TimeVal>();
-   if vpn !=(addr as usize -1 +len)/PAGE_SIZE{
-      //跨页
-      //let new_frame_pointer=table.get_mut_byte(VirNumber(vpn+1)); 不重复申请，节省内存
-      if table.is_maped(VirNumber(vpn+1)){
-         //并且存在合法映射,拼接两个页面
-        let  time_val:&mut TimeVal;
-         unsafe {
-           time_val= &mut *((frame_pointer as *mut _ as usize+offset) as *mut TimeVal);
-            *time_val=TimeVal{
-               sec:get_time_ms()/1000,
-               usec:get_time_ms()%1000
+    //判断是否跨页 跨页需要特殊处理
+    let len = size_of::<TimeVal>();
+    if vpn != (addr as usize - 1 + len) / PAGE_SIZE {
+        //跨页
+        //let new_frame_pointer=table.get_mut_byte(VirNumber(vpn+1)); 不重复申请，节省内存
+        if table.is_maped(VirNumber(vpn + 1)) {
+            //并且存在合法映射,拼接两个页面
+            let time_val: &mut TimeVal;
+            unsafe {
+                time_val = &mut *((frame_pointer as *mut _ as usize + offset) as *mut TimeVal);
+                *time_val = TimeVal {
+                    sec: get_time_ms() / 1000,
+                    usec: get_time_ms() % 1000,
+                }
             }
-         }
-      }else { 
-          //PageFault!!!!!! 下一个页面没有有效映射
-          panic!("InValid Memory write!!")
-      }
-      
-   }
-
-
+        } else {
+            //PageFault!!!!!! 下一个页面没有有效映射
+            panic!("InValid Memory write!!")
+        }
+    }
 }
 ///这个指针是用户空间的指针，应该解地址
 /// 使用文件描述符进行写入
@@ -1438,11 +1524,11 @@ pub fn sys_write(fd_target: usize, source_buffer: usize, buffer_len: usize) -> i
     // 获取当前任务的页表进行地址转换
     let user_satp = TASK_MANAER.get_current_stap();
     let buffer = PageTable::get_mut_slice_from_satp(user_satp, buffer_len, VirAddr(source_buffer));
-    
+
     // 计算总长度并准备写入缓冲区
     let total_len: usize = buffer.iter().map(|slic| slic.len()).sum();
     let mut write_buffer = Vec::with_capacity(total_len);
-    
+
     // 将用户空间的数据复制到内核缓冲区
     for slice in buffer {
         write_buffer.extend_from_slice(slice);
@@ -1475,8 +1561,9 @@ pub fn sys_write(fd_target: usize, source_buffer: usize, buffer_len: usize) -> i
 pub fn sys_read(fd_target: usize, source_buffer: usize, buffer_len: usize) -> isize {
     // 获取当前任务的页表进行地址转换
     let user_satp = TASK_MANAER.get_current_stap();
-    let mut buffer = PageTable::get_mut_slice_from_satp(user_satp, buffer_len, VirAddr(source_buffer));
-    
+    let mut buffer =
+        PageTable::get_mut_slice_from_satp(user_satp, buffer_len, VirAddr(source_buffer));
+
     // 计算总缓冲区大小
     let total_len: usize = buffer.iter().map(|slic| slic.len()).sum();
     let mut read_buffer = vec![0u8; total_len];
@@ -1492,7 +1579,10 @@ pub fn sys_read(fd_target: usize, source_buffer: usize, buffer_len: usize) -> is
     let read_len = match fd.read(&mut read_buffer) {
         Ok(len) => len,
         Err(e) => {
-            error!("sys_read: fd.read failed fd={} len={} err={}", fd_target, buffer_len, e);
+            error!(
+                "sys_read: fd.read failed fd={} len={} err={}",
+                fd_target, buffer_len, e
+            );
             return -1;
         }
     };
@@ -1510,44 +1600,44 @@ pub fn sys_read(fd_target: usize, source_buffer: usize, buffer_len: usize) -> is
     read_len as isize
 }
 
-
 ///exit系统调用，一般main程序return后在这里处理退出码 任务调度型返回-1
 ///注意：这个函数永不返回！要么切换到其他任务，要么关机
-pub fn sys_exit(exit_code:usize)->isize{
+pub fn sys_exit(exit_code: usize) -> isize {
     // 若把 init 标记为 Zombie，会导致系统只剩 Zombie/无 Ready 任务，从而调度器报错。
-    let (current_pid,current_task) = {
+    let (current_pid, current_task) = {
         let inner = TASK_MANAER.task_que_inner.lock();
         if inner.task_queen.is_empty() {
             drop(inner);
-            (0,None)
+            (0, None)
         } else {
             let current = inner.current;
             let pid = inner.task_queen[current].lock().pid.0;
             let ts = inner.task_queen[current].clone();
             drop(inner);
-            (pid,Some(ts))
+            (pid, Some(ts))
         }
     };
 
     //error!("pid :{} exit",current_pid);
 
-    match current_task{
-        Some(ts)=>{
+    match current_task {
+        Some(ts) => {
             let parent = &mut ts.lock().parent;
-            if parent.is_some(){
+            if parent.is_some() {
                 // try Wake father
-                let pa = parent.as_ref().expect("Kernel Error").upgrade().expect("Where is my father");
+                let pa = parent
+                    .as_ref()
+                    .expect("Kernel Error")
+                    .upgrade()
+                    .expect("Where is my father");
                 if pa.lock().task_statut == TaskStatus::Blocking {
                     let pid = pa.lock().pid.0;
                     TASK_MANAER.wake_task_from_blocking(pid);
                 }
             }
         }
-        None=>{
-
-        }
+        None => {}
     }
-    
 
     // Linux 语义：exit 后任务进入 Zombie，保留 pid/exit_code，等待父进程 wait() 回收(reap)。
     // 父进程退出时，其子进程会被过继给 init(pid=1)。
@@ -1569,7 +1659,7 @@ pub fn sys_exit(exit_code:usize)->isize{
 /// - 成功：返回已回收(reap)的 Zombie 子进程 pid
 /// - 失败：-1（无子进程）
 pub fn sys_wait(exit_code_ptr: usize) -> isize {
-    // wait4(pid=-1, wstatus, options=1)  WNOHANG == 1   
+    // wait4(pid=-1, wstatus, options=1)  WNOHANG == 1
     sys_wait4(-1, exit_code_ptr, 1)
 }
 
@@ -1583,18 +1673,13 @@ pub fn sys_wait(exit_code_ptr: usize) -> isize {
 ///
 /// wstatus 写回遵循 Linux：退出码存放在高 8 bit（status = exit_code << 8）。
 pub fn sys_wait4(pid: i32, wstatus_ptr: usize, options: i32) -> isize {
-
     let pid_isize = pid as isize;
     if pid_isize == 0 || pid_isize < -1 {
         warn!("sys_wait4: unsupport pid={}", pid_isize);
         return -1;
     }
 
-    let target_pid: Option<i32> = if pid_isize == -1 {
-        None
-    } else {
-        Some(pid)
-    };
+    let target_pid: Option<i32> = if pid_isize == -1 { None } else { Some(pid) };
 
     loop {
         let children = {
@@ -1632,7 +1717,7 @@ pub fn sys_wait4(pid: i32, wstatus_ptr: usize, options: i32) -> isize {
                 let cpid = { child.lock().pid.0 };
                 if cpid == tp {
                     found = true;
-                    
+
                     let status = { child.lock().task_statut.clone() };
                     if matches!(status, TaskStatus::Zombie) {
                         let exit_code = match TASK_MANAER.reap_zombie_child(cpid) {
@@ -1653,7 +1738,8 @@ pub fn sys_wait4(pid: i32, wstatus_ptr: usize, options: i32) -> isize {
                             let bytes = st.to_le_bytes();
                             let mut written = 0usize;
                             for s in slices.iter_mut() {
-                                let n = core::cmp::min(s.len(), bytes.len().saturating_sub(written));
+                                let n =
+                                    core::cmp::min(s.len(), bytes.len().saturating_sub(written));
                                 if n == 0 {
                                     break;
                                 }
@@ -1666,7 +1752,6 @@ pub fn sys_wait4(pid: i32, wstatus_ptr: usize, options: i32) -> isize {
                         }
                         return cpid as isize;
                     }
-                    
                 }
             }
 
@@ -1676,7 +1761,8 @@ pub fn sys_wait4(pid: i32, wstatus_ptr: usize, options: i32) -> isize {
             }
 
             //error!("Found :{} hang:{}",found,options);
-            if options==0{ // found target , but it not zombie
+            if options == 0 {
+                // found target , but it not zombie
                 warn!("Hang parent!");
                 // Block parent task,and runing next task
                 TASK_MANAER.blocking_current_task_and_run_next();
@@ -1689,8 +1775,6 @@ pub fn sys_wait4(pid: i32, wstatus_ptr: usize, options: i32) -> isize {
             //warn!("Child was found but,it not zombies ,it is running(smp) or ready(signal core), when you exit your child will foster to init");
 
             return 0;
-
-            
         } else {
             // pid == -1: find any zombie
             for child in children.iter() {
@@ -1734,12 +1818,12 @@ pub fn sys_wait4(pid: i32, wstatus_ptr: usize, options: i32) -> isize {
             // let has_child_run =children.iter().any(|cd|{
             //     cd.lock().task_statut == TaskStatus::Runing
             // });
-            
-            if options==0 {
+
+            if options == 0 {
                 //warn!("I'm, father,pid {} ",sys_getpid());
                 // Blocling current task
                 TASK_MANAER.blocking_current_task_and_run_next();
-                
+
                 // 父亲从这里苏醒 继续尝试回收
                 continue;
                 //warn!("I'm back! i'm father:{}",sys_getpid());
@@ -1747,7 +1831,6 @@ pub fn sys_wait4(pid: i32, wstatus_ptr: usize, options: i32) -> isize {
 
             // 非阻塞，posix直接返回0
             return 0;
-
         }
         // 不需要轮询
         //TASK_MANAER.suspend_and_run_task();
@@ -1755,9 +1838,7 @@ pub fn sys_wait4(pid: i32, wstatus_ptr: usize, options: i32) -> isize {
 }
 
 ///主动放弃cpu
-pub fn sys_yield()->isize{
-   TASK_MANAER.suspend_and_run_task();
-   0
+pub fn sys_yield() -> isize {
+    TASK_MANAER.suspend_and_run_task();
+    0
 }
-
-

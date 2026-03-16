@@ -1,13 +1,16 @@
 //!上层通用接口
+use crate::alloc::string::ToString;
+use crate::config::SECTOR_SIZE;
+use crate::fs::partition::gpt::{parsing_gpt_entries, parsing_gpt_header};
+use crate::fs::vfs::root::ROOTFS;
+use crate::fs::vfs::{File, KStat, MountFs, OpenFlags, VfsFs, VfsFsError, VfsStat};
+use crate::task::{TASK_MANAER, TASK_MANAGER_INIT};
+use alloc::format;
 use alloc::string::String;
 use alloc::sync::Arc;
-use crate::alloc::string::ToString;
+use alloc::vec::Vec;
 use log::error;
 use spin::Mutex;
-use crate::task::{TASK_MANAER, TASK_MANAGER_INIT};
-use crate::fs::vfs::{File, KStat, MountFs, OpenFlags, ROOTFS, VfsFs, VfsFsError, VfsStat};
-use alloc::format;
-use alloc::vec::Vec;
 
 fn resolve_mount(path: &str) -> Result<(MountFs, String, String), VfsFsError> {
     let abs = normalize_path(path)?;
@@ -19,23 +22,142 @@ fn resolve_mount(path: &str) -> Result<(MountFs, String, String), VfsFsError> {
     Ok((fs, abs, sub))
 }
 
+/// 解析 `/dev/vda1` 这类分区设备路径，返回 `(整盘路径, 1-based 分区号)`。
+pub fn vfs_split_partition_device_path(abs_path: &str) -> Option<(&str, usize)> {
+    if !abs_path.starts_with("/dev/") {
+        return None;
+    }
+    let mut end = abs_path.len();
+    while end > 0 && abs_path.as_bytes()[end - 1].is_ascii_digit() {
+        end -= 1;
+    }
+    if end == abs_path.len() {
+        return None;
+    }
+    let idx_str = &abs_path[end..];
+    let idx = idx_str.parse::<usize>().ok()?;
+    if idx == 0 {
+        return None;
+    }
+    Some((&abs_path[..end], idx))
+}
+
+/// 分区文件系统类型提示。
+///
+/// 这里表达的是“从分区表里推断出的文件系统倾向”，
+/// 供上层做 `auto` 挂载决策使用。
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PartitionFsHint {
+    Ext4,
+    Fat32,
+    Fat16,
+    Unknown,
+}
+
+/// 读取分区类型提示，统一兼容 MBR 和 GPT。
+pub fn vfs_read_partition_type(
+    disk: &Arc<dyn File>,
+    part_idx_1based: usize,
+) -> Result<PartitionFsHint, VfsFsError> {
+    const MBR_OFFSET: usize = 0x1BE;
+    const MBR_ENTRY_SIZE: usize = 16;
+    const GPT_LINUX_FILESYSTEM_GUID: [u8; 16] = [
+        0xaf, 0x3d, 0xc6, 0x0f, 0x83, 0x84, 0x72, 0x47, 0x8e, 0x79, 0x3d, 0x69, 0xd8, 0x47, 0x7d,
+        0xe4,
+    ];
+    const GPT_MICROSOFT_BASIC_DATA_GUID: [u8; 16] = [
+        0xa2, 0xa0, 0xd0, 0xeb, 0xe5, 0xb9, 0x33, 0x44, 0x87, 0xc0, 0x68, 0xb6, 0xb7, 0x26, 0x99,
+        0xc7,
+    ];
+    const GPT_EFI_SYSTEM_GUID: [u8; 16] = [
+        0x28, 0x73, 0x2a, 0xc1, 0x1f, 0xf8, 0xd2, 0x11, 0xba, 0x4b, 0x00, 0xa0, 0xc9, 0x3e, 0xc9,
+        0x3b,
+    ];
+
+    fn map_gpt_guid_to_hint(guid: &[u8; 16]) -> PartitionFsHint {
+        if guid == &GPT_LINUX_FILESYSTEM_GUID {
+            PartitionFsHint::Ext4
+        } else if guid == &GPT_MICROSOFT_BASIC_DATA_GUID || guid == &GPT_EFI_SYSTEM_GUID {
+            PartitionFsHint::Fat32
+        } else {
+            PartitionFsHint::Unknown
+        }
+    }
+
+    fn map_mbr_partition_type_to_hint(ptype: u8) -> PartitionFsHint {
+        match ptype {
+            0x83 => PartitionFsHint::Ext4,
+            0x0b | 0x0c => PartitionFsHint::Fat32,
+            0x0e => PartitionFsHint::Fat16,
+            _ => PartitionFsHint::Unknown,
+        }
+    }
+
+    if part_idx_1based == 0 {
+        return Err(VfsFsError::Invalid);
+    }
+
+    let mut mbr = [0u8; SECTOR_SIZE];
+    disk.read_at(0, &mut mbr)?;
+    if mbr[510] != 0x55 || mbr[511] != 0xAA {
+        return Err(VfsFsError::Invalid);
+    }
+
+    if part_idx_1based <= 4 {
+        let base = MBR_OFFSET + (part_idx_1based - 1) * MBR_ENTRY_SIZE;
+        let ptype = mbr[base + 4];
+        if ptype != 0x00 && ptype != 0xee {
+            return Ok(map_mbr_partition_type_to_hint(ptype));
+        }
+    }
+
+    let protective_gpt = (0..4usize).any(|idx| {
+        let base = MBR_OFFSET + idx * MBR_ENTRY_SIZE;
+        mbr[base + 4] == 0xee
+    });
+    if !protective_gpt {
+        return Err(VfsFsError::Invalid);
+    }
+
+    let mut lba1 = [0u8; SECTOR_SIZE];
+    disk.read_at(SECTOR_SIZE, &mut lba1)?;
+    let (entry_lba, num_entries, entry_size) =
+        parsing_gpt_header(&lba1).map_err(|_| VfsFsError::Invalid)?;
+    if part_idx_1based > num_entries as usize {
+        return Err(VfsFsError::Invalid);
+    }
+
+    let entries_bytes = num_entries as usize * entry_size as usize;
+    let entry_sectors = entries_bytes.div_ceil(SECTOR_SIZE);
+    let mut entry_buf = alloc::vec![0u8; entry_sectors * SECTOR_SIZE];
+    for sector_idx in 0..entry_sectors {
+        disk.read_at(
+            (entry_lba as usize + sector_idx) * SECTOR_SIZE,
+            &mut entry_buf[sector_idx * SECTOR_SIZE..(sector_idx + 1) * SECTOR_SIZE],
+        )?;
+    }
+
+    let parts = parsing_gpt_entries(&entry_buf, num_entries, entry_size);
+    let entry = parts.get(part_idx_1based - 1).ok_or(VfsFsError::Invalid)?;
+    Ok(map_gpt_guid_to_hint(&(entry.metadata.type_guid.0)))
+}
+
 /// 统一路径：绝对路径保持不变，相对路径以 进程打开的路径 为前缀
 /// TASK_MANAER初始化期间只能用绝对路径，内核也不应该出现相对路径
 pub fn normalize_path(path: &str) -> Result<String, VfsFsError> {
     let combin = if path.starts_with('/') {
         path.to_string()
     } else {
-        let tsmn_init:bool;
+        let tsmn_init: bool;
         unsafe {
-             tsmn_init= TASK_MANAGER_INIT;
+            tsmn_init = TASK_MANAGER_INIT;
         }
         if tsmn_init {
             let cwd = TASK_MANAER.get_current_cwd();
             format!("{}/{}", cwd, path)
-        }else {
+        } else {
             format!("/{}", path)
         }
-        
     };
 
     let mut parts: Vec<&str> = Vec::new();
@@ -74,7 +196,11 @@ pub fn vfs_write(file: &Arc<dyn File>, buf: &[u8]) -> Result<usize, VfsFsError> 
     file.write(buf)
 }
 
-pub fn vfs_read_at(file: &Arc<dyn File>, offset: usize, buf: &mut [u8]) -> Result<usize, VfsFsError> {
+pub fn vfs_read_at(
+    file: &Arc<dyn File>,
+    offset: usize,
+    buf: &mut [u8],
+) -> Result<usize, VfsFsError> {
     file.read_at(offset, buf)
 }
 
