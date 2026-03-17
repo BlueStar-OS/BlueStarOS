@@ -12,10 +12,9 @@ fn panic(_info: &PanicInfo) -> ! {
             loca.line(),
             _info.message()
         );
-    }else {
+    } else {
         crate::kprintln!("[Kernel Panic]: {:?}", _info.message());
     }
-    
-    shutdown()
 
+    shutdown()
 }

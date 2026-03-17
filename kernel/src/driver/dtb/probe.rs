@@ -25,7 +25,7 @@
 //! ```
 
 use crate::driver::dtb::{DeviceNode, DeviceTree};
-use log::{info, warn, debug};
+use log::{debug, info, warn};
 
 /// 探测优先级
 ///
@@ -116,8 +116,11 @@ pub fn run_probes(tree: &DeviceTree) {
             continue;
         }
 
-        debug!("[DTB Probe] Probing {} devices with compatible '{}'",
-               nodes.len(), entry.compatible);
+        debug!(
+            "[DTB Probe] Probing {} devices with compatible '{}'",
+            nodes.len(),
+            entry.compatible
+        );
 
         for node in nodes {
             // 检查设备是否可用
@@ -129,12 +132,16 @@ pub fn run_probes(tree: &DeviceTree) {
             // 调用探测回调
             match (entry.callback)(node, entry.compatible) {
                 Ok(()) => {
-                    info!("[DTB Probe] ✓ {} probed {} ({})",
-                          entry.driver_name, node.full_name, entry.compatible);
+                    info!(
+                        "[DTB Probe] ✓ {} probed {} ({})",
+                        entry.driver_name, node.full_name, entry.compatible
+                    );
                 }
                 Err(e) => {
-                    warn!("[DTB Probe] ✗ {} failed to probe {}: {}",
-                          entry.driver_name, node.full_name, e);
+                    warn!(
+                        "[DTB Probe] ✗ {} failed to probe {}: {}",
+                        entry.driver_name, node.full_name, e
+                    );
                 }
             }
         }

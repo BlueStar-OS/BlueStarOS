@@ -76,7 +76,8 @@ pub fn sys_call(id: usize, args: [usize; 6]) -> isize {
             in("x3") args[3],
             in("x4") args[4],
             in("x5") args[5],
-            in("x8") id
+            inlateout("x8") id => _,
+            clobber_abi("C"),
         );
     }
     ret
@@ -379,4 +380,3 @@ pub fn sys_exit(exit_code:usize)->!{//sys_exit
 pub fn sys_yield(){
     sys_call(SYS_SCHED_YIELD, [0,0,0,0,0,0]);
 }
-

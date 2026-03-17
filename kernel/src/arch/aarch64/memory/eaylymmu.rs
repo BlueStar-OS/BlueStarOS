@@ -76,9 +76,9 @@ const ATTR_NORMAL: u64 = 0 << 2; // AttrIndx = 0
 const ATTR_DEVICE: u64 = 1 << 2; // AttrIndx = 1
 
 // --- 通用属性位 ---
-const AF: u64         = 1 << 10;     // Access Flag (必须为 1)
-const SH_INNER: u64   = 0b11 << 8;   // Inner Shareable
-const AP_RW_EL1: u64  = 0b00 << 6;   // AP[2:1]=00 → EL1:RW, EL0:无
+const AF: u64 = 1 << 10; // Access Flag (必须为 1)
+const SH_INNER: u64 = 0b11 << 8; // Inner Shareable
+const AP_RW_EL1: u64 = 0b00 << 6; // AP[2:1]=00 → EL1:RW, EL0:无
 
 // ============================================================================
 // 组合属性: Normal 块 / Device 块
@@ -171,7 +171,7 @@ pub unsafe fn early_mmu_init() {
     // L1[0] → L2 表 (Table Descriptor)
     let l2_phys = &EARLY_L2_FIRST_GB as *const _ as u64;
     let l2_phys_2 = &EARLY_L2_SECONED_GB as *const _ as u64;
-    EARLY_L1.entries[0] = l2_phys   | DESC_TABLE;
+    EARLY_L1.entries[0] = l2_phys | DESC_TABLE;
     EARLY_L1.entries[1] = l2_phys_2 | DESC_TABLE;
 
     // 填充第四个 1GB 的 L2 表 (0xC0000000 - 0xFFFFFFFF)
@@ -192,20 +192,16 @@ pub unsafe fn early_ttbr0() -> u64 {
     &EARLY_L1 as *const _ as u64
 }
 
-
-
-
-pub fn turn_early_mmu(){
-let mut current_el: u64;
-  unsafe { asm!("mrs {0}, CurrentEL", out(reg) current_el); }
-  kprintln!("CurrentEL = {:#x}",current_el);  // bits[3:2] = EL
-  // 0x4 = EL1, 0x8 = EL2, 0xC = EL3
+pub fn turn_early_mmu() {
+    let mut current_el: u64;
+    unsafe {
+        asm!("mrs {0}, CurrentEL", out(reg) current_el);
+    }
+    kprintln!("CurrentEL = {:#x}", current_el); // bits[3:2] = EL
+                                                // 0x4 = EL1, 0x8 = EL2, 0xC = EL3
 
     unsafe {
-        asm!(
-            "tlbi vmalle1",
-            "dsb nsh"
-        );
+        asm!("tlbi vmalle1", "dsb nsh");
         kprintln!("Clear old table,clear old instruct");
         asm!(
             "msr mair_el1, {0}",in(reg) MAIR_EL1_VALUE
@@ -254,13 +250,8 @@ let mut current_el: u64;
 
         // Step 8: 失效指令缓存
         // 来源: head.S __enable_mmu — ic iallu; dsb nsh; isb
-        core::arch::asm!(
-            "ic iallu",
-            "dsb nsh",
-            "isb"
-        );
+        core::arch::asm!("ic iallu", "dsb nsh", "isb");
 
         kprintln!("[MMU]: Aarch64 Early mmu turn on!")
     }
-    
 }

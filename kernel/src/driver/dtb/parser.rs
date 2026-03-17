@@ -1,12 +1,14 @@
 //! DTB Parser
 //! Reference: Linux 5.4.29 drivers/of/fdt.c
 
-use alloc::string::String;
-use alloc::vec::Vec;
 use alloc::collections::BTreeMap;
 use alloc::format;
+use alloc::string::String;
+use alloc::vec::Vec;
 
-use super::fdt::{FdtHeader, FdtError, FDT_BEGIN_NODE, FDT_END_NODE, FDT_PROP, FDT_NOP, FDT_END, MemReservation};
+use super::fdt::{
+    FdtError, FdtHeader, MemReservation, FDT_BEGIN_NODE, FDT_END, FDT_END_NODE, FDT_NOP, FDT_PROP,
+};
 use super::node::{DeviceNode, DeviceTree, Property};
 
 /// DTB Parser
@@ -85,7 +87,9 @@ impl<'a> DtbParser<'a> {
         }
 
         let start = strings_start + offset;
-        let end = self.raw[start..].iter().position(|&b| b == 0)
+        let end = self.raw[start..]
+            .iter()
+            .position(|&b| b == 0)
             .map(|p| start + p)
             .unwrap_or(self.raw.len());
 
@@ -98,7 +102,9 @@ impl<'a> DtbParser<'a> {
             return "";
         }
 
-        let end = self.raw[offset..].iter().position(|&b| b == 0)
+        let end = self.raw[offset..]
+            .iter()
+            .position(|&b| b == 0)
             .map(|p| offset + p)
             .unwrap_or(self.raw.len());
 
@@ -173,10 +179,7 @@ impl<'a> DtbParser<'a> {
                     };
 
                     // Create new node
-                    let node = DeviceNode::new(
-                        String::from(name),
-                        full_name,
-                    );
+                    let node = DeviceNode::new(String::from(name), full_name);
 
                     node_stack.push(node);
                     path_stack.push(String::from(name));
@@ -216,14 +219,14 @@ impl<'a> DtbParser<'a> {
 
                     // Add property to current node
                     if let Some(node) = node_stack.last_mut() {
-                        node.properties.insert(
-                            String::from(name),
-                            Property::new(String::from(name), value),
-                        );
+                        node.properties
+                            .insert(String::from(name), Property::new(String::from(name), value));
 
                         // Handle phandle
                         if name == "phandle" || name == "linux,phandle" {
-                            if let Some(phandle) = node.properties.get(name).and_then(|p| p.as_u32()) {
+                            if let Some(phandle) =
+                                node.properties.get(name).and_then(|p| p.as_u32())
+                            {
                                 node.phandle = Some(phandle);
                             }
                         }

@@ -1,16 +1,16 @@
+use crate::fs::vfs::vfserror::VfsFsError;
 use alloc::string::String;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
-use core::any::Any;
 use bitflags::bitflags;
+use core::any::Any;
 use spin::Mutex;
-use crate::fs::vfs::vfserror::{VfsFsError};
 
 pub type MountFs = Arc<Mutex<dyn VfsFs>>;
 
 pub enum EntryType {
     File,
-    Dir
+    Dir,
 }
 
 bitflags! {
@@ -148,11 +148,11 @@ impl From<VfsStat> for KStat {
     }
 }
 
-/// 
-pub trait VfsFs :Send + Sync{
-    fn mount(&mut self)->Result<(),VfsFsError>;
-    fn umount(&mut self)->Result<(),VfsFsError>;
-    fn name(&self)->Result<String,VfsFsError>;
+///
+pub trait VfsFs: Send + Sync {
+    fn mount(&mut self) -> Result<(), VfsFsError>;
+    fn umount(&mut self) -> Result<(), VfsFsError>;
+    fn name(&self) -> Result<String, VfsFsError>;
 
     fn mkdir(&mut self, _path: &str) -> Result<(), VfsFsError> {
         Err(VfsFsError::NotSupported)

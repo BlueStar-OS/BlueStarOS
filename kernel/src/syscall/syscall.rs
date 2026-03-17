@@ -2,6 +2,7 @@ use crate::alloc::string::ToString;
 use crate::arch::memory::*;
 use crate::arch::task::TaskContext;
 use crate::arch::TrapContext;
+use crate::ARCHITECTURE;
 use crate::config::SECTOR_SIZE;
 use crate::error::BlueErr;
 use crate::fs::component::pipe::pipe::{make_pipe, PipeHandle};
@@ -616,7 +617,9 @@ pub fn sys_uname(buf: usize) -> isize {
     fill_field(&mut u.nodename, "BlueStarOS");
     fill_field(&mut u.release, "0.1.0");
     fill_field(&mut u.version, "#1");
-    fill_field(&mut u.machine, "riscv64");
+   
+    
+    fill_field(&mut u.machine, ARCHITECTURE);
     fill_field(&mut u.domainname, "(none)");
 
     let bytes: &[u8] =
@@ -1561,6 +1564,13 @@ pub fn sys_write(fd_target: usize, source_buffer: usize, buffer_len: usize) -> i
 pub fn sys_read(fd_target: usize, source_buffer: usize, buffer_len: usize) -> isize {
     // 获取当前任务的页表进行地址转换
     let user_satp = TASK_MANAER.get_current_stap();
+    debug!(
+        "[sys_read] fd={} user_buf={:#x} len={} satp={:#x}",
+        fd_target,
+        source_buffer,
+        buffer_len,
+        user_satp
+    );
     let mut buffer =
         PageTable::get_mut_slice_from_satp(user_satp, buffer_len, VirAddr(source_buffer));
 
@@ -1595,6 +1605,18 @@ pub fn sys_read(fd_target: usize, source_buffer: usize, buffer_len: usize) -> is
         let n = core::cmp::min(slice.len(), read_len - offset);
         slice[..n].copy_from_slice(&read_buffer[offset..offset + n]);
         offset += n;
+    }
+    if read_len > 0 {
+        let mut pt = PageTable::crate_table_from_satp(user_satp);
+        let first = pt
+            .translate(VirAddr(source_buffer))
+            .map(|pa| unsafe { *(pa.0 as *const u8) });
+        debug!(
+            "[sys_read] wrote first={:#x?} user_buf={:#x} read_len={}",
+            first,
+            source_buffer,
+            read_len
+        );
     }
 
     read_len as isize

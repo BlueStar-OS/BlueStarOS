@@ -1,15 +1,13 @@
-use core::fmt::{self, Write};
-use alloc::sync::Arc;
-use log::error;
-use crate::task::TASK_MANAER;
-use crate::fs::vfs::{File, OpenFlags, VfsFsError};
 use crate::arch::driver::uart;
-#[cfg(target_arch = "riscv64")]
-use riscv::register::sstatus;
-#[cfg(target_arch = "riscv64")]
-use riscv::register::sie;
-
-
+use crate::arch::{disable_irq, enable_irq, wait_for_interrupt};
+use crate::disable_timer_interrupt;
+use crate::enable_timer_interrupt;
+use crate::fs::vfs::{File, OpenFlags, VfsFsError};
+use crate::task::TASK_MANAER;
+use alloc::sync::Arc;
+use core::fmt::{self, Write};
+use log::{error, warn};
+use crate::info;
 pub const FD_TYPE_STDIN: usize = 0;
 pub const FD_TYPE_STDOUT: usize = 1;
 pub const FD_TYPE_STDERR: usize = 2;
@@ -17,47 +15,45 @@ pub const FD_TYPE_STDERR: usize = 2;
 /// 标准输出文件节点
 pub struct Stdout;
 
-
 /// 标准输入文件节点
 pub struct Stdin;
 
 ///标准错误文件节点
 pub struct Stderr;
 
-
 impl Stdin {
-    ///调用栈顶必须为traphandler！！！，因为其中有TASK_MANAER.suspend_and_run_task();
+    #[inline]
+    fn poll_input() -> Option<u8> {
+        #[cfg(any(target_arch = "riscv64", target_arch = "aarch64"))]
+        {
+            crate::arch::driver::keyboard::read_input()
+        }
+        #[cfg(not(any(target_arch = "riscv64", target_arch = "aarch64")))]
+        {
+            uart::getc()
+        }
+    }
+
+    #[inline]
+    fn wait_input_event() {
+        disable_timer_interrupt();
+        enable_irq();
+        wait_for_interrupt();
+        disable_irq();
+        enable_timer_interrupt();
+
+       
+        //TASK_MANAER.suspend_and_run_task();
+    }
+
+    /// `suspend_and_run_task()` 只能在 trap 顶层安全调用。
+    /// AArch64 键盘 IRQ 会在 syscall 的内核栈上唤醒 `wfi`，这里不能直接调度。
     pub fn get_char() -> u8 {
         loop {
-            // 先检查中断缓冲区
-            #[cfg(target_arch = "riscv64")]
-            if let Some(c) = crate::arch::driver::keyboard::read_input() {
+            if let Some(c) = Self::poll_input() {
                 return c;
             }
-            #[cfg(target_arch = "aarch64")]
-            if let Some(c) = crate::arch::driver::keyboard::read_input() {
-                return c;
-            }
-            // 非 riscv64/aarch64：轮询
-            #[cfg(not(any(target_arch = "riscv64", target_arch = "aarch64")))]
-            if let Some(cha) = uart::getc() {
-                return cha;
-            }
-            // 等待中断：开全局中断 + wfi
-            #[cfg(target_arch = "riscv64")]
-            unsafe {
-                sstatus::set_sie();    // 开全局中断
-                core::arch::asm!("wfi"); //等待中断
-                sstatus::clear_sie();  // 关全局中断
-            }
-            #[cfg(target_arch = "aarch64")]
-            unsafe {
-                core::arch::asm!("msr daifclr, #2"); // 开 IRQ
-                core::arch::asm!("wfi");              // 等待中断
-                core::arch::asm!("msr daifset, #2"); // 关 IRQ
-            }
-            // wfi 返回后让出 CPU
-            TASK_MANAER.suspend_and_run_task();
+            Self::wait_input_event();
         }
     }
 }
@@ -83,10 +79,14 @@ impl File for Stdin {
         for slot in buf.iter_mut() {
             let mut cha = Self::get_char();
             while cha == 0 {
-                
                 TASK_MANAER.suspend_and_run_task();
                 cha = Self::get_char();
             }
+            info!(
+                "[stdin.read] cha={:#x} '{}'",
+                cha,
+                cha as char
+            );
             *slot = cha as u8;
             read_count += 1;
             if *slot == 13 {

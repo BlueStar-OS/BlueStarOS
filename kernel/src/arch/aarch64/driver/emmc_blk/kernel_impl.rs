@@ -3,10 +3,10 @@
 extern crate alloc;
 use alloc::boxed::Box;
 
-use sdmmc::Kernel;
-use sdmmc::emmc::clock::{Clk, ClkError, init_global_clk};
-use rk3588_clk::{Rk3588Cru, constant::CCLK_EMMC};
 use core::ptr::NonNull;
+use rk3588_clk::{constant::CCLK_EMMC, Rk3588Cru};
+use sdmmc::emmc::clock::{init_global_clk, Clk, ClkError};
+use sdmmc::Kernel;
 
 /// 内核延时实现，使用 aarch64 通用计时器自旋等待
 struct BlueKernel;
@@ -37,13 +37,15 @@ unsafe impl Sync for Rk3588ClkUnit {}
 
 impl Clk for Rk3588ClkUnit {
     fn emmc_get_clk(&self) -> Result<u64, ClkError> {
-        self.cru.mmc_get_clk(CCLK_EMMC)
+        self.cru
+            .mmc_get_clk(CCLK_EMMC)
             .map(|r| r as u64)
             .map_err(|_| ClkError::InvalidClockRate)
     }
 
     fn emmc_set_clk(&self, rate: u64) -> Result<u64, ClkError> {
-        self.cru.mmc_set_clk(CCLK_EMMC, rate as usize)
+        self.cru
+            .mmc_set_clk(CCLK_EMMC, rate as usize)
             .map(|r| r as u64)
             .map_err(|_| ClkError::InvalidClockRate)
     }
@@ -51,8 +53,7 @@ impl Clk for Rk3588ClkUnit {
 
 /// 初始化全局时钟，必须在 EMmcHost::init() 之前调用
 pub fn init_emmc_clk() {
-    let ptr = NonNull::new(RK3588_CRU_BASE as *mut u8)
-        .expect("CRU base address is null");
+    let ptr = NonNull::new(RK3588_CRU_BASE as *mut u8).expect("CRU base address is null");
     let cru = Rk3588Cru::new(ptr);
 
     let unit = Rk3588ClkUnit { cru };

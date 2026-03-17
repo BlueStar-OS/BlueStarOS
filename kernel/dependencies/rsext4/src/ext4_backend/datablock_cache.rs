@@ -226,7 +226,7 @@ impl DataBlockCache {
         block_dev: &mut Jbd2Dev<B>,
         block_num: u64,
     ) -> BlockDevResult<()> {
-        if let Some(cached) = self.cache.remove(&block_num){
+        if let Some(cached) = self.cache.remove(&block_num) {
             if cached.dirty {
                 // 写回磁盘
                 Self::write_block_static(block_dev, cached.block_num, &cached.data)?;
@@ -295,7 +295,7 @@ impl DataBlockCache {
         block_dev: &mut Jbd2Dev<B>,
         block_num: u64,
     ) -> BlockDevResult<()> {
-        if let Some(cached) = self.cache.get(&block_num){
+        if let Some(cached) = self.cache.get(&block_num) {
             if cached.dirty {
                 let data = cached.data.clone();
                 Self::write_block_static(block_dev, block_num, &data)?;

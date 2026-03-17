@@ -73,16 +73,16 @@
 //! | D        | DBM=1                            | 脏页                           |
 //! | DEV      | AttrIndx=1 (Device nGnRE)        | 设备内存                       |
 
-use bitflags::bitflags;
-use crate::PAGE_SIZE_BITS;
-use crate::PAGE_SIZE;
-use crate::memory::FramTracker;
-use alloc::vec::Vec;
-use alloc::vec;
-use core::sync::atomic::compiler_fence;
 use crate::error;
-use core::sync::atomic::Ordering;
 use crate::memory::alloc_frame;
+use crate::memory::FramTracker;
+use crate::PAGE_SIZE;
+use crate::PAGE_SIZE_BITS;
+use alloc::vec;
+use alloc::vec::Vec;
+use bitflags::bitflags;
+use core::sync::atomic::compiler_fence;
+use core::sync::atomic::Ordering;
 use log::debug;
 
 // =============================================================================
@@ -109,10 +109,10 @@ use log::debug;
 // Page descriptor  (L3 最终页映射):           bits[1:0] = 0b11
 // Block descriptor (L1/L2 大页映射):          bits[1:0] = 0b01
 // Invalid:                                    bits[1:0] = 0b00
-const DESC_VALID: usize     = 1 << 0;  // PTE_VALID
-const DESC_TABLE_BIT: usize = 1 << 1;  // PTE_TABLE_BIT
+const DESC_VALID: usize = 1 << 0; // PTE_VALID
+const DESC_TABLE_BIT: usize = 1 << 1; // PTE_TABLE_BIT
 const DESC_TYPE_TABLE: usize = DESC_VALID | DESC_TABLE_BIT; // 0b11
-const DESC_TYPE_PAGE: usize  = DESC_VALID | DESC_TABLE_BIT; // 0b11 (L3)
+const DESC_TYPE_PAGE: usize = DESC_VALID | DESC_TABLE_BIT; // 0b11 (L3)
 
 // --- 内存属性索引 AttrIndx[4:2] ---
 //
@@ -130,8 +130,8 @@ const DESC_TYPE_PAGE: usize  = DESC_VALID | DESC_TABLE_BIT; // 0b11 (L3)
 //   Device nGnRE 保证: 每次访问都到达设备，不合并，不重排，不推测。
 // 指向 MAIR_EL1 中的 Attr 槽位
 // 我们的 MAIR 布局: Attr0=0xFF(Normal WB), Attr1=0x04(Device nGnRE)
-const PTE_ATTRINDX_SHIFT: usize  = 2;
-const PTE_ATTRINDX_MASK: usize   = 0b111 << PTE_ATTRINDX_SHIFT;
+const PTE_ATTRINDX_SHIFT: usize = 2;
+const PTE_ATTRINDX_MASK: usize = 0b111 << PTE_ATTRINDX_SHIFT;
 const PTE_ATTRINDX_NORMAL: usize = 0 << PTE_ATTRINDX_SHIFT; // AttrIdx=0: Normal
 const PTE_ATTRINDX_DEVICE: usize = 1 << PTE_ATTRINDX_SHIFT; // AttrIdx=1: Device
 
@@ -152,8 +152,8 @@ const PTE_ATTRINDX_DEVICE: usize = 1 << PTE_ATTRINDX_SHIFT; // AttrIdx=1: Device
 // AP[2:1]=01 → EL1:RW, EL0:RW
 // AP[2:1]=10 → EL1:RO, EL0:无
 // AP[2:1]=11 → EL1:RO, EL0:RO
-const PTE_USER: usize   = 1 << 6;  // AP[1] — EL0 可访问
-const PTE_RDONLY: usize  = 1 << 7;  // AP[2] — 只读
+const PTE_USER: usize = 1 << 6; // AP[1] — EL0 可访问
+const PTE_RDONLY: usize = 1 << 7; // AP[2] — 只读
 
 // --- 共享属性 SH[9:8] ---
 //
@@ -312,9 +312,9 @@ impl VirNumber {
     pub fn index(&self) -> [usize; 3] {
         let vpn = self.0;
         let mut idx: [usize; 3] = [0; 3];
-        idx[0] = (vpn >> 18) & 0x1FF;  // L1 索引
-        idx[1] = (vpn >> 9) & 0x1FF;   // L2 索引
-        idx[2] = vpn & 0x1FF;           // L3 索引
+        idx[0] = (vpn >> 18) & 0x1FF; // L1 索引
+        idx[1] = (vpn >> 9) & 0x1FF; // L2 索引
+        idx[2] = vpn & 0x1FF; // L3 索引
         idx
     }
 
@@ -524,10 +524,18 @@ impl PageTableEntry {
         // AP[2:1] bits[7:6] → R/W/U
         let ap = (self.0 >> 6) & 0b11;
         match ap {
-            0b00 => { flags |= PTEFlags::R | PTEFlags::W; }         // EL1:RW
-            0b01 => { flags |= PTEFlags::R | PTEFlags::W | PTEFlags::U; } // EL1:RW, EL0:RW
-            0b10 => { flags |= PTEFlags::R; }                       // EL1:RO
-            0b11 => { flags |= PTEFlags::R | PTEFlags::U; }         // EL1:RO, EL0:RO
+            0b00 => {
+                flags |= PTEFlags::R | PTEFlags::W;
+            } // EL1:RW
+            0b01 => {
+                flags |= PTEFlags::R | PTEFlags::W | PTEFlags::U;
+            } // EL1:RW, EL0:RW
+            0b10 => {
+                flags |= PTEFlags::R;
+            } // EL1:RO
+            0b11 => {
+                flags |= PTEFlags::R | PTEFlags::U;
+            } // EL1:RO, EL0:RO
             _ => {}
         }
 

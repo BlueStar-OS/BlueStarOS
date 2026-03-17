@@ -7,18 +7,18 @@ use core::ptr::{read_volatile, write_volatile};
 const UART2_BASE: usize = 0xfeb50000;
 
 /// UART 寄存器偏移
-const UART_RBR: usize = 0x00;  // 接收缓冲寄存器（DLAB=0时，读取）
-const UART_THR: usize = 0x00;  // 发送保持寄存器（DLAB=0时，写入）
-const UART_LSR: usize = 0x14;  // 线路状态寄存器
-const UART_LCR: usize = 0x0C;  // 线路控制寄存器
-const UART_DLL: usize = 0x00;  // 波特率除数低位（DLAB=1时）
-const UART_DLH: usize = 0x04;  // 波特率除数高位（DLAB=1时）
-const UART_IER: usize = 0x04;  // 中断使能寄存器（DLAB=0时）
-const UART_FCR: usize = 0x08;  // FIFO 控制寄存器
+const UART_RBR: usize = 0x00; // 接收缓冲寄存器（DLAB=0时，读取）
+const UART_THR: usize = 0x00; // 发送保持寄存器（DLAB=0时，写入）
+const UART_LSR: usize = 0x14; // 线路状态寄存器
+const UART_LCR: usize = 0x0C; // 线路控制寄存器
+const UART_DLL: usize = 0x00; // 波特率除数低位（DLAB=1时）
+const UART_DLH: usize = 0x04; // 波特率除数高位（DLAB=1时）
+const UART_IER: usize = 0x04; // 中断使能寄存器（DLAB=0时）
+const UART_FCR: usize = 0x08; // FIFO 控制寄存器
 
 /// 线路状态寄存器位定义
-const LSR_DR: u8 = 1 << 0;     // 数据就绪（接收FIFO非空）
-const LSR_THRE: u8 = 1 << 5;   // 发送保持寄存器空
+const LSR_DR: u8 = 1 << 0; // 数据就绪（接收FIFO非空）
+const LSR_THRE: u8 = 1 << 5; // 发送保持寄存器空
 
 /// RK3588 UART 驱动
 pub struct Rk3588Uart {

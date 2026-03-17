@@ -164,7 +164,7 @@ impl EMmcHost {
         // 保存分频器设置，然后禁用时钟输出以配置 DLL
         let clk_saved = self.read_reg16(EMMC_CLOCK_CONTROL);
         // 只保留分频器位 (bit 6-15)，清除使能位
-        let clk_div = clk_saved & !( EMMC_CLOCK_INT_EN | EMMC_CLOCK_INT_STABLE | EMMC_CLOCK_CARD_EN);
+        let clk_div = clk_saved & !(EMMC_CLOCK_INT_EN | EMMC_CLOCK_INT_STABLE | EMMC_CLOCK_CARD_EN);
         self.write_reg16(EMMC_CLOCK_CONTROL, 0);
 
         debug!(
@@ -244,9 +244,7 @@ impl EMmcHost {
             self.write_reg(DWCMSHC_EMMC_DLL_TXCLK, extra);
 
             // STRBIN
-            extra = DWCMSHC_EMMC_DLL_DLYENA
-                | DLL_STRBIN_TAPNUM_DEFAULT
-                | DLL_STRBIN_TAPNUM_FROM_SW;
+            extra = DWCMSHC_EMMC_DLL_DLYENA | DLL_STRBIN_TAPNUM_DEFAULT | DLL_STRBIN_TAPNUM_FROM_SW;
             self.write_reg(DWCMSHC_EMMC_DLL_STRBIN, extra);
         } else {
             // Bypass DLL: 低速模式 (<=52MHz)

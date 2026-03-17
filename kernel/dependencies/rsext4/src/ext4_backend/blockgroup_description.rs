@@ -420,7 +420,7 @@ mod tests {
 
     #[test]
     fn test_group_desc_64bit_values() {
-        let  desc = Ext4GroupDesc {
+        let desc = Ext4GroupDesc {
             bg_block_bitmap_lo: 0x12345678,
             bg_block_bitmap_hi: 0xABCDEF00,
             bg_inode_bitmap_lo: 0,
@@ -454,7 +454,7 @@ mod tests {
 
     #[test]
     fn test_group_desc_flags() {
-        let  desc = Ext4GroupDesc {
+        let desc = Ext4GroupDesc {
             bg_flags: Ext4GroupDesc::EXT4_BG_INODE_UNINIT,
             ..Default::default()
         };

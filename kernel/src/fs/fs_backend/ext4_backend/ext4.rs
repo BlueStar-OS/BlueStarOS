@@ -1,29 +1,22 @@
 use crate::fs::vfs::*;
 use alloc::string::ToString;
 use log::error;
-use rsext4::{Jbd2Dev, ext4_backend::ext4::Ext4FileSystem, fs_mount, fs_umount, mkfs};
+use rsext4::{ext4_backend::ext4::Ext4FileSystem, fs_mount, fs_umount, mkfs, Jbd2Dev};
 
+use super::Ext4BlockDevice;
 use alloc::format;
 use alloc::sync::Arc;
-use rsext4::{
-    OpenFile,
-    lseek as ext4_lseek,
-    mkdir as ext4_mkdir,
-    mkfile as ext4_mkfile,
-    mv as ext4_mv,
-    open as ext4_open,
-    read_at as ext4_read_at,
-    rename as ext4_rename,
-    truncate as ext4_truncate,
-    write_at as ext4_write_at,
-};
+use alloc::vec::Vec;
+use rsext4::ext4_backend::config::BLOCK_SIZE;
 use rsext4::ext4_backend::dir::get_inode_with_num;
 use rsext4::ext4_backend::entries::DirEntryIterator;
 use rsext4::ext4_backend::file::unlink as ext4_unlink;
 use rsext4::ext4_backend::loopfile::resolve_inode_block_allextend;
-use rsext4::ext4_backend::config::BLOCK_SIZE;
-use alloc::vec::Vec;
-use super::Ext4BlockDevice;
+use rsext4::{
+    lseek as ext4_lseek, mkdir as ext4_mkdir, mkfile as ext4_mkfile, mv as ext4_mv,
+    open as ext4_open, read_at as ext4_read_at, rename as ext4_rename, truncate as ext4_truncate,
+    write_at as ext4_write_at, OpenFile,
+};
 
 pub struct Ext4Fs {
     pub dev: Jbd2Dev<Ext4BlockDevice>,
@@ -41,7 +34,7 @@ pub struct Ext4File {
 }
 
 impl Ext4File {
-    pub fn new(mount: MountFs, of: OpenFile,flags: OpenFlags) -> Self {
+    pub fn new(mount: MountFs, of: OpenFile, flags: OpenFlags) -> Self {
         Self {
             mount,
             of: spin::Mutex::new(of),
@@ -49,7 +42,10 @@ impl Ext4File {
         }
     }
 
-    fn with_ext4_mut<T>(&self, f: impl FnOnce(&mut Ext4Fs) -> Result<T, VfsFsError>) -> Result<T, VfsFsError> {
+    fn with_ext4_mut<T>(
+        &self,
+        f: impl FnOnce(&mut Ext4Fs) -> Result<T, VfsFsError>,
+    ) -> Result<T, VfsFsError> {
         let mut guard = self.mount.lock();
         let ext4 = guard
             .as_any_mut()
@@ -156,7 +152,7 @@ impl File for Ext4File {
     }
 
     fn getdents64(&self, max_len: usize) -> Result<Vec<u8>, VfsFsError> {
-             if max_len == 0 {
+        if max_len == 0 {
             return Ok(Vec::new());
         }
 
@@ -263,13 +259,18 @@ impl VfsFs for Ext4Fs {
         if self.fs.is_some() {
             return Err(VfsFsError::Mounted);
         }
-        
+
         let fs = fs_mount(&mut self.dev).map_err(|_| VfsFsError::MountFail)?;
         self.fs = Some(fs);
         Ok(())
     }
 
-    fn open(&mut self, mount_fs: MountFs, path: &str, flags: OpenFlags) -> Result<Arc<dyn File>, VfsFsError> {
+    fn open(
+        &mut self,
+        mount_fs: MountFs,
+        path: &str,
+        flags: OpenFlags,
+    ) -> Result<Arc<dyn File>, VfsFsError> {
         let fs_inner = self.fs.as_mut().ok_or(VfsFsError::IO)?;
         if flags.contains(OpenFlags::APPEND) && !flags.writable() {
             return Err(VfsFsError::PermissionDenied);

@@ -130,7 +130,7 @@ impl Ext4Inode {
     ///检查是否有extend树的结构
     /// 检查EXT4_EXTENTS_FL标志和标志extend头
     pub fn have_extend_header_and_use_extend(&self) -> bool {
-        if !Self::is_extent(&self){
+        if !Self::is_extent(&self) {
             debug!("Inode not have extend flag!");
             return false;
         }
@@ -145,8 +145,7 @@ impl Ext4Inode {
         }
     }
 
-
-    //some metadata change support 
+    //some metadata change support
     pub fn set_mtime(&mut self, mtime: u32) {
         self.i_mtime = mtime;
     }
@@ -156,7 +155,6 @@ impl Ext4Inode {
     pub fn set_atime(&mut self, atime: u32) {
         self.i_atime = atime;
     }
-
 }
 
 // 文件模式常量 - 文件类型

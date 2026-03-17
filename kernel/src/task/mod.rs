@@ -1,19 +1,19 @@
-mod task;
 mod process;
 pub mod signal;
-use crate::fs::vfs::{OpenFlags, vfs_open};
-use alloc::vec::{Vec};
-use alloc::vec;
-use log::{debug, error, info, warn};
-use bitflags::bitflags;
+mod task;
 use crate::config::{app_end, app_start};
+use crate::fs::vfs::{vfs_open, OpenFlags};
+use alloc::vec;
+use alloc::vec::Vec;
+use bitflags::bitflags;
+use log::{debug, error, info, warn};
 
-bitflags!{
+bitflags! {
     /// 信号结构体 posix
     #[derive(Debug,Clone, Copy,PartialEq, Eq)]
-    
+
     pub struct Signal:usize{
-        const SIGHUP    = 1usize << (1  - 1);  // 1  挂起（控制终端断开/会话结束）
+        const SIGHUP    = 1usize << 0;  // 1  挂起（控制终端断开/会话结束）
         const SIGINT    = 1usize << (2  - 1);  // 2  中断（通常是 Ctrl+C）
         const SIGQUIT   = 1usize << (3  - 1);  // 3  退出（通常是 Ctrl+\\，可产生 core）
         const SIGILL    = 1usize << (4  - 1);  // 4  非法指令
@@ -47,11 +47,10 @@ bitflags!{
     }
 }
 
-
-pub fn have_elf_header(data:[u8;4])->bool{
-    if data!=[0x7f, b'E', b'L', b'F'] {
+pub fn have_elf_header(data: [u8; 4]) -> bool {
+    if data != [0x7f, b'E', b'L', b'F'] {
         return false;
-    }else {
+    } else {
         return true;
     }
 }
@@ -73,53 +72,47 @@ pub fn file_loader(file_path: &str) -> Vec<u8> {
         return bytes.to_vec();
     }
 
-    // rk3588 临时内联
-    if file_path == "/test/init" {
-        let start = app_start as usize;
-        let end = app_end as usize;
-        if end <= start {
-            return vec![];
-        }
-        let bytes = unsafe { core::slice::from_raw_parts(start as *const u8, end - start) };
-        return bytes.to_vec();
-    }
 
-    let fd =match vfs_open(file_path, OpenFlags::empty()){
-        Ok(res)=>{
-            res
-        }
-        Err(_)=>{
+
+    let fd = match vfs_open(file_path, OpenFlags::empty()) {
+        Ok(res) => res,
+        Err(_) => {
             warn!("Open Application faild,can't open it");
-            return vec![];//提前结束
+            return vec![]; //提前结束
         }
     };
     debug!("open file success");
 
     let mut out: Vec<u8> = Vec::new();
 
-
     // elf校验
     let mut tmp = [0u8; 512];
     let n = match fd.read(&mut tmp) {
-            Ok(n) => n,
-            Err(e) => {
-                error!("file_loader: fd.read failed: path={} err={:?}", file_path, e);
-                return vec![];
-            }
-        };
-        
-    if !have_elf_header([tmp[0],tmp[1],tmp[2],tmp[3]]) {
+        Ok(n) => n,
+        Err(e) => {
+            error!(
+                "file_loader: fd.read failed: path={} err={:?}",
+                file_path, e
+            );
+            return vec![];
+        }
+    };
+
+    if !have_elf_header([tmp[0], tmp[1], tmp[2], tmp[3]]) {
         warn!("Valid elf file");
-        return vec![]
+        return vec![];
     }
 
-        out.extend_from_slice(&tmp[..n]);
+    out.extend_from_slice(&tmp[..n]);
 
     loop {
         let n = match fd.read(&mut tmp) {
             Ok(n) => n,
             Err(e) => {
-                error!("file_loader: fd.read failed: path={} err={:?}", file_path, e);
+                error!(
+                    "file_loader: fd.read failed: path={} err={:?}",
+                    file_path, e
+                );
                 return vec![];
             }
         };

@@ -278,7 +278,10 @@ pub struct RamFile {
 }
 
 impl RamFile {
-    fn with_fs_mut<T>(&self, f: impl FnOnce(&mut RamFs) -> Result<T, VfsFsError>) -> Result<T, VfsFsError> {
+    fn with_fs_mut<T>(
+        &self,
+        f: impl FnOnce(&mut RamFs) -> Result<T, VfsFsError>,
+    ) -> Result<T, VfsFsError> {
         let mut guard = self.mount_fs.lock();
         let fs = guard
             .as_any_mut()
@@ -289,7 +292,10 @@ impl RamFile {
 
     fn with_fs<T>(&self, f: impl FnOnce(&RamFs) -> Result<T, VfsFsError>) -> Result<T, VfsFsError> {
         let guard = self.mount_fs.lock();
-        let fs = guard.as_any().downcast_ref::<RamFs>().ok_or(VfsFsError::IO)?;
+        let fs = guard
+            .as_any()
+            .downcast_ref::<RamFs>()
+            .ok_or(VfsFsError::IO)?;
         f(fs)
     }
 }
@@ -406,7 +412,13 @@ impl VfsFs for RamFs {
 
     fn mkdir(&mut self, path: &str) -> Result<(), VfsFsError> {
         let (parent, name) = self.split_parent(path)?;
-        let _ = self.create_node(parent, &name, NodeKind::Dir { entries: BTreeMap::new() })?;
+        let _ = self.create_node(
+            parent,
+            &name,
+            NodeKind::Dir {
+                entries: BTreeMap::new(),
+            },
+        )?;
         Ok(())
     }
 
@@ -416,7 +428,12 @@ impl VfsFs for RamFs {
         Ok(())
     }
 
-    fn open(&mut self, mount_fs: MountFs, path: &str, flags: OpenFlags) -> Result<Arc<dyn File>, VfsFsError> {
+    fn open(
+        &mut self,
+        mount_fs: MountFs,
+        path: &str,
+        flags: OpenFlags,
+    ) -> Result<Arc<dyn File>, VfsFsError> {
         let ino = match self.lookup_path(path) {
             Ok(ino) => ino,
             Err(VfsFsError::NotFound) if flags.contains(OpenFlags::CREAT) => {

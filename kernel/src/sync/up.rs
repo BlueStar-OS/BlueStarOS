@@ -1,28 +1,26 @@
-use core::cell::{RefCell};
-
-
+use core::cell::RefCell;
 
 //确保在单核环境中的数据安全共享访问
-pub struct UPSafeCell<T>{
-    inner:RefCell<T>
+pub struct UPSafeCell<T> {
+    inner: RefCell<T>,
 }
 
-unsafe impl<T> Sync  for UPSafeCell<T>{}
+unsafe impl<T> Sync for UPSafeCell<T> {}
 unsafe impl<T> Send for UPSafeCell<T> {}
 
-impl<T> UPSafeCell<T>{
-    pub const fn new(value:T)->Self{
-        UPSafeCell{
-            inner:RefCell::new(value)
+impl<T> UPSafeCell<T> {
+    pub const fn new(value: T) -> Self {
+        UPSafeCell {
+            inner: RefCell::new(value),
         }
     }
 
     #[track_caller]
-    pub fn lock(&self)->core::cell::RefMut<'_,T>{
+    pub fn lock(&self) -> core::cell::RefMut<'_, T> {
         match self.inner.try_borrow_mut() {
-            Ok(g) =>{g},
+            Ok(g) => g,
             Err(_) => {
-            kprintln!("Try lock error");
+                kprintln!("Try lock error");
                 let loc = core::panic::Location::caller();
                 panic!(
                     "RefCell already borrowed at {}:{}:{}",
@@ -35,7 +33,7 @@ impl<T> UPSafeCell<T>{
     }
 
     #[track_caller]
-    pub fn try_lock(&self)->Option<core::cell::RefMut<'_,T>>{
+    pub fn try_lock(&self) -> Option<core::cell::RefMut<'_, T>> {
         match self.inner.try_borrow_mut() {
             Ok(g) => Some(g),
             Err(_) => {

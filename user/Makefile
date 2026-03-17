@@ -2,6 +2,7 @@
 # - builds all binaries in src/bin into ELF (release, target: riscv64gc-unknown-none-elf)
 # - make img: create ../kernel/disk.img (GPT 4 partitions), format p1 ext4 / p2 FAT32 / p3 ext4 / p4 FAT32, and mark p1 as `rootfs`
 
+ARCH ?= riscv64
 TARGET := riscv64gc-unknown-none-elf
 AARCH64_TARGET := aarch64-unknown-none-softfloat
 RV_MUSL_GCC := riscv64-linux-musl-gcc
@@ -19,6 +20,16 @@ OSCOMP_ELF_DIR := ../kernel/testsuits-for-oskernel/riscv-syscalls-testing/user/b
 .ONESHELL:
 
 .PHONY: all build build-aarch64 img consent_img makeimg clean FORCE
+
+ifeq ($(ARCH),aarch64)
+IMG_BUILD_TARGET := build-aarch64
+IMG_BIN_DIR := $(AARCH64_BUILD_DIR)
+IMG_CTEST_OUT_DIR := $(AARCH64_CTEST_OUT_DIR)
+else
+IMG_BUILD_TARGET := build
+IMG_BIN_DIR := $(BUILD_DIR)
+IMG_CTEST_OUT_DIR := $(CTEST_OUT_DIR)
+endif
 
 all: build build-aarch64
 
@@ -44,7 +55,7 @@ build-aarch64: FORCE
 	done
 	@rm -rf .cargo
 
-img: build
+img: $(IMG_BUILD_TARGET)
 	@echo "Creating $(KERNEL_IMG)..."
 	# 1) 创建一个 100MiB 的原始镜像文件：这里仅生成“裸磁盘”，不包含分区/文件系统
 	dd if=/dev/zero of=$(KERNEL_IMG) bs=1M count=100
@@ -83,11 +94,11 @@ img: build
 	sudo mkdir -p $$TMPDIR/test
 	for b in $(BINS); do
 		echo "Copying $$b..."
-		sudo cp $(BUILD_DIR)/$$b $$TMPDIR/test/
+		sudo cp $(IMG_BIN_DIR)/$$b $$TMPDIR/test/
 		sudo chmod +x $$TMPDIR/test/$$b
 	done
-	if [ -d "$(CTEST_OUT_DIR)" ]; then
-		for f in $(CTEST_OUT_DIR)/* ; do
+	if [ -d "$(IMG_CTEST_OUT_DIR)" ]; then
+		for f in $(IMG_CTEST_OUT_DIR)/* ; do
 			if [ -f "$$f" ]; then
 				name=$$(basename $$f)
 				echo "Copying ctest $$name..."

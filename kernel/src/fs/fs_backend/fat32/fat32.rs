@@ -2,15 +2,17 @@
 //!
 //! Endianness: FAT32 on-disk fields are little-endian.
 
-use alloc::string::String;
 use crate::alloc::string::ToString;
+use crate::fs::vfs::{
+    File, LinuxDirent64, MountFs, OpenFlags, VfsFs, VfsFsError, VfsStat, VFS_DT_DIR, VFS_DT_REG,
+};
+use alloc::format;
+use alloc::string::String;
 use alloc::sync::Arc;
+use alloc::vec;
 use alloc::vec::Vec;
 use core::any::Any;
-use alloc::vec;
 use spin::Mutex;
-use alloc::format;
-use crate::fs::vfs::{File, LinuxDirent64, MountFs, OpenFlags, VfsFs, VfsFsError, VfsStat, VFS_DT_DIR, VFS_DT_REG};
 
 fn le16(b: &[u8]) -> u16 {
     u16::from_le_bytes([b[0], b[1]])
@@ -49,9 +51,9 @@ const ATTR_VOLUME_ID: u8 = 0x08;
 const FAT32_EOC_MIN: u32 = 0x0FFFFFF8;
 const FAT32_EOC: u32 = 0x0FFFFFFF;
 
-pub struct Fat32Fs{
+pub struct Fat32Fs {
     pub dev: Arc<dyn File>, // vblock 分区设备（按“分区内偏移”读写：offset=0 表示分区第0字节）
-    pub info: Fat32Info,     // 从 BPB/FSInfo 推导出来的几何与布局信息
+    pub info: Fat32Info,    // 从 BPB/FSInfo 推导出来的几何与布局信息
     mounted: bool,
 }
 
@@ -78,7 +80,13 @@ impl Fat32SfnEntry {
         let lo = le16(&raw[26..28]) as u32;
         let first_cluster = (hi << 16) | lo;
         let size = le32(&raw[28..32]);
-        Ok(Self { first_byte, name11, attr, first_cluster, size })
+        Ok(Self {
+            first_byte,
+            name11,
+            attr,
+            first_cluster,
+            size,
+        })
     }
 
     fn first_byte(&self) -> u8 {
@@ -150,7 +158,14 @@ impl Fat32LfnEntry {
             idx += 1;
         }
 
-        Ok(Self { ord, attr, entry_type, checksum, fst_clus_lo, name_u16 })
+        Ok(Self {
+            ord,
+            attr,
+            entry_type,
+            checksum,
+            fst_clus_lo,
+            name_u16,
+        })
     }
 
     fn ord(&self) -> u8 {
@@ -188,10 +203,10 @@ pub struct Fat32Info {
     pub bk_boot_sec: u16,  // BPB_BkBootSec：备份引导扇区号（相对分区起点的扇区号；常见 6）
 
     // --- computed layout (all in units of sectors, relative to partition start) ---
-    pub fat_lba0: u64,        // 第 1 份 FAT 的起始 LBA（分区内相对 LBA：fat_lba0=RsvdSecCnt）
-    pub data_lba0: u64,       // 数据区起始 LBA（分区内相对 LBA：data_lba0=RsvdSecCnt+NumFATs*FATSz32）
-    pub clus_bytes: u32,      // 每簇字节数 = byts_per_sec * sec_per_clus
-    pub total_clusters: u32,  // 总簇数（粗略计算：data_secs / sec_per_clus；用于 sanity check/遍历边界）
+    pub fat_lba0: u64, // 第 1 份 FAT 的起始 LBA（分区内相对 LBA：fat_lba0=RsvdSecCnt）
+    pub data_lba0: u64, // 数据区起始 LBA（分区内相对 LBA：data_lba0=RsvdSecCnt+NumFATs*FATSz32）
+    pub clus_bytes: u32, // 每簇字节数 = byts_per_sec * sec_per_clus
+    pub total_clusters: u32, // 总簇数（粗略计算：data_secs / sec_per_clus；用于 sanity check/遍历边界）
 }
 
 impl Fat32Info {
@@ -294,7 +309,11 @@ impl Fat32Fs {
         let mut sector = [0u8; FAT32_MIN_SECTOR_SIZE];
         dev.read_at(0, &mut sector)?;
         let info = Fat32Info::parse_from_boot_sector(&sector)?;
-        Ok(Self { dev, info, mounted: false })
+        Ok(Self {
+            dev,
+            info,
+            mounted: false,
+        })
     }
 }
 
@@ -359,7 +378,11 @@ fn split_parent(path: &str) -> Result<(String, String), VfsFsError> {
     if name.is_empty() {
         return Err(VfsFsError::Invalid);
     }
-    let parent_path = if parent.is_empty() { "/".to_string() } else { format!("/{}", parent) };
+    let parent_path = if parent.is_empty() {
+        "/".to_string()
+    } else {
+        format!("/{}", parent)
+    };
     Ok((parent_path, name.to_string()))
 }
 
@@ -396,7 +419,6 @@ fn lfn_checksum(sfn11: &[u8; 11]) -> u8 {
     }
     sum
 }
-
 
 fn lfn_u16_to_string(u16s: &[u16]) -> String {
     let mut s = String::new();
@@ -455,8 +477,6 @@ impl DirEnt {
 }
 
 impl Fat32Fs {
-
-
     fn sector_bytes(&self) -> usize {
         self.info.byts_per_sec as usize
     }
@@ -613,7 +633,13 @@ impl Fat32Fs {
         Ok((first, cur))
     }
 
-    fn read_file_at(&self, first_clus: u32, size: u32, offset: usize, out: &mut [u8]) -> Result<usize, VfsFsError> {
+    fn read_file_at(
+        &self,
+        first_clus: u32,
+        size: u32,
+        offset: usize,
+        out: &mut [u8],
+    ) -> Result<usize, VfsFsError> {
         let file_size = size as usize;
         if offset >= file_size {
             return Ok(0);
@@ -704,7 +730,11 @@ impl Fat32Fs {
         }
     }
 
-    fn find_free_dirent_slots(&self, dir_first: u32, need: usize) -> Result<(u32, usize), VfsFsError> {
+    fn find_free_dirent_slots(
+        &self,
+        dir_first: u32,
+        need: usize,
+    ) -> Result<(u32, usize), VfsFsError> {
         if need == 0 {
             return Err(VfsFsError::Invalid);
         }
@@ -756,11 +786,18 @@ impl Fat32Fs {
                 in_ext = true;
                 continue;
             }
-            let ok = (ch >= b'0' && ch <= b'9') || (ch >= b'a' && ch <= b'z') || (ch >= b'A' && ch <= b'Z') || ch == b'_';
+            let ok = (ch >= b'0' && ch <= b'9')
+                || (ch >= b'a' && ch <= b'z')
+                || (ch >= b'A' && ch <= b'Z')
+                || ch == b'_';
             if !ok {
                 continue;
             }
-            let up = if ch >= b'a' && ch <= b'z' { ch - 32 } else { ch };
+            let up = if ch >= b'a' && ch <= b'z' {
+                ch - 32
+            } else {
+                ch
+            };
             if in_ext {
                 if ext.len() < 3 {
                     ext.push(up);
@@ -784,7 +821,14 @@ impl Fat32Fs {
         Ok(out)
     }
 
-    fn write_lfn_dirent(&self, dirent_clus: u32, dirent_off: usize, ord: u8, checksum: u8, name13: &[u16; 13]) -> Result<(), VfsFsError> {
+    fn write_lfn_dirent(
+        &self,
+        dirent_clus: u32,
+        dirent_off: usize,
+        ord: u8,
+        checksum: u8,
+        name13: &[u16; 13],
+    ) -> Result<(), VfsFsError> {
         let mut buf = vec![0u8; self.info.clus_bytes as usize];
         self.read_cluster(dirent_clus, &mut buf)?;
         if dirent_off + DIR_ENTRY_SIZE > buf.len() {
@@ -843,7 +887,11 @@ impl Fat32Fs {
         for i in 0..lfn_cnt {
             let idx_from_end = lfn_cnt - 1 - i;
             let ord = (idx_from_end as u8) + 1;
-            let ord = if idx_from_end == lfn_cnt - 1 { ord | 0x40 } else { ord };
+            let ord = if idx_from_end == lfn_cnt - 1 {
+                ord | 0x40
+            } else {
+                ord
+            };
             let mut part = [0xFFFFu16; 13];
             for j in 0..13 {
                 let k = idx_from_end * 13 + j;
@@ -934,7 +982,13 @@ impl Fat32Fs {
                 if name_matches(&name, target) {
                     let first_clus = sfn.first_cluster();
                     let size = sfn.size();
-                    return Ok(DirEnt { attr, first_clus, size, dirent_clus: clus, dirent_off: off });
+                    return Ok(DirEnt {
+                        attr,
+                        first_clus,
+                        size,
+                        dirent_clus: clus,
+                        dirent_off: off,
+                    });
                 }
             }
 
@@ -966,7 +1020,10 @@ impl Fat32Fs {
         Ok((cur_clus, true, 0))
     }
 
-    fn open_path_with_loc(&self, path: &str) -> Result<(u32, bool, u32, Option<(u32, usize)>, Option<[u8; 11]>), VfsFsError> {
+    fn open_path_with_loc(
+        &self,
+        path: &str,
+    ) -> Result<(u32, bool, u32, Option<(u32, usize)>, Option<[u8; 11]>), VfsFsError> {
         if path == "/" || path.is_empty() {
             return Ok((self.info.root_clus, true, 0, None, None));
         }
@@ -980,7 +1037,13 @@ impl Fat32Fs {
                 self.read_cluster(ent.dirent_clus, &mut clbuf)?;
                 let raw = &clbuf[ent.dirent_off..ent.dirent_off + DIR_ENTRY_SIZE];
                 let sfn = Fat32SfnEntry::from_raw(raw)?;
-                return Ok((ent.first_clus, ent.is_dir(), ent.size, Some((ent.dirent_clus, ent.dirent_off)), Some(sfn.name11())));
+                return Ok((
+                    ent.first_clus,
+                    ent.is_dir(),
+                    ent.size,
+                    Some((ent.dirent_clus, ent.dirent_off)),
+                    Some(sfn.name11()),
+                ));
             }
             if !ent.is_dir() {
                 return Err(VfsFsError::NotDir);
@@ -1004,7 +1067,11 @@ impl Fat32Fs {
         }
         let clus_bytes = self.info.clus_bytes as usize;
         let end_pos = offset.saturating_add(data.len());
-        let need_clusters = if end_pos == 0 { 0 } else { (end_pos + clus_bytes - 1) / clus_bytes };
+        let need_clusters = if end_pos == 0 {
+            0
+        } else {
+            (end_pos + clus_bytes - 1) / clus_bytes
+        };
         if need_clusters == 0 {
             return Ok(0);
         }
@@ -1042,7 +1109,12 @@ impl Fat32Fs {
         Ok(copied)
     }
 
-    fn dir_getdents(&self, dir_first: u32, start_off: u64, max_len: usize) -> Result<Vec<u8>, VfsFsError> {
+    fn dir_getdents(
+        &self,
+        dir_first: u32,
+        start_off: u64,
+        max_len: usize,
+    ) -> Result<Vec<u8>, VfsFsError> {
         let mut stream: Vec<u8> = Vec::new();
         let mut clus = dir_first;
         let mut buf = vec![0u8; self.info.clus_bytes as usize];
@@ -1114,7 +1186,11 @@ impl Fat32Fs {
                 }
 
                 let first_clus = sfn.first_cluster();
-                let dtype = if (attr & ATTR_DIRECTORY) != 0 { VFS_DT_DIR } else { VFS_DT_REG };
+                let dtype = if (attr & ATTR_DIRECTORY) != 0 {
+                    VFS_DT_DIR
+                } else {
+                    VFS_DT_REG
+                };
 
                 let name_bytes = name.as_bytes();
                 let reclen = align_up(hdr_len + name_bytes.len() + 1, 8);
@@ -1170,16 +1246,20 @@ pub struct Fat32File {
 }
 
 impl Fat32File {
-    fn with_fs<T>(&self, f: impl FnOnce(&Fat32Fs) -> Result<T, VfsFsError>) -> Result<T, VfsFsError> {
+    fn with_fs<T>(
+        &self,
+        f: impl FnOnce(&Fat32Fs) -> Result<T, VfsFsError>,
+    ) -> Result<T, VfsFsError> {
         let mut guard = self.mount_fs.lock();
-        let fs = guard.as_any().downcast_ref::<Fat32Fs>().ok_or(VfsFsError::NotSupported)?;
+        let fs = guard
+            .as_any()
+            .downcast_ref::<Fat32Fs>()
+            .ok_or(VfsFsError::NotSupported)?;
         f(fs)
     }
 }
 
 impl File for Fat32File {
-    
-
     fn read(&self, buf: &mut [u8]) -> Result<usize, VfsFsError> {
         let mut off = self.offset.lock();
         let n = self.read_at(*off, buf)?;
@@ -1209,13 +1289,26 @@ impl File for Fat32File {
         }
         let mut first = self.first_clus.lock();
         let mut size = self.size.lock();
-        self.with_fs(|fs| fs.write_file_at(self.dirent_loc, self.sfn11, &mut *first, &mut *size, offset, buf))
+        self.with_fs(|fs| {
+            fs.write_file_at(
+                self.dirent_loc,
+                self.sfn11,
+                &mut *first,
+                &mut *size,
+                offset,
+                buf,
+            )
+        })
     }
 
     fn lseek(&self, offset: isize, whence: usize) -> Result<usize, VfsFsError> {
         let mut off = self.offset.lock();
         let cur = *off as isize;
-        let end = if self.is_dir { 0 } else { *self.size.lock() as isize };
+        let end = if self.is_dir {
+            0
+        } else {
+            *self.size.lock() as isize
+        };
         let new = match whence {
             0 => offset,
             1 => cur.saturating_add(offset),
@@ -1243,7 +1336,11 @@ impl File for Fat32File {
     fn stat(&self) -> Result<VfsStat, VfsFsError> {
         Ok(VfsStat {
             inode: *self.first_clus.lock(),
-            size: if self.is_dir { 0 } else { *self.size.lock() as u64 },
+            size: if self.is_dir {
+                0
+            } else {
+                *self.size.lock() as u64
+            },
             mode: 0,
             file_type: if self.is_dir { VFS_DT_DIR } else { VFS_DT_REG },
         })
@@ -1358,8 +1455,19 @@ impl VfsFs for Fat32Fs {
         dotdot[0] = b'.';
         dotdot[1] = b'.';
         self.write_sfn_dirent(new_clus, 0, dot, ATTR_DIRECTORY, new_clus, 0)?;
-        let parent_for_dotdot = if pclus == self.info.root_clus { self.info.root_clus } else { pclus };
-        self.write_sfn_dirent(new_clus, DIR_ENTRY_SIZE, dotdot, ATTR_DIRECTORY, parent_for_dotdot, 0)?;
+        let parent_for_dotdot = if pclus == self.info.root_clus {
+            self.info.root_clus
+        } else {
+            pclus
+        };
+        self.write_sfn_dirent(
+            new_clus,
+            DIR_ENTRY_SIZE,
+            dotdot,
+            ATTR_DIRECTORY,
+            parent_for_dotdot,
+            0,
+        )?;
 
         let _ = self.write_name_dirents(pclus, &dir_name, ATTR_DIRECTORY, new_clus, 0)?;
         Ok(())
@@ -1387,7 +1495,12 @@ impl VfsFs for Fat32Fs {
         Ok(())
     }
 
-    fn open(&mut self, mount_fs: MountFs, path: &str, flags: OpenFlags) -> Result<Arc<dyn File>, VfsFsError> {
+    fn open(
+        &mut self,
+        mount_fs: MountFs,
+        path: &str,
+        flags: OpenFlags,
+    ) -> Result<Arc<dyn File>, VfsFsError> {
         if !self.mounted {
             return Err(VfsFsError::Unmounted);
         }
@@ -1463,7 +1576,8 @@ impl VfsFs for Fat32Fs {
                 if !is_dir {
                     return Err(VfsFsError::NotDir);
                 }
-                let (dclus, doff, sfn11) = self.write_name_dirents(pclus, &file_name, 0x20, 0, 0)?;
+                let (dclus, doff, sfn11) =
+                    self.write_name_dirents(pclus, &file_name, 0x20, 0, 0)?;
                 created_loc = Some((dclus, doff));
                 created_sfn11 = Some(sfn11);
                 (0, false, 0, created_loc, created_sfn11)
@@ -1471,7 +1585,11 @@ impl VfsFs for Fat32Fs {
             Err(e) => return Err(e),
         };
 
-        let init_off = if flags.contains(OpenFlags::APPEND) { size as usize } else { 0 };
+        let init_off = if flags.contains(OpenFlags::APPEND) {
+            size as usize
+        } else {
+            0
+        };
         Ok(Arc::new(Fat32File {
             mount_fs,
             first_clus: Mutex::new(first_clus),

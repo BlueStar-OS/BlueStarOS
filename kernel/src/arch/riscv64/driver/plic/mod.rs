@@ -1,14 +1,14 @@
 // PLIC (Platform-Level Interrupt Controller) 驱动
 // QEMU riscv64 virt 平台专用
 
+use crate::arch::memory::*;
+use crate::dtb::DeviceNode;
 use crate::dtb_probe;
 use crate::info;
-use crate::dtb::DeviceNode;
-use crate::VirNumRange;
-use crate::arch::memory::*;
 use crate::kprintln;
 use crate::register_kernel_mmio;
 use crate::MapAreaFlags;
+use crate::VirNumRange;
 /// QEMU virt PLIC 基地址
 const PLIC_BASE: usize = 0x0C00_0000;
 
@@ -89,14 +89,16 @@ pub fn plic_fn(node: &DeviceNode, _compatible: &str) -> Result<(), &'static str>
     }
 
     let mmio_range = VirNumRange::new(VirAddr(base_addr), VirAddr(base_addr + size - 1));
-    let flags = MapAreaFlags::V | MapAreaFlags::R | MapAreaFlags::W
-        | MapAreaFlags::A | MapAreaFlags::G | MapAreaFlags::DEV;
+    let flags = MapAreaFlags::V
+        | MapAreaFlags::R
+        | MapAreaFlags::W
+        | MapAreaFlags::A
+        | MapAreaFlags::G
+        | MapAreaFlags::DEV;
     register_kernel_mmio(mmio_range, flags);
 
-   
     Ok(())
 }
-
 
 dtb_probe! {
     compatible: "sifive,plic-1.0.0",

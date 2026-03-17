@@ -358,7 +358,7 @@ mod command {
 
 
 #[no_mangle]
-pub fn main(){
+pub fn main() -> usize {
     let mut exit_code = -1;
     ui::banner();
     loop {

@@ -1,21 +1,20 @@
 //创建文件夹功能模块
 
-
 use crate::alloc::string::ToString;
 use crate::ext4_backend::blockdev::*;
 use crate::ext4_backend::config::*;
 use crate::ext4_backend::disknode::*;
 use crate::ext4_backend::endian::*;
 use crate::ext4_backend::entries::*;
+use crate::ext4_backend::error::*;
 use crate::ext4_backend::ext4::*;
 use crate::ext4_backend::extents_tree::*;
 use crate::ext4_backend::file::*;
 use crate::ext4_backend::loopfile::*;
-use crate::ext4_backend::error::*;
 use alloc::string::String;
 use alloc::vec::Vec;
-use log::error;
 use log::debug;
+use log::error;
 
 #[derive(Debug)]
 pub enum FileError {
@@ -94,7 +93,7 @@ pub fn get_inode_with_num<B: BlockDevice>(
         let mut found_inode_num: Option<u64> = None;
 
         for lbn in 0..total_blocks {
-            let phys = match resolve_inode_block( device, &mut current_inode, lbn as u32)? {
+            let phys = match resolve_inode_block(device, &mut current_inode, lbn as u32)? {
                 Some(b) => b,
                 None => continue,
             };
@@ -323,17 +322,16 @@ pub fn insert_dir_entry<B: BlockDevice>(
     )?;
 
     // 在新分配的数据块中写入唯一的目录项，占满整个块
-    fs.datablock_cache
-        .modify(device, new_block, |data| {
-            for b in data.iter_mut() {
-                *b = 0;
-            }
-            let mut full_entry = new_entry;
-            full_entry.rec_len = BLOCK_SIZE as u16;
-            full_entry.to_disk_bytes(&mut data[0..8]);
-            let nlen = full_entry.name_len as usize;
-            data[8..8 + nlen].copy_from_slice(&full_entry.name[..nlen]);
-        })?;
+    fs.datablock_cache.modify(device, new_block, |data| {
+        for b in data.iter_mut() {
+            *b = 0;
+        }
+        let mut full_entry = new_entry;
+        full_entry.rec_len = BLOCK_SIZE as u16;
+        full_entry.to_disk_bytes(&mut data[0..8]);
+        let nlen = full_entry.name_len as usize;
+        data[8..8 + nlen].copy_from_slice(&full_entry.name[..nlen]);
+    })?;
 
     Ok(())
 }
@@ -365,7 +363,10 @@ pub fn mkdir_with_ino<B: BlockDevice>(
     if norm_path.is_empty() || norm_path == "/" {
         debug!("Creating root directory");
         if let Err(e) = create_root_directory_entry(fs, device) {
-            error!("mkdir create_root_directory_entry failed path={} err={:?} ({})", path, e, e);
+            error!(
+                "mkdir create_root_directory_entry failed path={} err={:?} ({})",
+                path, e, e
+            );
             return None;
         }
         return match fs.get_root(device) {
@@ -384,7 +385,10 @@ pub fn mkdir_with_ino<B: BlockDevice>(
         return match fs.get_root(device) {
             Ok(inode) => Some((fs.root_inode, inode)),
             Err(e) => {
-                error!("mkdir get_root failed(empty parts) path={} err={:?} ({})", path, e, e);
+                error!(
+                    "mkdir get_root failed(empty parts) path={} err={:?} ({})",
+                    path, e, e
+                );
                 None
             }
         };
@@ -404,7 +408,10 @@ pub fn mkdir_with_ino<B: BlockDevice>(
 
         if let Ok(None) = get_file_inode(fs, device, &cur_path) {
             if mkdir(device, fs, &cur_path).is_none() {
-                error!("mkdir recursive parent create failed path={} parent={}", path, cur_path);
+                error!(
+                    "mkdir recursive parent create failed path={} parent={}",
+                    path, cur_path
+                );
                 return None;
             }
         }
@@ -428,7 +435,10 @@ pub fn mkdir_with_ino<B: BlockDevice>(
         match get_inode_with_num(fs, device, &parent).ok().flatten() {
             Some((n, ino)) => (n, ino),
             None => {
-                error!("mkdir get parent inode failed path={} parent={} child={}", path, parent, child);
+                error!(
+                    "mkdir get parent inode failed path={} parent={} child={}",
+                    path, parent, child
+                );
                 return None;
             }
         };
@@ -437,7 +447,10 @@ pub fn mkdir_with_ino<B: BlockDevice>(
     if (parent.is_empty() || parent == "/") && child.is_empty() {
         debug!("Creating root directory");
         if let Err(e) = create_root_directory_entry(fs, device) {
-            error!("mkdir create_root_directory_entry failed path={} err={:?} ({})", path, e, e);
+            error!(
+                "mkdir create_root_directory_entry failed path={} err={:?} ({})",
+                path, e, e
+            );
             return None;
         }
         return match fs.get_root(device) {
@@ -453,7 +466,10 @@ pub fn mkdir_with_ino<B: BlockDevice>(
     if (parent.is_empty() || parent == "/") && child == "lost+found" {
         debug!("Creating /lost+found directory");
         if let Err(e) = create_lost_found_directory(fs, device) {
-            error!("mkdir create_lost_found_directory failed path={} err={:?} ({})", path, e, e);
+            error!(
+                "mkdir create_lost_found_directory failed path={} err={:?} ({})",
+                path, e, e
+            );
             return None;
         }
         return match get_inode_with_num(fs, device, "/lost+found").ok().flatten() {
@@ -469,7 +485,10 @@ pub fn mkdir_with_ino<B: BlockDevice>(
     let new_dir_ino = match fs.alloc_inode(device) {
         Ok(ino) => ino,
         Err(e) => {
-            error!("mkdir alloc_inode failed path={} parent={} child={} err={:?} ({})", path, parent, child, e, e);
+            error!(
+                "mkdir alloc_inode failed path={} parent={} child={} err={:?} ({})",
+                path, parent, child, e, e
+            );
             return None;
         }
     };
@@ -478,7 +497,10 @@ pub fn mkdir_with_ino<B: BlockDevice>(
     let data_block = match fs.alloc_block(device) {
         Ok(b) => b,
         Err(e) => {
-            error!("mkdir alloc_block failed path={} ino={} err={:?} ({})", path, new_dir_ino, e, e);
+            error!(
+                "mkdir alloc_block failed path={} ino={} err={:?} ({})",
+                path, new_dir_ino, e, e
+            );
             return None;
         }
     };
@@ -544,7 +566,10 @@ pub fn mkdir_with_ino<B: BlockDevice>(
         })
         .is_err()
     {
-        error!("mkdir modify_inode failed path={} ino={}", path, new_dir_ino);
+        error!(
+            "mkdir modify_inode failed path={} ino={}",
+            path, new_dir_ino
+        );
         return None;
     }
 
@@ -554,7 +579,10 @@ pub fn mkdir_with_ino<B: BlockDevice>(
         let p_inode_table_start = match fs.group_descs.get(p_group as usize) {
             Some(desc) => desc.inode_table(),
             None => {
-                error!("mkdir parent group desc missing path={} parent_ino={} group={}", path, parent_ino_num, p_group);
+                error!(
+                    "mkdir parent group desc missing path={} parent_ino={} group={}",
+                    path, parent_ino_num, p_group
+                );
                 return None;
             }
         };
@@ -597,10 +625,7 @@ pub fn mkdir_with_ino<B: BlockDevice>(
     {
         error!(
             "mkdir insert_dir_entry failed path={} parent_ino={} child={} ino={}",
-            path,
-            parent_ino_num,
-            child,
-            new_dir_ino
+            path, parent_ino_num, child, new_dir_ino
         );
         return None;
     }
@@ -610,10 +635,7 @@ pub fn mkdir_with_ino<B: BlockDevice>(
         Err(e) => {
             error!(
                 "mkdir get_inode_by_num failed path={} ino={} err={:?} ({})",
-                path,
-                new_dir_ino,
-                e,
-                e
+                path, new_dir_ino, e, e
             );
             None
         }
@@ -788,7 +810,7 @@ pub fn create_lost_found_directory<B: BlockDevice>(
 
     //这里也需要根据extend来解析
     let mut root_inode = fs.get_root(block_dev)?;
-    let root_block = resolve_inode_block( block_dev, &mut root_inode, 0)?
+    let root_block = resolve_inode_block(block_dev, &mut root_inode, 0)?
         .expect("lost+found logical_block can't map to physical blcok!");
 
     if root_block == 0 {
@@ -868,9 +890,7 @@ pub fn create_lost_found_directory<B: BlockDevice>(
     //  记录到超级块
     fs.superblock.s_lpf_ino = lost_ino;
 
-    debug!(
-        "lost+found directory created: inode={lost_ino}, data_block={data_block}"
-    );
+    debug!("lost+found directory created: inode={lost_ino}, data_block={data_block}");
 
     Ok(())
 }

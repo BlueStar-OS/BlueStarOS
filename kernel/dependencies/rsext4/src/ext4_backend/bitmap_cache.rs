@@ -1,10 +1,10 @@
 //! 位图缓存模块
 
 use crate::ext4_backend::blockdev::*;
-use alloc::collections::BTreeMap;
-use alloc::vec::Vec;
 use crate::ext4_backend::error::*;
 use crate::BITMAP_CACHE_MAX;
+use alloc::collections::BTreeMap;
+use alloc::vec::Vec;
 use log::debug;
 
 /// 位图类型
@@ -219,7 +219,7 @@ impl BitmapCache {
         block_dev: &mut Jbd2Dev<B>,
         key: &CacheKey,
     ) -> BlockDevResult<()> {
-        if let Some(bitmap) = self.cache.remove(key){
+        if let Some(bitmap) = self.cache.remove(key) {
             if bitmap.dirty {
                 Self::write_bitmap_static(block_dev, bitmap.block_num, &bitmap.data)?;
             }
@@ -270,7 +270,7 @@ impl BitmapCache {
         block_dev: &mut Jbd2Dev<B>,
         key: &CacheKey,
     ) -> BlockDevResult<()> {
-        if let Some(bitmap) = self.cache.get(key){
+        if let Some(bitmap) = self.cache.get(key) {
             if bitmap.dirty {
                 let block_num = bitmap.block_num;
                 let data = bitmap.data.clone();

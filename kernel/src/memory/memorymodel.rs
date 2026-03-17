@@ -1,10 +1,10 @@
 //! 存储从DTB扫描的物理内存区域信息
 //! dtb::init() 扫描 memory 节点后注册到 KERNEL_MAIN_MEMORY
 
+use crate::config::MB;
+use crate::sync::UPSafeCell;
 use alloc::vec::Vec;
 use lazy_static::lazy_static;
-use crate::sync::UPSafeCell;
-use crate::config::MB;
 
 /// 一段物理内存区域（物理地址）
 #[derive(Debug, Clone, Copy)]
@@ -35,8 +35,12 @@ impl MachineMemoryInfo {
 
     /// 注册一段物理内存区域
     pub fn register(&mut self, start: usize, end: usize) {
-        kprintln!("[MemModel] Register Physical Memory region: {:#x}-{:#x} ({} MB)",
-               start, end, (end - start) / MB);
+        kprintln!(
+            "[MemModel] Register Physical Memory region: {:#x}-{:#x} ({} MB)",
+            start,
+            end,
+            (end - start) / MB
+        );
         self.regions.push(PhysMemoryRange { start, end });
     }
 

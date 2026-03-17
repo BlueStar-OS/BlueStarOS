@@ -21,12 +21,11 @@ DRIVER_FEATURES ?= qemu_plat
 
 QEMU_DEVICE_ARGS = \
 	-drive file=disk.img,format=raw,if=none,id=x0 \
+	-drive file=emmc.img,format=raw,if=none,id=x1 \
 	-net none \
 	-device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0 \
-	-device virtio-gpu-device,bus=virtio-mmio-bus.1 \
-	-device sdhci-pci \
-	-device sd-card,drive=emmc0 \
-	-drive id=emmc0,file=emmc.img,format=raw,if=none
+	-device virtio-blk-device,drive=x1,bus=virtio-mmio-bus.2 \
+	-device virtio-gpu-device,bus=virtio-mmio-bus.1
 
 
 else ifeq ($(ARCH), aarch64)
@@ -40,18 +39,15 @@ QEMU_KERNEL = -kernel $(KERNEL_BIN)
 QEMU_DEBUG_BOOT = $(QEMU_BIOS) $(QEMU_KERNEL)
 GDB_SET_ARCH = -ex 'set arch aarch64'
 # 驱动 features
-DRIVER_FEATURES ?=
+DRIVER_FEATURES ?= qemu_plat
 
 
 QEMU_DEVICE_ARGS = \
 	-machine virt,gic-version=3  \
-	-drive file=disk.img,format=raw,if=none,id=x0 \
+	-drive file=emmc.img,format=raw,if=none,id=x0 \
 	-net none \
 	-device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0 \
 	-device virtio-gpu-device,bus=virtio-mmio-bus.1 \
-	-device sdhci-pci \
-	-device sd-card,drive=emmc0 \
-	-drive id=emmc0,file=emmc.img,format=raw,if=none
 
 
 else
@@ -100,10 +96,12 @@ build: user-makeimg
 	@echo "Copied to src/BlueStarOS.elf and src/BlueStarOS.bin"
 
 user-makeimg:
-	$(MAKE) -C $(USER_DIR) img
+	$(MAKE) -C $(USER_DIR) img ARCH=$(ARCH)
+	@cp $(USER_DIR)/../kernel/disk.img $(USER_DIR)/../kernel/emmc.img
+	@echo "Synced disk.img -> emmc.img"
 
 user-consent-img:
-	$(MAKE) -C $(USER_DIR) consent_img
+	$(MAKE) -C $(USER_DIR) consent_img ARCH=$(ARCH)
 
 env:
 	(rustup target list | grep "$(TARGET) (installed)") || rustup target add $(TARGET)

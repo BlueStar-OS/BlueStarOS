@@ -134,8 +134,15 @@ fn main()->usize{
 
 pub fn getchar()->char{
    let mut ch: u8 = 0;
-   let _ = syscall::sys_read(FD_TYPE_STDIN, &mut ch as *mut u8 as usize, 1);
-   ch as char
+   let ch_ptr = core::ptr::addr_of_mut!(ch);
+
+   
+   syscall::sys_read(FD_TYPE_STDIN, ch_ptr as usize, 1);
+   
+   let ch_now = unsafe { core::ptr::read_volatile(ch_ptr) };
+   
+   
+   ch_now as char
 }
 
 pub fn readline(ptr:usize,len:usize)->isize{//返回读取的字符数量 目前实现比较原始，后期封装

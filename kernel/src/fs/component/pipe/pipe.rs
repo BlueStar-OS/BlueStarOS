@@ -1,26 +1,26 @@
 use alloc::sync::{Arc, Weak};
 
-use crate::sync::UPSafeCell;
 use crate::fs::vfs::{File, VfsFsError};
+use crate::sync::UPSafeCell;
 use crate::task::TASK_MANAER;
 
-pub const RINGBUFFERSIZE:usize = 512;
+pub const RINGBUFFERSIZE: usize = 512;
 
 ///pipe模型
-pub struct Pipe{
-    readble:bool,
-    writeble:bool,
-    ringbuffer:Arc<UPSafeCell<PipeRingBuffer>>,
+pub struct Pipe {
+    readble: bool,
+    writeble: bool,
+    ringbuffer: Arc<UPSafeCell<PipeRingBuffer>>,
 }
 
 ///pipe环形缓冲区模型
-pub struct PipeRingBuffer{
-    buffer:[u8;RINGBUFFERSIZE],
-    status:PipeRingBufferStatus,
-    head:usize,
-    tail:usize,
-    write_point:Weak<UPSafeCell<Pipe>>, //写段弱引用计数,检测写段是否关闭
-    read_point:Weak<UPSafeCell<Pipe>>, //读端弱引用计数，检测读端是否关闭
+pub struct PipeRingBuffer {
+    buffer: [u8; RINGBUFFERSIZE],
+    status: PipeRingBufferStatus,
+    head: usize,
+    tail: usize,
+    write_point: Weak<UPSafeCell<Pipe>>, //写段弱引用计数,检测写段是否关闭
+    read_point: Weak<UPSafeCell<Pipe>>,  //读端弱引用计数，检测读端是否关闭
 }
 
 ///pipe环形缓冲区状态
@@ -38,7 +38,7 @@ impl PipeRingBuffer {
             head: 0,
             tail: 0,
             write_point: Weak::new(),
-            read_point:Weak::new(),
+            read_point: Weak::new(),
         }
     }
 
@@ -56,8 +56,6 @@ impl PipeRingBuffer {
     fn is_read_end_closed(&self) -> bool {
         self.read_point.upgrade().is_none()
     }
-
-
 
     fn readable_len(&self) -> usize {
         match self.status {

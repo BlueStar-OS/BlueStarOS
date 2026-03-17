@@ -154,5 +154,3 @@ pub fn from_syscall_ret(ret: isize) -> Result<usize, BlueErr> {
         Err(BlueErr::from((-ret) as i32))
     }
 }
-
-

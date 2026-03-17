@@ -102,16 +102,3 @@ ld x2,2*8(sp) #最后恢复sp为user普通栈指针
 sret
 #回到触发异常的那条指令
 
-.global kernel_traped_forbid
-kernel_traped_forbid:
-l:
-    # marker
-    li t6, 0x5555666677778888
-
-
-    la sp, kernel_kernel_trap_top
-    addi sp, sp, -32 #预留空间，防止prologue打穿
-    # long jump
-    la t5, skernel_traped_forbid
-    jr t5
-

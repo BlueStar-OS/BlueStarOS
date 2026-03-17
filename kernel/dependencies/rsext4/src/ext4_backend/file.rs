@@ -2,22 +2,19 @@ use core::u32;
 
 use alloc::string::ToString;
 use alloc::vec::Vec;
-use log::{error, info};
 use log::{debug, warn};
+use log::{error, info};
 
 use crate::ext4_backend::blockdev::*;
 use crate::ext4_backend::config::*;
 use crate::ext4_backend::dir::*;
 use crate::ext4_backend::disknode::*;
 use crate::ext4_backend::entries::*;
+use crate::ext4_backend::error::*;
 use crate::ext4_backend::ext4::*;
 use crate::ext4_backend::extents_tree::*;
 use crate::ext4_backend::loopfile::*;
-use crate::ext4_backend::error::*;
 use alloc::string::String;
-
-
-
 
 pub fn rename<B: BlockDevice>(
     device: &mut Jbd2Dev<B>,
@@ -37,17 +34,29 @@ pub fn rename<B: BlockDevice>(
         }
     }
     //删除了还存在？错误!
-    if get_inode_with_num(fs, device, &new_norm).ok().flatten().is_some() {
+    if get_inode_with_num(fs, device, &new_norm)
+        .ok()
+        .flatten()
+        .is_some()
+    {
         return Err(BlockDevError::WriteError);
     }
 
     mv(fs, device, &old_norm, &new_norm)?;
 
     // 校验
-    if get_inode_with_num(fs, device, &old_norm).ok().flatten().is_some() {
+    if get_inode_with_num(fs, device, &old_norm)
+        .ok()
+        .flatten()
+        .is_some()
+    {
         return Err(BlockDevError::WriteError);
     }
-    if get_inode_with_num(fs, device, &new_norm).ok().flatten().is_none() {
+    if get_inode_with_num(fs, device, &new_norm)
+        .ok()
+        .flatten()
+        .is_none()
+    {
         return Err(BlockDevError::WriteError);
     }
 
@@ -78,10 +87,10 @@ pub fn truncate_with_ino<B: BlockDevice>(
     truncate_size: u64,
 ) -> BlockDevResult<()> {
     let mut inode = fs.get_inode_by_num(device, inode_num)?;
-    
+
     if !inode.is_file() {
         warn!("trubcate abnormal file")
-    }else if inode.is_symlink() {
+    } else if inode.is_symlink() {
         error!("Can't truncate symlink file!");
         return Err(BlockDevError::Unsupported);
     }
@@ -141,8 +150,6 @@ pub fn truncate_with_ino<B: BlockDevice>(
         }
 
         if new_blocks > old_blocks {
-
-
             let mut new_blocks_map: Vec<(u32, u64)> = Vec::new();
             for lbn in old_blocks as u32..new_blocks as u32 {
                 let phys = fs.alloc_block(device)?;
@@ -266,11 +273,11 @@ pub fn create_symbol_link<B: BlockDevice>(
         ("/".to_string(), dst_norm)
     };
 
-    let (parent_ino_num, parent_inode) = match get_inode_with_num(fs, device, &parent).ok().flatten()
-    {
-        Some(v) => v,
-        None => return Err(BlockDevError::InvalidInput),
-    };
+    let (parent_ino_num, parent_inode) =
+        match get_inode_with_num(fs, device, &parent).ok().flatten() {
+            Some(v) => v,
+            None => return Err(BlockDevError::InvalidInput),
+        };
     if !parent_inode.is_dir() {
         return Err(BlockDevError::InvalidInput);
     }
@@ -289,7 +296,6 @@ pub fn create_symbol_link<B: BlockDevice>(
     new_inode.i_size_lo = size_lo;
     new_inode.i_size_high = size_hi;
 
-
     if target_len == 0 {
         new_inode.i_blocks_lo = 0;
         new_inode.l_i_blocks_high = 0;
@@ -299,12 +305,8 @@ pub fn create_symbol_link<B: BlockDevice>(
         let mut raw = [0u8; 60];
         raw[..target_len].copy_from_slice(target_bytes);
         for i in 0..15 {
-            new_inode.i_block[i] = u32::from_le_bytes([
-                raw[i * 4],
-                raw[i * 4 + 1],
-                raw[i * 4 + 2],
-                raw[i * 4 + 3],
-            ]);
+            new_inode.i_block[i] =
+                u32::from_le_bytes([raw[i * 4], raw[i * 4 + 1], raw[i * 4 + 2], raw[i * 4 + 3]]);
         }
         new_inode.i_blocks_lo = 0;
         new_inode.l_i_blocks_high = 0;
@@ -361,16 +363,11 @@ pub fn create_symbol_link<B: BlockDevice>(
     Ok(())
 }
 
-
-
-
 fn read_symlink_target<B: BlockDevice>(
     device: &mut Jbd2Dev<B>,
     fs: &mut Ext4FileSystem,
     inode: &mut Ext4Inode,
 ) -> BlockDevResult<Vec<u8>> {
-
-
     let size = inode.size() as usize;
     if size == 0 {
         return Ok(Vec::new());
@@ -400,7 +397,7 @@ fn read_symlink_target<B: BlockDevice>(
         }
     } else {
         for lbn in 0..total_blocks {
-            let phys = match resolve_inode_block( device, inode, lbn as u32)? {
+            let phys = match resolve_inode_block(device, inode, lbn as u32)? {
                 Some(b) => b,
                 None => break,
             };
@@ -411,8 +408,6 @@ fn read_symlink_target<B: BlockDevice>(
     }
 
     buf.truncate(size);
-
-  
 
     Ok(buf)
 }
@@ -443,7 +438,6 @@ fn read_file_follow<B: BlockDevice>(
     path: &str,
     depth: usize,
 ) -> BlockDevResult<Option<Vec<u8>>> {
-  
     if depth > 8 {
         return Err(BlockDevError::InvalidInput);
     }
@@ -491,7 +485,7 @@ fn read_file_follow<B: BlockDevice>(
         }
     } else {
         for lbn in 0..total_blocks {
-            let phys = match resolve_inode_block( device, &mut inode, lbn as u32)? {
+            let phys = match resolve_inode_block(device, &mut inode, lbn as u32)? {
                 Some(b) => b,
                 None => break,
             };
@@ -503,8 +497,6 @@ fn read_file_follow<B: BlockDevice>(
     }
 
     buf.truncate(size);
-
-   
 
     Ok(Some(buf))
 }
@@ -566,7 +558,10 @@ pub fn mv<B: BlockDevice>(
     {
         Some(v) => v,
         None => {
-            error!("mv old parent not found: old_path={} old_parent={}", old_path, old_parent);
+            error!(
+                "mv old parent not found: old_path={} old_parent={}",
+                old_path, old_parent
+            );
             return Err(BlockDevError::InvalidInput);
         }
     };
@@ -605,7 +600,7 @@ pub fn mv<B: BlockDevice>(
             total_size.div_ceil(BLOCK_SIZE)
         };
         for lbn in 0..total_blocks {
-            let phys = match resolve_inode_block( block_dev, &mut old_parent_inode, lbn as u32) {
+            let phys = match resolve_inode_block(block_dev, &mut old_parent_inode, lbn as u32) {
                 Ok(Some(b)) => b,
                 _ => continue,
             };
@@ -649,18 +644,31 @@ pub fn mv<B: BlockDevice>(
     {
         Some(v) => v,
         None => {
-            error!("mv new parent not found: new_path={} new_parent={}", new_path, new_parent);
+            error!(
+                "mv new parent not found: new_path={} new_parent={}",
+                new_path, new_parent
+            );
             return Err(BlockDevError::InvalidInput);
         }
     };
     if !new_parent_inode.is_dir() {
-        error!("mv new parent is not dir: new_path={} new_parent={}", new_path, new_parent);
+        error!(
+            "mv new parent is not dir: new_path={} new_parent={}",
+            new_path, new_parent
+        );
         return Err(BlockDevError::InvalidInput);
     }
 
     // new_path 已存在则返回
-    if get_inode_with_num(fs, block_dev, &new_norm).ok().flatten().is_some() {
-        error!("mv destination already exists: new_path={} new_norm={}", new_path, new_norm);
+    if get_inode_with_num(fs, block_dev, &new_norm)
+        .ok()
+        .flatten()
+        .is_some()
+    {
+        error!(
+            "mv destination already exists: new_path={} new_norm={}",
+            new_path, new_norm
+        );
         return Err(BlockDevError::InvalidInput);
     }
 
@@ -711,7 +719,10 @@ pub fn mv<B: BlockDevice>(
     let mut moved_inode = match fs.get_inode_by_num(block_dev, src_ino) {
         Ok(v) => v,
         Err(e) => {
-            error!("mv get_inode_by_num failed ino={} err={:?} ({})", src_ino, e, e);
+            error!(
+                "mv get_inode_by_num failed ino={} err={:?} ({})",
+                src_ino, e, e
+            );
             return Err(e);
         }
     };
@@ -723,7 +734,10 @@ pub fn mv<B: BlockDevice>(
         {
             Some((n, _)) => n,
             None => {
-                error!("mv old parent vanished while moving dir: old_parent={}", old_parent);
+                error!(
+                    "mv old parent vanished while moving dir: old_parent={}",
+                    old_parent
+                );
                 return Err(BlockDevError::InvalidInput);
             }
         };
@@ -736,10 +750,13 @@ pub fn mv<B: BlockDevice>(
             });
 
             // 更新被移动目录的 ".." 指向新父目录 inode
-            let first_blk = match resolve_inode_block( block_dev, &mut moved_inode, 0) {
+            let first_blk = match resolve_inode_block(block_dev, &mut moved_inode, 0) {
                 Ok(Some(b)) => b,
                 _ => {
-                    error!("mv resolve_inode_block failed for moved dir ino={}", src_ino);
+                    error!(
+                        "mv resolve_inode_block failed for moved dir ino={}",
+                        src_ino
+                    );
                     return Err(BlockDevError::Corrupted);
                 }
             };
@@ -806,9 +823,7 @@ pub fn unlink<B: BlockDevice>(
     let blocks = match resolve_inode_block_allextend(fs, block_dev, &mut parent_inode) {
         Ok(v) => v,
         Err(e) => {
-            warn!(
-                "Parse parent dir blocks failed, unlink failed: {e:?} parent={parent_path}"
-            );
+            warn!("Parse parent dir blocks failed, unlink failed: {e:?} parent={parent_path}");
             return;
         }
     };
@@ -892,9 +907,7 @@ pub fn unlink<B: BlockDevice>(
     //最后调用removeentryfromparent移除entry
     let removed = remove_inodeentry_from_parentdir(fs, block_dev, &parent_path, &child_name);
     if !removed {
-        warn!(
-            "Dir entry '{child_name}' not found under parent {parent_path} in unlink"
-        );
+        warn!("Dir entry '{child_name}' not found under parent {parent_path} in unlink");
     }
 }
 
@@ -967,7 +980,8 @@ pub fn link<B: BlockDevice>(
     let mut copied_ft: Option<u8> = None;
     if let Some((_lpino, mut lp_inode)) = get_inode_with_num(fs, block_dev, &linked_parent_path)
         .ok()
-        .flatten(){
+        .flatten()
+    {
         if let Ok(blocks) = resolve_inode_block_allextend(fs, block_dev, &mut lp_inode) {
             for &phys in blocks.values() {
                 let cached = match fs.datablock_cache.get_or_load(block_dev, phys) {
@@ -1040,9 +1054,7 @@ pub fn remove_inodeentry_from_parentdir<B: BlockDevice>(
     {
         Some(v) => v,
         None => {
-            warn!(
-                "Parent directory not found for path {parent_path}, remove entry failed"
-            );
+            warn!("Parent directory not found for path {parent_path}, remove entry failed");
             return false;
         }
     };
@@ -1063,7 +1075,7 @@ pub fn remove_inodeentry_from_parentdir<B: BlockDevice>(
         if removed {
             break;
         }
-        let phys = match resolve_inode_block( block_dev, &mut parent_inode, lbn as u32) {
+        let phys = match resolve_inode_block(block_dev, &mut parent_inode, lbn as u32) {
             Ok(Some(b)) => b,
             _ => continue,
         };
@@ -1192,14 +1204,13 @@ pub fn delete_dir<B: BlockDevice>(fs: &mut Ext4FileSystem, block_dev: &mut Jbd2D
         if frame.stage == 0 {
             let block_bytes = BLOCK_SIZE;
 
-            let dir_blocks =
-                match resolve_inode_block_allextend(fs, block_dev, &mut frame.inode) {
-                    Ok(v) => v,
-                    Err(e) => {
-                        warn!("Parse dir blocks failed: {:?} path={}", e, frame.path);
-                        return;
-                    }
-                };
+            let dir_blocks = match resolve_inode_block_allextend(fs, block_dev, &mut frame.inode) {
+                Ok(v) => v,
+                Err(e) => {
+                    warn!("Parse dir blocks failed: {:?} path={}", e, frame.path);
+                    return;
+                }
+            };
 
             let mut to_descend: Vec<(
                 alloc::string::String,
@@ -1254,9 +1265,7 @@ pub fn delete_dir<B: BlockDevice>(fs: &mut Ext4FileSystem, block_dev: &mut Jbd2D
                     let child_inode = match fs.get_inode_by_num(block_dev, child_ino) {
                         Ok(v) => v,
                         Err(e) => {
-                            warn!(
-                                "get child inode {child_ino} failed: {e:?} path={child_path}"
-                            );
+                            warn!("get child inode {child_ino} failed: {e:?} path={child_path}");
                             continue;
                         }
                     };
@@ -1415,7 +1424,7 @@ pub fn delete_file<B: BlockDevice>(
             .into_values()
             .collect();
     inode_used_blocks.sort(); //排序block
-    //link-1
+                              //link-1
     target_inode.i_links_count = target_inode.i_links_count.saturating_sub(1);
     //update target inode link
     if fs
@@ -1493,7 +1502,7 @@ pub fn build_file_block_mapping<B: BlockDevice>(
 
         //初始头构建
         if !inode.have_extend_header_and_use_extend() {
-            inode.i_flags |=Ext4Inode::EXT4_EXTENTS_FL;
+            inode.i_flags |= Ext4Inode::EXT4_EXTENTS_FL;
             inode.write_extend_header();
         }
 
@@ -1529,7 +1538,8 @@ pub fn build_file_block_mapping<B: BlockDevice>(
         // 构造一个叶子根节点，并通过 ExtentTree 将其写入 inode.i_block
         let mut tree = ExtentTree::new(inode);
         for extend in exts_vec {
-            tree.insert_extent(fs, extend, block_dev).expect("Extend insert Failed!");
+            tree.insert_extent(fs, extend, block_dev)
+                .expect("Extend insert Failed!");
         }
     } else {
         error!("not support tranditional block pointer");
@@ -1564,7 +1574,10 @@ pub fn mkfile_with_ino<B: BlockDevice>(
         let ino = match get_inode_with_num(fs, device, &norm_path).ok().flatten() {
             Some((ino, _)) => ino,
             None => {
-                error!("mkfile_with_ino existing file but failed to get ino path={}", path);
+                error!(
+                    "mkfile_with_ino existing file but failed to get ino path={}",
+                    path
+                );
                 return None;
             }
         };
@@ -1594,7 +1607,10 @@ pub fn mkfile_with_ino<B: BlockDevice>(
         match get_inode_with_num(fs, device, &parent).ok().flatten() {
             Some((n, ino)) => (n, ino),
             None => {
-                error!("mkfile get parent inode failed path={} parent={}", path, parent);
+                error!(
+                    "mkfile get parent inode failed path={} parent={}",
+                    path, parent
+                );
                 return None;
             }
         };
@@ -1603,12 +1619,13 @@ pub fn mkfile_with_ino<B: BlockDevice>(
     let new_file_ino = match fs.alloc_inode(device) {
         Ok(ino) => ino,
         Err(e) => {
-            error!("mkfile alloc_inode failed path={} err={:?} ({})", path, e, e);
+            error!(
+                "mkfile alloc_inode failed path={} err={:?} ({})",
+                path, e, e
+            );
             return None;
         }
     };
-
-
 
     // 如有初始数据，为文件分配一个或多个数据块并写入
     let mut data_blocks: Vec<u64> = Vec::new();
@@ -1626,7 +1643,10 @@ pub fn mkfile_with_ino<B: BlockDevice>(
             let blk = match fs.alloc_block(device) {
                 Ok(b) => b,
                 Err(e) => {
-                    error!("mkfile alloc_block failed path={} err={:?} ({})", path, e, e);
+                    error!(
+                        "mkfile alloc_block failed path={} err={:?} ({})",
+                        path, e, e
+                    );
                     break;
                 }
             };
@@ -1653,7 +1673,7 @@ pub fn mkfile_with_ino<B: BlockDevice>(
     let imode;
     let mut new_inode = Ext4Inode::default();
     if file_type.is_some() {
-        imode = match file_type.unwrap(){
+        imode = match file_type.unwrap() {
             Ext4DirEntry2::EXT4_FT_SYMLINK => Ext4Inode::S_IFLNK | 0o777,
             Ext4DirEntry2::EXT4_FT_REG_FILE => Ext4Inode::S_IFREG | 0o644,
             Ext4DirEntry2::EXT4_FT_DIR => Ext4Inode::S_IFDIR | 0o755,
@@ -1663,10 +1683,10 @@ pub fn mkfile_with_ino<B: BlockDevice>(
             Ext4DirEntry2::EXT4_FT_SOCK => Ext4Inode::S_IFSOCK | 0o644,
             _ => Ext4Inode::S_IFREG | 0o644,
         };
-    }else {
+    } else {
         imode = Ext4Inode::S_IFREG | 0o644;
     }
-    
+
     new_inode.i_mode = imode;
 
     //extend是否开启
@@ -1711,7 +1731,10 @@ pub fn mkfile_with_ino<B: BlockDevice>(
         })
         .is_err()
     {
-        error!("mkfile modify_inode failed path={} ino={}", path, new_file_ino);
+        error!(
+            "mkfile modify_inode failed path={} ino={}",
+            path, new_file_ino
+        );
         return None;
     }
 
@@ -1736,10 +1759,7 @@ pub fn mkfile_with_ino<B: BlockDevice>(
     {
         error!(
             "mkfile insert_dir_entry failed path={} parent_ino={} child={} ino={}",
-            path,
-            parent_ino_num,
-            child,
-            new_file_ino
+            path, parent_ino_num, child, new_file_ino
         );
         return None;
     }
@@ -1750,10 +1770,7 @@ pub fn mkfile_with_ino<B: BlockDevice>(
         Err(e) => {
             error!(
                 "mkfile get_inode_by_num failed path={} ino={} err={:?} ({})",
-                path,
-                new_file_ino,
-                e,
-                e
+                path, new_file_ino, e, e
             );
             None
         }
@@ -1802,7 +1819,6 @@ pub fn write_file_with_ino<B: BlockDevice>(
     }
 
     let mut inode = fs.get_inode_by_num(device, inode_num)?;
-
 
     let old_size = inode.size() as u64;
     let block_bytes = BLOCK_SIZE as u64;
@@ -1862,9 +1878,9 @@ pub fn write_file_with_ino<B: BlockDevice>(
 
                 let add_iblocks = (BLOCK_SIZE / 512) as u32;
                 inode.i_blocks_lo = inode.i_blocks_lo.saturating_add(add_iblocks);
-                inode.l_i_blocks_high =
-                    inode.l_i_blocks_high.saturating_add(((add_iblocks as u64) >> 32) as u16);
-
+                inode.l_i_blocks_high = inode
+                    .l_i_blocks_high
+                    .saturating_add(((add_iblocks as u64) >> 32) as u16);
 
                 new_phys
             }
@@ -1889,7 +1905,8 @@ pub fn write_file_with_ino<B: BlockDevice>(
             let dst_off = (write_start - block_start) as usize;
             let len = write_end - write_start;
 
-            blk[dst_off..dst_off + len as usize].copy_from_slice(&data[src_off as usize..(src_off + len) as usize]);
+            blk[dst_off..dst_off + len as usize]
+                .copy_from_slice(&data[src_off as usize..(src_off + len) as usize]);
         })?;
     }
 

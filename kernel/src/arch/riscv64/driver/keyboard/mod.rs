@@ -1,17 +1,16 @@
 // 键盘驱动（通过 UART 中断实现）
 // 捕获 Ctrl 组合键并转换为信号投递到当前任务
 
-use alloc::collections::vec_deque::VecDeque;
-use lazy_static::lazy_static;
+use crate::arch::driver::uart;
 use crate::kprintln;
 use crate::sync::UPSafeCell;
+use crate::task::signal::{push_signal, OsSignal};
 use crate::task::{Signal, TASK_MANAER};
-use crate::task::signal::{OsSignal, push_signal};
-use crate::arch::driver::uart;
+use alloc::collections::vec_deque::VecDeque;
+use lazy_static::lazy_static;
 /// 输入字符缓冲区（非信号字符存这里，供 TTY 消费）
 lazy_static! {
-    static ref INPUT_BUF: UPSafeCell<VecDeque<u8>> =
-        UPSafeCell::new(VecDeque::with_capacity(256));
+    static ref INPUT_BUF: UPSafeCell<VecDeque<u8>> = UPSafeCell::new(VecDeque::with_capacity(256));
 }
 
 /// UART 16550 寄存器地址
@@ -38,7 +37,9 @@ pub fn enable_uart_rx_interrupt() {
         let lsr_val = (UART_LSR as *const u8).read_volatile();
         crate::kprintln!(
             "[UART] IER={:#04x} IIR={:#04x} LSR={:#04x}",
-            ier_val, iir_val, lsr_val
+            ier_val,
+            iir_val,
+            lsr_val
         );
     }
 }
@@ -46,7 +47,6 @@ pub fn enable_uart_rx_interrupt() {
 /// UART 中断处理入口
 /// 16550 是电平触发，必须读 IIR 排空所有中断源，否则 IRQ 线不释放
 pub fn keyboard_interrupt_handler() {
-
     unsafe {
         loop {
             let iir = (UART_IIR as *const u8).read_volatile();

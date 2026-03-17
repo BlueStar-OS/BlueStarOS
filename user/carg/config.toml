@@ -1,11 +1,10 @@
 [build]
-target = "riscv64gc-unknown-none-elf"
+target = "aarch64-unknown-none-softfloat"
 
-[target.riscv64gc-unknown-none-elf]
+[target.aarch64-unknown-none-softfloat]
 rustflags = [
-    "-Clink-args=-Tsrc/linker.ld",
+    "-Clink-args=-Tsrc/linker-aarch64.ld",
 ]
-
 
 [source.crates-io]
 replace-with = "vendored-sources"

@@ -1,13 +1,12 @@
 ///wrapping ext4 block device
 mod ext4;
 
+use crate::fs::vfs::{File, VfsFsError};
 use alloc::sync::Arc;
 use log::error;
 use rsext4::BlockDevice as RsExt4BlockDevice;
-use crate::fs::vfs::{File, VfsFsError};
 
 pub use ext4::*;
-
 
 pub struct Ext4BlockDevice(pub Arc<dyn File>);
 

@@ -97,7 +97,9 @@ impl MmioDevice {
 
         let interrupts = node.get_property("interrupts").map(|p| p.as_u32_list());
         let interrupt_parent = node.get_u32("interrupt-parent");
-        let status = node.get_string("status").unwrap_or_else(|| String::from("okay"));
+        let status = node
+            .get_string("status")
+            .unwrap_or_else(|| String::from("okay"));
 
         Some(Self {
             name: node.full_name.clone(),
@@ -133,7 +135,8 @@ impl InterruptController {
             return None;
         }
 
-        let reg = node.get_property("reg")
+        let reg = node
+            .get_property("reg")
             .map(|p| p.as_reg(addr_cells, size_cells))
             .unwrap_or_default();
 
@@ -174,7 +177,8 @@ impl GpioController {
             return None;
         }
 
-        let reg = node.get_property("reg")
+        let reg = node
+            .get_property("reg")
             .map(|p| p.as_reg(addr_cells, size_cells))
             .unwrap_or_default();
 
@@ -214,7 +218,8 @@ impl ClockController {
             return None;
         }
 
-        let reg = node.get_property("reg")
+        let reg = node
+            .get_property("reg")
             .map(|p| p.as_reg(addr_cells, size_cells))
             .unwrap_or_default();
 
@@ -298,7 +303,8 @@ impl BusBridge {
         let compatible = node.compatible();
         let bus_type = BusType::from_compatible(&compatible);
 
-        let reg = node.get_property("reg")
+        let reg = node
+            .get_property("reg")
             .map(|p| p.as_reg(addr_cells, size_cells))
             .unwrap_or_default();
 
@@ -355,7 +361,13 @@ impl<'a> DeviceScanner<'a> {
         result
     }
 
-    fn find_memory_recursive(&self, node: &DeviceNode, addr_cells: u32, size_cells: u32, result: &mut Vec<MemoryInfo>) {
+    fn find_memory_recursive(
+        &self,
+        node: &DeviceNode,
+        addr_cells: u32,
+        size_cells: u32,
+        result: &mut Vec<MemoryInfo>,
+    ) {
         if let Some(mem) = MemoryInfo::from_node(node, addr_cells, size_cells) {
             result.push(mem);
         }
@@ -375,7 +387,13 @@ impl<'a> DeviceScanner<'a> {
         result
     }
 
-    fn find_ic_recursive(&self, node: &DeviceNode, addr_cells: u32, size_cells: u32, result: &mut Vec<InterruptController>) {
+    fn find_ic_recursive(
+        &self,
+        node: &DeviceNode,
+        addr_cells: u32,
+        size_cells: u32,
+        result: &mut Vec<InterruptController>,
+    ) {
         if let Some(ic) = InterruptController::from_node(node, addr_cells, size_cells) {
             result.push(ic);
         }
@@ -394,7 +412,13 @@ impl<'a> DeviceScanner<'a> {
         result
     }
 
-    fn find_gpio_recursive(&self, node: &DeviceNode, addr_cells: u32, size_cells: u32, result: &mut Vec<GpioController>) {
+    fn find_gpio_recursive(
+        &self,
+        node: &DeviceNode,
+        addr_cells: u32,
+        size_cells: u32,
+        result: &mut Vec<GpioController>,
+    ) {
         if let Some(gpio) = GpioController::from_node(node, addr_cells, size_cells) {
             result.push(gpio);
         }
@@ -413,12 +437,19 @@ impl<'a> DeviceScanner<'a> {
         result
     }
 
-    fn find_mmio_recursive(&self, node: &DeviceNode, addr_cells: u32, size_cells: u32, result: &mut Vec<MmioDevice>) {
+    fn find_mmio_recursive(
+        &self,
+        node: &DeviceNode,
+        addr_cells: u32,
+        size_cells: u32,
+        result: &mut Vec<MmioDevice>,
+    ) {
         // Skip memory, cpu, interrupt-controller, gpio-controller nodes
         if node.get_string("device_type") == Some(String::from("memory"))
             || node.get_string("device_type") == Some(String::from("cpu"))
             || node.get_property("interrupt-controller").is_some()
-            || node.get_property("gpio-controller").is_some() {
+            || node.get_property("gpio-controller").is_some()
+        {
             // Still recurse into children
             let node_addr = node.address_cells();
             let node_size = node.size_cells();
@@ -447,7 +478,13 @@ impl<'a> DeviceScanner<'a> {
         result
     }
 
-    fn find_bus_recursive(&self, node: &DeviceNode, addr_cells: u32, size_cells: u32, result: &mut Vec<BusBridge>) {
+    fn find_bus_recursive(
+        &self,
+        node: &DeviceNode,
+        addr_cells: u32,
+        size_cells: u32,
+        result: &mut Vec<BusBridge>,
+    ) {
         if let Some(bus) = BusBridge::from_node(node, addr_cells, size_cells) {
             result.push(bus);
         }

@@ -83,8 +83,8 @@ use crate::memory::MapSet;
 //                   n = non-Reordering: 不重排访问顺序
 //                   E = Early Write Acknowledgement: 允许写缓冲
 //                   用于: UART, VirtIO, GIC 等 MMIO 设备
-const MAIR_ATTR0_NORMAL_WB: u64    = 0xFF;        // Attr0[7:0]
-const MAIR_ATTR1_DEVICE_NGNRE: u64 = 0x04 << 8;   // Attr1[15:8]
+const MAIR_ATTR0_NORMAL_WB: u64 = 0xFF; // Attr0[7:0]
+const MAIR_ATTR1_DEVICE_NGNRE: u64 = 0x04 << 8; // Attr1[15:8]
 const MAIR_EL1_VALUE: u64 = MAIR_ATTR0_NORMAL_WB | MAIR_ATTR1_DEVICE_NGNRE;
 // = 0x04FF
 
@@ -130,7 +130,7 @@ const TCR_EPD0: u64 = 0 << 23;
 // IRGN0/ORGN0: TTBR0 页表遍历 (page table walk) 的缓存策略
 // 01 = Write-Back Write-Allocate — 页表遍历经过缓存，大幅提升 TLB miss 时的性能
 // 如果设为 00 (Non-cacheable)，每次 TLB miss 都要从内存读页表，非常慢
-const TCR_IRGN0_WBWA: u64 = 1 << 8;  // Inner cacheability
+const TCR_IRGN0_WBWA: u64 = 1 << 8; // Inner cacheability
 const TCR_ORGN0_WBWA: u64 = 1 << 10; // Outer cacheability
 
 // SH0: TTBR0 页表遍历的共享属性
@@ -163,19 +163,18 @@ const TCR_IPS_40BIT: u64 = 2 << 32;
 // 组合 TCR 值
 // T0SZ=25, IRGN0=WB, ORGN0=WB, SH0=ISH, TG0=4K,
 // T1SZ=25, EPD1=0, IRGN1=WB, ORGN1=WB, SH1=ISH, TG1=4K, IPS=40bit
-const TCR_EL1_VALUE: u64 =
-    TCR_T0SZ_39BIT |
-    TCR_T1SZ_39BIT |
-    TCR_IRGN0_WBWA |
-    TCR_ORGN0_WBWA |
-    TCR_SH0_INNER |
-    TCR_TG0_4K |
-    TCR_EPD0 |
-    TCR_IRGN1_WBWA |
-    TCR_ORGN1_WBWA |
-    TCR_SH1_INNER |
-    TCR_TG1_4K |
-    TCR_IPS_40BIT;
+const TCR_EL1_VALUE: u64 = TCR_T0SZ_39BIT
+    | TCR_T1SZ_39BIT
+    | TCR_IRGN0_WBWA
+    | TCR_ORGN0_WBWA
+    | TCR_SH0_INNER
+    | TCR_TG0_4K
+    | TCR_EPD0
+    | TCR_IRGN1_WBWA
+    | TCR_ORGN1_WBWA
+    | TCR_SH1_INNER
+    | TCR_TG1_4K
+    | TCR_IPS_40BIT;
 
 // --- SCTLR_EL1 (System Control Register) ---
 //
@@ -189,9 +188,9 @@ const TCR_EL1_VALUE: u64 =
 //
 // 注意: 必须在 MAIR/TCR/TTBR 都配置好之后才能设置 M=1!
 //       否则 MMU 会用未初始化的寄存器进行翻译，导致未定义行为。
-const SCTLR_ELX_M: u64 = 1 << 0;   // MMU 使能
-const SCTLR_ELX_C: u64 = 1 << 2;   // 数据缓存使能
-const SCTLR_ELX_I: u64 = 1 << 12;  // 指令缓存使能
+const SCTLR_ELX_M: u64 = 1 << 0; // MMU 使能
+const SCTLR_ELX_C: u64 = 1 << 2; // 数据缓存使能
+const SCTLR_ELX_I: u64 = 1 << 12; // 指令缓存使能
 
 /// 激活内存映射集：配置 MMU 系统寄存器并切换页表
 ///
@@ -248,10 +247,7 @@ pub fn active_memset(memset: &MapSet) {
     unsafe {
         // Step 1: 失效所有 TLB 条目（必须在设置 TTBR 之前）
         // 来源: proc.S __cpu_setup 第一条指令
-        core::arch::asm!(
-            "tlbi vmalle1",
-            "dsb nsh",
-        );
+        core::arch::asm!("tlbi vmalle1", "dsb nsh",);
         debug!("[MMU] Step 1: TLB 已失效 (tlbi vmalle1 + dsb nsh)");
 
         // Step 2: 配置 MAIR_EL1
@@ -312,11 +308,7 @@ pub fn active_memset(memset: &MapSet) {
 
         // Step 8: 失效指令缓存
         // 来源: head.S __enable_mmu — ic iallu; dsb nsh; isb
-        core::arch::asm!(
-            "ic iallu",
-            "dsb nsh",
-            "isb"
-        );
+        core::arch::asm!("ic iallu", "dsb nsh", "isb");
 
         debug!("[MMU] MMU Turned! I-cache already into invalid");
 
@@ -326,7 +318,8 @@ pub fn active_memset(memset: &MapSet) {
             "mrs {0}, sctlr_el1",
             out(reg) sctlr_verify
         );
-        debug!("[MMU] Verify SCTLR_EL1 = {:#x}, M={}, C={}, I={}",
+        debug!(
+            "[MMU] Verify SCTLR_EL1 = {:#x}, M={}, C={}, I={}",
             sctlr_verify,
             (sctlr_verify >> 0) & 1,
             (sctlr_verify >> 2) & 1,

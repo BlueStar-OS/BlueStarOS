@@ -1,4 +1,4 @@
-use core::{ fmt::{Display, Formatter, Result}};
+use core::fmt::{Display, Formatter, Result};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum VfsFsError {
@@ -20,8 +20,6 @@ pub enum VfsFsError {
     NoSpace,
     NoDevice,
 }
-
-
 
 impl Display for VfsFsError {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {

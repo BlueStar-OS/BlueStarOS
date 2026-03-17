@@ -270,4 +270,3 @@ macro_rules! read_composite_csr {
         }
     };
 }
-

@@ -27,9 +27,9 @@ impl EMmcChipConfig {
         Self {
             flags: RK_DLL_CMD_OUT,
             hs200_tx_tap: 16,
-            hs400_tx_tap: 10,  // DLL_TXCLK_TAPNUM_90_DEGREES = 0xA
-            hs400_cmd_tap: 8,  // DLL_CMDOUT_TAPNUM_90_DEGREES
-            hs400_strbin_tap: 4, // DLL_STRBIN_TAPNUM_DEFAULT
+            hs400_tx_tap: 10,            // DLL_TXCLK_TAPNUM_90_DEGREES = 0xA
+            hs400_cmd_tap: 8,            // DLL_CMDOUT_TAPNUM_90_DEGREES
+            hs400_strbin_tap: 4,         // DLL_STRBIN_TAPNUM_DEFAULT
             _ddr50_strbin_delay_num: 22, // 0x16
         }
     }

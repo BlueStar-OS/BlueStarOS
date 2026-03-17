@@ -69,14 +69,18 @@ fn gicv3_probe(node: &DeviceNode, _compatible: &str) -> Result<(), &'static str>
 
     // 注册 GIC MMIO 区域到内核内存空间列表
     {
-        use crate::memory::{register_kernel_mmio, VirNumRange, MapAreaFlags};
         use crate::arch::memory::VirAddr;
+        use crate::memory::{register_kernel_mmio, MapAreaFlags, VirNumRange};
 
         let gic_start = gicd_addr;
         let gic_end = gicr_addr + gicr_sz;
         let gic_range = VirNumRange::new(VirAddr(gic_start), VirAddr(gic_end));
-        let flags = MapAreaFlags::V | MapAreaFlags::R | MapAreaFlags::W
-                  | MapAreaFlags::A | MapAreaFlags::G | MapAreaFlags::DEV;
+        let flags = MapAreaFlags::V
+            | MapAreaFlags::R
+            | MapAreaFlags::W
+            | MapAreaFlags::A
+            | MapAreaFlags::G
+            | MapAreaFlags::DEV;
         register_kernel_mmio(gic_range, flags);
     }
 

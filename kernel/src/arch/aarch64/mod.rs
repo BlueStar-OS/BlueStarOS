@@ -1,5 +1,3 @@
-// AArch64 架构相关实现
-
 pub mod driver;
 pub mod memory;
 pub mod sbi;
@@ -8,11 +6,9 @@ pub mod time;
 pub mod trap;
 
 use crate::allocator_init;
-use crate::arch::driver::gicd;
-use crate::arch::driver::keyboard;
-use crate::arch::memory::early_mmu_init;
+use crate::arch::driver::{gicd, keyboard};
 use crate::arch::memory::eaylymmu::turn_early_mmu;
-use crate::arch::task::TaskContext;
+use crate::arch::memory::early_mmu_init;
 use crate::config::*;
 use crate::debug;
 use crate::dtb;
@@ -20,170 +16,78 @@ use crate::init_frame_allocator_from_dtb;
 use crate::kernel_info_debug;
 use crate::kprintln;
 use crate::logger;
-use crate::set_next_timeInterupt;
 use core::arch::{asm, global_asm};
 
 pub use sbi::*;
-// 引入入口
 global_asm!(include_str!("./entry.asm"));
 
-// 导出trap相关类型和函数
-pub use trap::__aarch64_vector;
-pub use trap::{set_kernel_forbid, set_kernel_trap_handler, TrapContext};
-
-// 导出任务切换函数
 pub use task::__switch;
+pub use trap::{__aarch64_vector, app_entry_point, kernel_trap_handler, set_kernel_trap_handler, TrapContext};
 
-/// 平台初始化函数
 pub fn arch_init() {
     kprintln!("Arch PlatForm init");
 
     unsafe {
-        // 填充静态页表
         early_mmu_init();
     }
 
-    // 打开早期的mmu，因为不开默认全是device memory
     turn_early_mmu();
-
-    //内核堆，分配器初始化
     allocator_init();
-
-    // 初始化设备树。
-    // 这里只做早期解析和内存区注册，不在这里直接执行设备 probe。
     dtb::init();
 
     kprintln!("Logger start inited");
-    logger::init(); //日志初始化 - 必须先初始化日志才能使用 debug!
+    logger::init();
     kprintln!("Logger inited");
     kprintln!("Inital Physical Memory Alloctor");
-    init_frame_allocator_from_dtb(ekernel as usize); //物理内存页分配器初始化（从DTB探测）
-                                                     // 页帧分配器准备好之后，再执行真正的设备探测。
-                                                     // 这样 virtio-blk / eMMC 等驱动在 probe 里申请页帧时不会过早 panic。
+    init_frame_allocator_from_dtb(ekernel as usize);
     dtb::run_device_probes();
-    kernel_info_debug(); //打印内核日志
-
-    // AArch64: 初始化 GIC 中断控制器 + UART RX 中断
-    // gicd::gic_init();
-    // gicd::gic_enable_spi(crate::arch::driver::gicd::UART2_INTID);
-    // keyboard::enable_uart_rx_interrupt();
+    kernel_info_debug();
 
     kprintln!("Welcome to BlueStarOS!");
-
     debug!("Kernel init success!");
 
-    set_kernel_trap_handler(); //初始化陷阱入口，必须在地址空间激活后设置虚拟地址
-
-    KERNEL_SPACE.lock().activate(); //激活地址空间
-
-    // 下面需要在内核空间开启之后执行，因为涉及内核态中断访问trap
-    rather_global_interrupt(); //愿意处理全局中断使能
-    enable_timer_interupt(); //开启全局时间中断使能
-    set_next_timeInterupt(); //第一次开启时钟中断
-}
-
-/// 应用程序入口点
-/// 从内核态切换到用户态
-#[no_mangle]
-pub extern "C" fn app_entry_point() {
-    use crate::config::{straper, TRAP_BOTTOM_ADDR};
-    use crate::task::TASK_MANAER;
-    use log::debug;
-
     set_kernel_trap_handler();
-    let user_satp = TASK_MANAER.get_current_stap();
+    KERNEL_SPACE.lock().activate();
+    disable_timer_interrupt();
+    gicd::gic_init();
+    keyboard::enable_uart_rx_interrupt();
+    kprintln!("[ArchInit] keyboard irq ready");
 
-    // 计算 __kernel_refume 在 trampoline 高地址中的位置
-    // .text.traper section: straper(低地址) 映射到 TRAP_BOTTOM_ADDR(高地址)
-    extern "C" {
-        fn __kernel_refume();
-    }
-    let refume_offset = __kernel_refume as usize - straper as usize;
-    let refume_va = TRAP_BOTTOM_ADDR + refume_offset;
-
-    debug!(
-        "app_entry: user_satp={:#x}, refume_va={:#x}",
-        user_satp, refume_va
-    );
-
-    // 跳到 trampoline 高地址执行 __kernel_refume
-    // 在那里切换 TTBR0/TTBR1 到用户页表后，当前代码（低地址）不可达，
-    // 但 trampoline（高地址）在用户页表中也有映射，所以不会崩
-    unsafe {
-        asm!(
-            "mov x0, {trap_cx}",
-            "mov x1, {user_ttbr0}",
-            "br {refume_va}",
-            trap_cx = in(reg) TRAP_CONTEXT_ADDR,
-            user_ttbr0 = in(reg) user_satp,
-            refume_va = in(reg) refume_va,
-            options(noreturn)
-        );
-    }
+    rather_global_interrupt();
+    kprintln!("[ArchInit] global irq enabled");
+    kprintln!("[ArchInit] timer irq disabled for qemu irq debug");
 }
 
-/// 内核陷阱处理函数
-#[no_mangle]
-pub extern "C" fn kernel_trap_handler() {
-    use crate::trap::recycle_pending_kstacks;
-    use log::error;
-
-    // 回收内核栈
-    recycle_pending_kstacks();
-
-    set_kernel_forbid();
-
-    // 读取ESR_EL1获取异常原因
-    let esr: u64;
-    let elr: u64;
-    let far: u64;
-    unsafe {
-        asm!("mrs {}, esr_el1", out(reg) esr);
-        asm!("mrs {}, elr_el1", out(reg) elr);
-        asm!("mrs {}, far_el1", out(reg) far);
-    }
-
-    let ec = (esr >> 26) & 0x3F;
-
-    error!(
-        "Kernel trap: EC={:#x} ESR={:#x} ELR={:#x} FAR={:#x}",
-        ec, esr, elr, far
-    );
-
-    match ec {
-        0x15 => {
-            // SVC (系统调用)
-            error!("Unexpected SVC in kernel mode");
-        }
-        0x24 | 0x25 => {
-            // Data abort
-            error!("Kernel data abort at {:#x}", far);
-        }
-        0x20 | 0x21 => {
-            // Instruction abort
-            error!("Kernel instruction abort at {:#x}", far);
-        }
-        _ => {
-            error!("Unknown kernel exception");
-        }
-    }
-
-    panic!("Kernel trap handler - should not reach here");
-}
-
-/// 愿意处理全局中断使能 (AArch64实现)
 pub fn rather_global_interrupt() {
+    enable_irq();
+}
+
+pub fn enable_irq() {
     unsafe {
-        // 启用IRQ中断 (清除DAIF.I位)
         asm!("msr daifclr, #2");
     }
 }
 
-/// 开启全局时间中断使能 (AArch64实现)
-pub fn enable_timer_interupt() {
+pub fn disable_irq() {
     unsafe {
-        // 启用EL1物理定时器中断
-        // CNTP_CTL_EL0: bit 0 = enable, bit 1 = imask (0=not masked)
+        asm!("msr daifset, #2");
+    }
+}
+
+pub fn wait_for_interrupt() {
+    unsafe {
+        asm!("wfi");
+    }
+}
+
+pub fn enable_timer_interrupt() {
+    unsafe {
         asm!("msr cntp_ctl_el0, {}", in(reg) 1u64);
+    }
+}
+
+pub fn disable_timer_interrupt() {
+    unsafe {
+        asm!("msr cntp_ctl_el0, {}", in(reg) 0u64);
     }
 }

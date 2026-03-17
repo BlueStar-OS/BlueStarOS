@@ -3,8 +3,8 @@
 //! 参考 Linux: drivers/irqchip/irq-gic-v3.c
 //! RK3588 地址: GICD=0xfe600000, GICR=0xfe680000
 
-use core::arch::asm;
 use crate::kprintln;
+use core::arch::asm;
 
 use super::{gicd_base, gicr_rd_base, gicr_sgi_base};
 
@@ -12,7 +12,9 @@ use super::{gicd_base, gicr_rd_base, gicr_sgi_base};
 
 #[inline]
 fn write32(addr: usize, val: u32) {
-    unsafe { (addr as *mut u32).write_volatile(val); }
+    unsafe {
+        (addr as *mut u32).write_volatile(val);
+    }
 }
 
 #[inline]
@@ -22,13 +24,17 @@ fn read32(addr: usize) -> u32 {
 
 #[inline]
 fn write64(addr: usize, val: u64) {
-    unsafe { (addr as *mut u64).write_volatile(val); }
+    unsafe {
+        (addr as *mut u64).write_volatile(val);
+    }
 }
 
 #[inline]
 fn read_mpidr_affinity() -> u64 {
     let mpidr: u64;
-    unsafe { asm!("mrs {}, mpidr_el1", out(reg) mpidr); }
+    unsafe {
+        asm!("mrs {}, mpidr_el1", out(reg) mpidr);
+    }
     ((mpidr >> 32) & 0xFF) << 32
         | ((mpidr >> 16) & 0xFF) << 16
         | ((mpidr >> 8) & 0xFF) << 8
@@ -138,10 +144,16 @@ fn gic_dist_init() {
     }
 
     // 8. 启用 Distributor: ARE_NS | EnableGrp1A | EnableGrp1
-    write32(base + GICD_CTLR, GICD_CTLR_ARE_NS | GICD_CTLR_ENABLE_G1A | GICD_CTLR_ENABLE_G1);
+    write32(
+        base + GICD_CTLR,
+        GICD_CTLR_ARE_NS | GICD_CTLR_ENABLE_G1A | GICD_CTLR_ENABLE_G1,
+    );
     gic_dist_wait_for_rwp();
 
-    kprintln!("[GIC] Distributor initialized, {} interrupt lines", it_lines);
+    kprintln!(
+        "[GIC] Distributor initialized, {} interrupt lines",
+        it_lines
+    );
 }
 
 // ==================== Redistributor 初始化 ====================
@@ -204,17 +216,17 @@ fn gic_cpu_interface_init() {
         }
 
         // 2. 设置优先级掩码 — 允许所有优先级
-        asm!("msr S3_0_C4_C6_0, {}", in(reg) 0xFFu64);  // ICC_PMR_EL1
+        asm!("msr S3_0_C4_C6_0, {}", in(reg) 0xFFu64); // ICC_PMR_EL1
 
         // 3. BPR1 = 0（最细粒度优先级分组）
-        asm!("msr S3_0_C12_C12_3, {}", in(reg) 0u64);  // ICC_BPR1_EL1
+        asm!("msr S3_0_C12_C12_3, {}", in(reg) 0u64); // ICC_BPR1_EL1
 
         // 4. EOI 模式 = 0（写 EOIR 同时 deactivate）
-        asm!("msr S3_0_C12_C12_4, {}", in(reg) 0u64);  // ICC_CTLR_EL1
+        asm!("msr S3_0_C12_C12_4, {}", in(reg) 0u64); // ICC_CTLR_EL1
         asm!("isb");
 
         // 5. 使能 Group 1 中断
-        asm!("msr S3_0_C12_C12_7, {}", in(reg) 1u64);  // ICC_IGRPEN1_EL1
+        asm!("msr S3_0_C12_C12_7, {}", in(reg) 1u64); // ICC_IGRPEN1_EL1
         asm!("isb");
     }
 

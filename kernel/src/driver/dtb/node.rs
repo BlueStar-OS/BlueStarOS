@@ -1,8 +1,8 @@
 //! Device Tree Node structures
 //! Reference: Linux 5.4.29 include/linux/of.h
 
-use alloc::string::String;
 use alloc::collections::BTreeMap;
+use alloc::string::String;
 use alloc::vec::Vec;
 
 /// Register block for reg property
@@ -91,7 +91,9 @@ impl Property {
         } else {
             self.value.len()
         };
-        core::str::from_utf8(&self.value[..len]).map(String::from).ok()
+        core::str::from_utf8(&self.value[..len])
+            .map(String::from)
+            .ok()
     }
 
     /// Get property as string list
@@ -230,7 +232,12 @@ impl Property {
     }
 
     /// Get property as ranges
-    pub fn as_ranges(&self, child_addr_cells: u32, parent_addr_cells: u32, size_cells: u32) -> Vec<AddressRange> {
+    pub fn as_ranges(
+        &self,
+        child_addr_cells: u32,
+        parent_addr_cells: u32,
+        size_cells: u32,
+    ) -> Vec<AddressRange> {
         let mut result = Vec::new();
         let cell_size = 4; // Each cell is 4 bytes
         let entry_size = (child_addr_cells + parent_addr_cells + size_cells) as usize * cell_size;
@@ -241,16 +248,24 @@ impl Property {
             let child_bus_addr = match child_addr_cells {
                 1 => {
                     let val = u32::from_be_bytes([
-                        self.value[i], self.value[i + 1],
-                        self.value[i + 2], self.value[i + 3],
+                        self.value[i],
+                        self.value[i + 1],
+                        self.value[i + 2],
+                        self.value[i + 3],
                     ]);
                     i += 4;
                     val as u64
                 }
                 2 => {
                     let val = u64::from_be_bytes([
-                        self.value[i], self.value[i + 1], self.value[i + 2], self.value[i + 3],
-                        self.value[i + 4], self.value[i + 5], self.value[i + 6], self.value[i + 7],
+                        self.value[i],
+                        self.value[i + 1],
+                        self.value[i + 2],
+                        self.value[i + 3],
+                        self.value[i + 4],
+                        self.value[i + 5],
+                        self.value[i + 6],
+                        self.value[i + 7],
                     ]);
                     i += 8;
                     val
@@ -262,16 +277,24 @@ impl Property {
             let parent_bus_addr = match parent_addr_cells {
                 1 => {
                     let val = u32::from_be_bytes([
-                        self.value[i], self.value[i + 1],
-                        self.value[i + 2], self.value[i + 3],
+                        self.value[i],
+                        self.value[i + 1],
+                        self.value[i + 2],
+                        self.value[i + 3],
                     ]);
                     i += 4;
                     val as u64
                 }
                 2 => {
                     let val = u64::from_be_bytes([
-                        self.value[i], self.value[i + 1], self.value[i + 2], self.value[i + 3],
-                        self.value[i + 4], self.value[i + 5], self.value[i + 6], self.value[i + 7],
+                        self.value[i],
+                        self.value[i + 1],
+                        self.value[i + 2],
+                        self.value[i + 3],
+                        self.value[i + 4],
+                        self.value[i + 5],
+                        self.value[i + 6],
+                        self.value[i + 7],
                     ]);
                     i += 8;
                     val
@@ -283,16 +306,24 @@ impl Property {
             let size = match size_cells {
                 1 => {
                     let val = u32::from_be_bytes([
-                        self.value[i], self.value[i + 1],
-                        self.value[i + 2], self.value[i + 3],
+                        self.value[i],
+                        self.value[i + 1],
+                        self.value[i + 2],
+                        self.value[i + 3],
                     ]);
                     i += 4;
                     val as u64
                 }
                 2 => {
                     let val = u64::from_be_bytes([
-                        self.value[i], self.value[i + 1], self.value[i + 2], self.value[i + 3],
-                        self.value[i + 4], self.value[i + 5], self.value[i + 6], self.value[i + 7],
+                        self.value[i],
+                        self.value[i + 1],
+                        self.value[i + 2],
+                        self.value[i + 3],
+                        self.value[i + 4],
+                        self.value[i + 5],
+                        self.value[i + 6],
+                        self.value[i + 7],
                     ]);
                     i += 8;
                     val
@@ -333,7 +364,10 @@ impl DeviceNode {
     pub fn new(name: String, full_name: String) -> Self {
         // Parse unit address from name (e.g., "cpu@0" -> name="cpu", unit_addr=Some("0"))
         let (base_name, unit_addr) = if let Some(at_pos) = name.find('@') {
-            (String::from(&name[..at_pos]), Some(String::from(&name[at_pos + 1..])))
+            (
+                String::from(&name[..at_pos]),
+                Some(String::from(&name[at_pos + 1..])),
+            )
         } else {
             (name, None)
         };
@@ -365,7 +399,9 @@ impl DeviceNode {
 
     /// Get property as string list
     pub fn get_string_list(&self, name: &str) -> Vec<String> {
-        self.get_property(name).map(|p| p.as_string_list()).unwrap_or_default()
+        self.get_property(name)
+            .map(|p| p.as_string_list())
+            .unwrap_or_default()
     }
 
     /// Check if node is available (status = "ok" or "okay" or no status property)
@@ -435,7 +471,12 @@ impl DeviceTree {
         result
     }
 
-    fn find_compatible_recursive<'a>(&self, node: &'a DeviceNode, compatible: &str, result: &mut Vec<&'a DeviceNode>) {
+    fn find_compatible_recursive<'a>(
+        &self,
+        node: &'a DeviceNode,
+        compatible: &str,
+        result: &mut Vec<&'a DeviceNode>,
+    ) {
         if node.compatible().iter().any(|c| c == compatible) {
             result.push(node);
         }

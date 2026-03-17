@@ -1,10 +1,10 @@
 pub mod syscall;
-use log::{error, warn};
 use crate::arch::memory::*;
 use crate::syscall::syscall::*;
+use log::{error, warn};
 // Linux riscv64 syscall numbers (subset used by the oscomp test suite)
 pub const SYS_GETCWD: usize = 17;
-pub const SYS_IOCTL:usize = 29;
+pub const SYS_IOCTL: usize = 29;
 pub const SYS_UNLINKAT: usize = 35;
 pub const SYS_LINKAT: usize = 37;
 pub const SYS_UMOUNT2: usize = 39;
@@ -18,12 +18,12 @@ pub const SYS_GETDENTS64: usize = 61;
 pub const SYS_LSEEK: usize = 62;
 pub const SYS_READ: usize = 63;
 pub const SYS_WRITE: usize = 64;
-pub const SYS_WRITEV:usize = 66; 
+pub const SYS_WRITEV: usize = 66;
 pub const SYS_NEWFSTATAT: usize = 79;
 pub const SYS_FSTAT: usize = 80;
 pub const SYS_EXIT: usize = 93;
-pub const SYS_EXIT_GROUP:usize = 94;
-pub const SYS_SET_TID_ADDRESS:usize = 96;
+pub const SYS_EXIT_GROUP: usize = 94;
+pub const SYS_SET_TID_ADDRESS: usize = 96;
 pub const SYS_NANOSLEEP: usize = 101;
 pub const SYS_SETPRIORITY: usize = 140;
 pub const SYS_TIMES: usize = 153;
@@ -43,7 +43,7 @@ pub const SYS_DUP3: usize = 24;
 ///id: 系统调用号
 ///args:接受1个usize参数
 ///返回值：通过 x10 (a0) 寄存器返回给用户态
-pub fn syscall_handler(id:usize,arg:[usize;6]) -> isize {
+pub fn syscall_handler(id: usize, arg: [usize; 6]) -> isize {
     match id {
         SYS_SET_TID_ADDRESS => sys_set_tid_address(arg[0]),
         SYS_EXIT_GROUP => sys_exit_group(arg[0]),
@@ -72,12 +72,8 @@ pub fn syscall_handler(id:usize,arg:[usize;6]) -> isize {
         // We currently ignore dirfd/mode and reuse sys_open's semantics.
         SYS_OPENAT => sys_open(arg[1], arg[2]),
 
-        SYS_CLOSE=>{
-            sys_close(arg[0])
-        }
-        SYS_LSEEK=>{
-            sys_lseek(arg[0], arg[1] as isize, arg[2])
-        }
+        SYS_CLOSE => sys_close(arg[0]),
+        SYS_LSEEK => sys_lseek(arg[0], arg[1] as isize, arg[2]),
         // newfstatat(dirfd, pathname, statbuf, flags)
         // For now we ignore dirfd/flags and reuse the existing path-based sys_stat.
         SYS_NEWFSTATAT => sys_stat(arg[1], arg[2]),
@@ -92,7 +88,7 @@ pub fn syscall_handler(id:usize,arg:[usize;6]) -> isize {
 
         // mkdirat(dirfd, pathname, mode)
         // oscomp user/lib/syscall.c implements mkdir() via mkdirat(AT_FDCWD,...,mode)
-        SYS_MKDIRAT => {sys_mkdirat(arg[0] as isize, arg[1], arg[2])},
+        SYS_MKDIRAT => sys_mkdirat(arg[0] as isize, arg[1], arg[2]),
         SYS_UNLINKAT => sys_unlink(arg[1]),
 
         SYS_GETDENTS64 => sys_getdents64(arg[0], arg[1], arg[2]),
@@ -123,4 +119,3 @@ pub fn syscall_handler(id:usize,arg:[usize;6]) -> isize {
         }
     }
 }
-

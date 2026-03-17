@@ -1,5 +1,5 @@
-use core::fmt;
 use crate::fs::component::tty::print as driver_print;
+use core::fmt;
 
 /// 内核打印函数,直接输出到当前任务缓冲区？？，不对吧。
 pub fn kprint(fmt: fmt::Arguments) {
