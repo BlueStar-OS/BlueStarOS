@@ -170,7 +170,7 @@ pub struct VirtBlk(pub UPSafeCell<VirtIOBlk<'static, VirtioHal>>, u64);
 unsafe impl Send for VirtBlk {}
 unsafe impl Sync for VirtBlk {}
 
-impl crate::fs::vfs::BlueBlk for VirtBlk {
+impl crate::fs::vfs::BlockDevTrait for VirtBlk {
     fn read_block(&mut self, lba: usize, buf: &mut [u8]) -> Result<(), crate::fs::vfs::VfsFsError> {
         self.0
             .lock()

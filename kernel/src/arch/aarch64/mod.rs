@@ -1,5 +1,7 @@
+pub mod board;
 pub mod driver;
 pub mod memory;
+pub mod panic;
 pub mod sbi;
 pub mod task;
 pub mod time;
@@ -7,8 +9,8 @@ pub mod trap;
 
 use crate::allocator_init;
 use crate::arch::driver::{gicd, keyboard};
-use crate::arch::memory::eaylymmu::turn_early_mmu;
 use crate::arch::memory::early_mmu_init;
+use crate::arch::memory::eaylymmu::turn_early_mmu;
 use crate::config::*;
 use crate::debug;
 use crate::dtb;
@@ -22,7 +24,9 @@ pub use sbi::*;
 global_asm!(include_str!("./entry.asm"));
 
 pub use task::__switch;
-pub use trap::{__aarch64_vector, app_entry_point, kernel_trap_handler, set_kernel_trap_handler, TrapContext};
+pub use trap::{
+    __aarch64_vector, app_entry_point, kernel_trap_handler, set_kernel_trap_handler, TrapContext,
+};
 
 pub fn arch_init() {
     kprintln!("Arch PlatForm init");

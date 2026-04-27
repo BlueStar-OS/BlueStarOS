@@ -79,13 +79,11 @@ pub extern "C" fn kernel_trap_handler() {
         Trap::Exception(Exception::UserEnvCall) => {
             {
                 let current_trapcx = TASK_MANAER.get_current_trapcx();
-                debug!("pre sepc:{:#x}", current_trapcx.sepc_entry_point);
                 current_trapcx.sepc_entry_point += 4;
             }
             let ret = syscall_handler(sys_id, sys_args);
             {
                 let current_trapcx: &mut TrapContext = TASK_MANAER.get_current_trapcx();
-                debug!("lat sepc:{:#x}", current_trapcx.sepc_entry_point);
                 current_trapcx.x[10] = ret as usize;
             }
         }

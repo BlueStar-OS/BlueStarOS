@@ -90,7 +90,6 @@ pub fn getc_blocking() -> u8 {
     }
 }
 
-
 use crate::driver::dtb::DeviceNode;
 use log::{info, warn};
 
@@ -137,10 +136,16 @@ fn arm_pl011_probe(node: &DeviceNode, _compatible: &str) -> Result<(), &'static 
                 cells, intid
             );
         } else {
-            warn!("[UART Probe] Failed to decode interrupts property: {:?}", cells);
+            warn!(
+                "[UART Probe] Failed to decode interrupts property: {:?}",
+                cells
+            );
         }
     } else {
-        warn!("[UART Probe] Missing interrupts property, fallback INTID={}", irq_intid());
+        warn!(
+            "[UART Probe] Missing interrupts property, fallback INTID={}",
+            irq_intid()
+        );
     }
 
     {

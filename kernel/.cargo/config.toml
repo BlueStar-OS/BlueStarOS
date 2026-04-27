@@ -1,6 +1,5 @@
 [build]
 target = "riscv64gc-unknown-none-elf"
-
 [target.riscv64gc-unknown-none-elf]
 rustflags = [
     "-Clink-arg=-Tsrc/linker.ld", "-Cforce-frame-pointers=yes"
@@ -9,7 +8,7 @@ linker = "rust-lld"
 
 [target.aarch64-unknown-none-softfloat]
 rustflags = [
-    "-Clink-arg=-Tsrc/linker-aarch64.ld", "-Cforce-frame-pointers=yes"
+    "-Clink-arg=-Tsrc/linker-aarch64.ld", "-Cforce-frame-pointers=yes" , "-C" , "force-frame-pointers=yes"
 ]
 linker = "rust-lld"
 

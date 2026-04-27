@@ -1,6 +1,6 @@
 use super::set_kernel_trap_handler;
-use super::traplog::log_exception_detail;
 use super::traphandler::{dispatch_user_sync, gic_handle_irq_in_user};
+use super::traplog::log_exception_detail;
 use core::arch::asm;
 
 #[inline]
@@ -59,7 +59,7 @@ pub extern "C" fn irq_el0_64() {
     use crate::trap::recycle_pending_kstacks;
 
     //raw_irq_probe(b"<uirq>");
-   // log::warn!("[IRQ] enter user irq_el0_64");
+    // log::warn!("[IRQ] enter user irq_el0_64");
     recycle_pending_kstacks();
     gic_handle_irq_in_user();
     app_entry_point();

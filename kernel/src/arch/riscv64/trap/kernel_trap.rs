@@ -5,7 +5,10 @@ use crate::task::TASK_MANAER;
 use crate::time::set_next_timeInterupt;
 use riscv::register::satp;
 use riscv::register::scause::Interrupt;
-use riscv::register::{scause::{self, Trap}, sepc, sstatus, stval};
+use riscv::register::{
+    scause::{self, Trap},
+    sepc, sstatus, stval,
+};
 #[no_mangle]
 pub extern "C" fn kernel_mode_trap_handler() {
     let scauses = scause::read();

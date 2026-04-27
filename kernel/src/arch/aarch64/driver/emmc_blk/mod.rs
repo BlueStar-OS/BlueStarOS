@@ -1,4 +1,4 @@
-//! eMMC 块设备驱动，通过 sdmmc crate 实现 BlueBlk trait
+//! eMMC 块设备驱动，通过 sdmmc crate 实现 BlockDevTrait trait
 
 pub mod kernel_impl;
 use crate::dtb::DeviceNode;
@@ -6,7 +6,7 @@ use crate::fs::vfs::register_global_block_device;
 use crate::kprintln;
 use crate::{
     dtb_probe,
-    fs::vfs::{BlueBlk, VfsFsError},
+    fs::vfs::{BlockDevTrait, VfsFsError},
 };
 use alloc::sync::Arc;
 use log::info;
@@ -62,7 +62,7 @@ impl EmmcBlk {
     }
 }
 
-impl BlueBlk for EmmcBlk {
+impl BlockDevTrait for EmmcBlk {
     fn read_block(&mut self, lba: usize, buf: &mut [u8]) -> Result<(), VfsFsError> {
         self.host
             .read_blocks(lba as u32, 1, buf)

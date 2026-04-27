@@ -4,7 +4,20 @@
 extern crate user_lib;
 use user_lib::print;
 use user_lib::{args, println};
+use user_lib::error::*;
 use user_lib::syscall::sys_umount2;
+
+fn errname(ret: isize) -> &'static str {
+    match (-ret) as isize {
+        EINVAL => "EINVAL",
+        ENOENT => "ENOENT",
+        ENODEV => "ENODEV",
+        EBUSY => "EBUSY",
+        EIO => "EIO",
+        EFAULT => "EFAULT",
+        _ => "UNKNOWN",
+    }
+}
 
 #[no_mangle]
 pub fn main() -> usize {
@@ -18,7 +31,12 @@ pub fn main() -> usize {
     let target = argv[1].as_str();
     let ret = sys_umount2(target, 0);
     if ret < 0 {
-        println!("umount failed ret={} target={}", ret, target);
+        println!(
+            "umount failed ret={} ({}) target={}",
+            ret,
+            errname(ret),
+            target
+        );
         return 1;
     }
     0

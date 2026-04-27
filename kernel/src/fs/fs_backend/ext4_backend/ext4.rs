@@ -1,22 +1,19 @@
 use crate::fs::vfs::*;
 use alloc::string::ToString;
-use log::error;
-use rsext4::{ext4_backend::ext4::Ext4FileSystem, fs_mount, fs_umount, mkfs, Jbd2Dev};
+use rsext4::api::{fs_mount, fs_umount, OpenFile};
+use rsext4::dir::get_inode_with_num;
+use rsext4::entries::DirEntryIterator;
+use rsext4::loopfile::resolve_inode_block_allextend;
+use rsext4::{
+    lseek as ext4_lseek, mkdir as ext4_mkdir, mkfile as ext4_mkfile, mv as ext4_mv,
+    open as ext4_open, read_at as ext4_read_at, rename as ext4_rename, truncate as ext4_truncate,
+    unlink as ext4_unlink, write_at as ext4_write_at, Ext4FileSystem, Jbd2Dev, BLOCK_SIZE,
+};
 
 use super::Ext4BlockDevice;
 use alloc::format;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
-use rsext4::ext4_backend::config::BLOCK_SIZE;
-use rsext4::ext4_backend::dir::get_inode_with_num;
-use rsext4::ext4_backend::entries::DirEntryIterator;
-use rsext4::ext4_backend::file::unlink as ext4_unlink;
-use rsext4::ext4_backend::loopfile::resolve_inode_block_allextend;
-use rsext4::{
-    lseek as ext4_lseek, mkdir as ext4_mkdir, mkfile as ext4_mkfile, mv as ext4_mv,
-    open as ext4_open, read_at as ext4_read_at, rename as ext4_rename, truncate as ext4_truncate,
-    write_at as ext4_write_at, OpenFile,
-};
 
 pub struct Ext4Fs {
     pub dev: Jbd2Dev<Ext4BlockDevice>,
@@ -79,7 +76,7 @@ impl File for Ext4File {
             let mut of = self.of.lock();
             if self.flags.contains(OpenFlags::APPEND) {
                 let end = of.inode.size() as u64;
-                ext4_lseek(&mut *of, end);
+                ext4_lseek(&mut *of, end).map_err(|_| VfsFsError::IO)?;
             }
             ext4_write_at(&mut ext4.dev, fs_inner, &mut *of, buf).map_err(|_| VfsFsError::IO)?;
             Ok(buf.len())
@@ -93,7 +90,7 @@ impl File for Ext4File {
         let data = self.with_ext4_mut(|ext4| {
             let fs_inner = ext4.fs.as_mut().ok_or(VfsFsError::IO)?;
             let mut of = self.of.lock();
-            ext4_lseek(&mut *of, offset as u64);
+            ext4_lseek(&mut *of, offset as u64).map_err(|_| VfsFsError::IO)?;
             ext4_read_at(&mut ext4.dev, fs_inner, &mut *of, buf.len()).map_err(|_| VfsFsError::IO)
         })?;
         let n = core::cmp::min(buf.len(), data.len());
@@ -108,7 +105,7 @@ impl File for Ext4File {
         self.with_ext4_mut(|ext4| {
             let fs_inner = ext4.fs.as_mut().ok_or(VfsFsError::IO)?;
             let mut of = self.of.lock();
-            ext4_lseek(&mut *of, offset as u64);
+            ext4_lseek(&mut *of, offset as u64).map_err(|_| VfsFsError::IO)?;
             ext4_write_at(&mut ext4.dev, fs_inner, &mut *of, buf).map_err(|_| VfsFsError::IO)?;
             Ok(buf.len())
         })
@@ -130,7 +127,7 @@ impl File for Ext4File {
         if new_off < 0 {
             return Err(VfsFsError::NotSupported);
         }
-        ext4_lseek(&mut *of, new_off as u64);
+        ext4_lseek(&mut *of, new_off as u64).map_err(|_| VfsFsError::IO)?;
         Ok(of.offset as usize)
     }
 
@@ -144,7 +141,7 @@ impl File for Ext4File {
             VFS_DT_UNKNOWN
         };
         Ok(VfsStat {
-            inode: of.inode_num,
+            inode: of.inode_num.raw(),
             size: of.inode.size(),
             mode: 0,
             file_type,
@@ -284,7 +281,7 @@ impl VfsFs for Ext4Fs {
         .map_err(|_| VfsFsError::IO)?;
         if flags.contains(OpenFlags::APPEND) {
             let end = of.inode.size() as u64;
-            ext4_lseek(&mut of, end);
+            ext4_lseek(&mut of, end).map_err(|_| VfsFsError::IO)?;
         }
         if flags.contains(OpenFlags::TRUNC) {
             if flags.writable() {
@@ -310,19 +307,13 @@ impl VfsFs for Ext4Fs {
 
     fn mkdir(&mut self, path: &str) -> Result<(), VfsFsError> {
         let fs_inner = self.fs.as_mut().ok_or(VfsFsError::IO)?;
-        let res = ext4_mkdir(&mut self.dev, fs_inner, path);
-        if res.is_none() {
-            return Err(VfsFsError::IO);
-        }
+        ext4_mkdir(&mut self.dev, fs_inner, path).map_err(|_| VfsFsError::IO)?;
         Ok(())
     }
 
     fn mkfile(&mut self, path: &str) -> Result<(), VfsFsError> {
         let fs_inner = self.fs.as_mut().ok_or(VfsFsError::IO)?;
-        let res = ext4_mkfile(&mut self.dev, fs_inner, path, None, None);
-        if res.is_none() {
-            return Err(VfsFsError::IO);
-        }
+        ext4_mkfile(&mut self.dev, fs_inner, path, None, None).map_err(|_| VfsFsError::IO)?;
         Ok(())
     }
 
@@ -360,7 +351,7 @@ impl VfsFs for Ext4Fs {
         if inode.is_dir() {
             return Err(VfsFsError::IsDir);
         }
-        ext4_unlink(fs_inner, &mut self.dev, path);
+        ext4_unlink(fs_inner, &mut self.dev, path).map_err(|_| VfsFsError::IO)?;
         Ok(())
     }
 
@@ -378,7 +369,7 @@ impl VfsFs for Ext4Fs {
             VFS_DT_UNKNOWN
         };
         Ok(VfsStat {
-            inode: ino,
+            inode: ino.raw(),
             size: inode.size(),
             mode: 0,
             file_type,

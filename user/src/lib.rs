@@ -176,3 +176,5 @@ use crate::panic::panic;
 
 pub use self::syscall::*;
 pub use self::console::*;
+pub mod error;
+pub use self::error::*;

@@ -3,8 +3,8 @@ use crate::config::SECTOR_SIZE;
 use crate::fs::fs_backend::RamFs;
 use crate::fs::partition::gpt::{parsing_gpt_entries, parsing_gpt_header, GptPartitionName};
 use crate::fs::partition::mbr::{parsing_mbr_partition, MbrPartitionType};
-use crate::fs::partition::DevicePartition;
-use crate::fs::vfs::{global_block_devices, File, VfsFsError, VBLOCK};
+use crate::fs::vfs::dm_liner::DmlinerEntry;
+use crate::fs::vfs::{global_block_devices, BlockDevTrait, File, VfsFsError, BLOCKDEVFILE};
 use alloc::{string::String, sync::Arc, vec::Vec};
 use log::{debug, warn};
 use spin::Mutex;
@@ -40,7 +40,7 @@ impl RootFs {
         alloc::format!("/vd{}", suffix)
     }
 
-    /// 为单个块设备创建原始设备节点和分区节点。
+    /// 为块设备整盘设备文件，并且尝试扫描这个盘的分区来建立分区设备文件节点。
     ///
     /// 行为约定：
     /// 1. 总是先创建原始块设备节点，例如 `/vda`；
@@ -50,15 +50,12 @@ impl RootFs {
     fn register_block_device_nodes(
         ramfs: &mut RamFs,
         dev_path: &str,
-        blk: Arc<Mutex<dyn crate::fs::vfs::BlueBlk>>,
+        blk: Arc<Mutex<dyn BlockDevTrait>>,
     ) -> Result<(), VfsFsError> {
         let total_sectors = blk.lock().capacity_in_sectors();
-        let whole = Arc::new(VBLOCK::new(
+        let whole = Arc::new(BLOCKDEVFILE::new(
             blk.clone(),
-            DevicePartition::Raw {
-                base_lba: 0,
-                sectors: total_sectors,
-            },
+            DmlinerEntry::new(0, total_sectors),
         )) as Arc<dyn crate::fs::vfs::File>;
         ramfs.mkdev(dev_path, whole)?;
 
@@ -93,13 +90,9 @@ impl RootFs {
                     "{} MBR partition {}: start_lba={}, sectors={}, meta={:?}",
                     dev_path, idx, entry.start_lba, entry.sectors, entry.metadata
                 );
-                let dev = Arc::new(VBLOCK::new(
+                let dev = Arc::new(BLOCKDEVFILE::new(
                     blk.clone(),
-                    DevicePartition::Mbr {
-                        base_lba: entry.start_lba,
-                        sectors: entry.sectors,
-                        metadata: entry.metadata,
-                    },
+                    DmlinerEntry::new(entry.start_lba, entry.sectors),
                 )) as Arc<dyn crate::fs::vfs::File>;
                 let path = alloc::format!("{}{}", dev_path, idx + 1);
                 ramfs.mkdev(path.as_str(), dev)?;
@@ -146,13 +139,9 @@ impl RootFs {
                 "{} GPT partition {}: start_lba={}, sectors={}, meta={:?}",
                 dev_path, idx, gp.start_lba, gp.sectors, gp.metadata
             );
-            let dev = Arc::new(VBLOCK::new(
+            let dev = Arc::new(BLOCKDEVFILE::new(
                 blk.clone(),
-                DevicePartition::Gpt {
-                    base_lba: gp.start_lba,
-                    sectors: gp.sectors,
-                    metadata: gp.metadata,
-                },
+                DmlinerEntry::new(gp.start_lba, gp.sectors),
             )) as Arc<dyn crate::fs::vfs::File>;
             let path = alloc::format!("{}{}", dev_path, idx + 1);
             ramfs.mkdev(path.as_str(), dev)?;
@@ -178,12 +167,9 @@ impl RootFs {
             let dev_path = Self::block_device_name(idx);
             let total_sectors = blk.lock().capacity_in_sectors();
 
-            let raw = Arc::new(VBLOCK::new(
+            let raw = Arc::new(BLOCKDEVFILE::new(
                 blk.clone(),
-                DevicePartition::Raw {
-                    base_lba: 0,
-                    sectors: total_sectors,
-                },
+                DmlinerEntry::new(0, total_sectors),
             )) as Arc<dyn File>;
             filesystem_candidates.push(FilesystemProbeCandidate {
                 path: dev_path.clone(),
@@ -209,13 +195,9 @@ impl RootFs {
                 } else {
                     for (part_idx, entry) in parts.into_iter().enumerate() {
                         let part_path = alloc::format!("{}{}", dev_path, part_idx + 1);
-                        let part = Arc::new(VBLOCK::new(
+                        let part = Arc::new(BLOCKDEVFILE::new(
                             blk.clone(),
-                            DevicePartition::Mbr {
-                                base_lba: entry.start_lba,
-                                sectors: entry.sectors,
-                                metadata: entry.metadata,
-                            },
+                            DmlinerEntry::new(entry.start_lba, entry.sectors),
                         )) as Arc<dyn File>;
                         filesystem_candidates.push(FilesystemProbeCandidate {
                             path: part_path,
@@ -263,13 +245,9 @@ impl RootFs {
             {
                 let part_path = alloc::format!("{}{}", dev_path, part_idx + 1);
                 let is_gpt_rootfs = matches!(&entry.metadata.name, GptPartitionName::Named(name) if name == "rootfs");
-                let part = Arc::new(VBLOCK::new(
+                let part = Arc::new(BLOCKDEVFILE::new(
                     blk.clone(),
-                    DevicePartition::Gpt {
-                        base_lba: entry.start_lba,
-                        sectors: entry.sectors,
-                        metadata: entry.metadata,
-                    },
+                    DmlinerEntry::new(entry.start_lba, entry.sectors),
                 )) as Arc<dyn File>;
                 filesystem_candidates.push(FilesystemProbeCandidate {
                     path: part_path,

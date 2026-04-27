@@ -2,6 +2,7 @@
 #![no_main]
 use user_lib::print;
 use user_lib::println;
+use user_lib::error::*;
 use user_lib::syscall::{
     sys_close, sys_creat, sys_exit, sys_fork, sys_mmap, sys_open, sys_read, sys_unmap, sys_wait,
     sys_write, MmapFlags, MmapProt, O_RDONLY, O_RDWR,
@@ -13,14 +14,24 @@ pub fn main()->usize{
     let mut pass: usize = 0;
     let mut fail: usize = 0;
 
+    fn errname(ret: isize) -> &'static str {
+        if ret >= 0 { return "OK"; }
+        match (-ret) as isize {
+            EINVAL => "EINVAL",
+            ENOMEM => "ENOMEM",
+            EBADF => "EBADF",
+            _ => "UNKNOWN",
+        }
+    }
+
     fn report(pass: &mut usize, fail: &mut usize, name: &str, expect_ok: bool, ret: isize) {
-        let ok = ret != -1;
+        let ok = ret >= 0;
         if ok == expect_ok {
             *pass += 1;
             println!("[PASS] {} | expect_ok={} actual_ok={} ret={:#x}", name, expect_ok, ok, ret as usize);
         } else {
             *fail += 1;
-            println!("[FAIL] {} | expect_ok={} actual_ok={} ret={:#x}", name, expect_ok, ok, ret as usize);
+            println!("[FAIL] {} | expect_ok={} actual_ok={} ret={:#x} ({})", name, expect_ok, ok, ret as usize, errname(ret));
         }
     }
 
@@ -121,7 +132,7 @@ pub fn main()->usize{
         0,
     );
     report(&mut pass, &mut fail, "mmap 1 page for munmap", true, ret4_map);
-    if ret4_map != -1 {
+    if ret4_map >= 0 {
         let mapped = ret4_map as usize;
         let v = touch_u8(mapped, 0x66);
         report_bool(&mut pass, &mut fail, "touch before munmap", true, v == 0x66);
@@ -158,7 +169,7 @@ pub fn main()->usize{
         0,
     );
     report(&mut pass, &mut fail, "mmap 3 pages for partial munmap", true, ret5_map);
-    if ret5_map != -1 {
+    if ret5_map >= 0 {
         let a0 = base5;
         let a1 = base5 + page;
         let a2 = base5 + page * 2;
@@ -190,7 +201,7 @@ pub fn main()->usize{
         0,
     );
     report(&mut pass, &mut fail, "mmap 4 pages for prefix munmap", true, ret6_map);
-    if ret6_map != -1 {
+    if ret6_map >= 0 {
         let p0 = base6;
         let p1 = base6 + page;
         let p2 = base6 + page * 2;
@@ -218,7 +229,7 @@ pub fn main()->usize{
         0,
     );
     report(&mut pass, &mut fail, "mmap 4 pages for suffix munmap", true, ret7_map);
-    if ret7_map != -1 {
+    if ret7_map >= 0 {
         let p0 = base7;
         let p1 = base7 + page;
         let p2 = base7 + page * 2;
@@ -246,7 +257,7 @@ pub fn main()->usize{
         0,
     );
     report(&mut pass, &mut fail, "mmap 5 pages for 2-page hole munmap", true, ret8_map);
-    if ret8_map != -1 {
+    if ret8_map >= 0 {
         let p0 = base8;
         let p1 = base8 + page;
         let p2 = base8 + page * 2;
@@ -277,7 +288,7 @@ pub fn main()->usize{
         0,
     );
     report(&mut pass, &mut fail, "mmap 1 page for len=1 munmap", true, ret9_map);
-    if ret9_map != -1 {
+    if ret9_map >= 0 {
         let _ = touch_u8(base9, 0x60);
         let ret9_un = sys_unmap(base9, 1);
         report(&mut pass, &mut fail, "munmap len=1 should succeed", true, ret9_un);
@@ -304,7 +315,7 @@ pub fn main()->usize{
         0,
     );
     report(&mut pass, &mut fail, "MAP_FIXED area B (2 pages)", true, ret10_b);
-    if ret10_a != -1 && ret10_b != -1 {
+    if ret10_a >= 0 && ret10_b >= 0 {
         let a0 = base10;
         let a1 = base10 + page;
         let b0 = base10 + page * 3;
@@ -327,13 +338,13 @@ pub fn main()->usize{
     let path11 = "/test/munmap_drop_shared.bin";
     let fd11 = sys_creat(path11);
     report(&mut pass, &mut fail, "creat drop(shared) file", true, fd11);
-    if fd11 != -1 {
+    if fd11 >= 0 {
         write_fill_4096(&mut pass, &mut fail, fd11 as usize, b'A', "init drop(shared) file page0");
         let _ = sys_close(fd11 as usize);
     }
     let fd11_rw = sys_open(path11, O_RDWR);
     report(&mut pass, &mut fail, "open(O_RDWR) drop(shared)", true, fd11_rw);
-    let pid11 = if fd11_rw != -1 { sys_fork() } else { -1 };
+    let pid11 = if fd11_rw >= 0 { sys_fork() } else { -1 };
     if pid11 == 0 {
         let mapped = sys_mmap(
             base11,
@@ -343,7 +354,7 @@ pub fn main()->usize{
             fd11_rw,
             0,
         );
-        if mapped != -1 {
+        if mapped >= 0 {
             unsafe {
                 core::ptr::write_volatile(mapped as *mut u8, b'S');
             }
@@ -366,13 +377,13 @@ pub fn main()->usize{
     let path12 = "/test/munmap_drop_private.bin";
     let fd12 = sys_creat(path12);
     report(&mut pass, &mut fail, "creat drop(private) file", true, fd12);
-    if fd12 != -1 {
+    if fd12 >= 0 {
         write_fill_4096(&mut pass, &mut fail, fd12 as usize, b'A', "init drop(private) file page0");
         let _ = sys_close(fd12 as usize);
     }
     let fd12_rw = sys_open(path12, O_RDWR);
     report(&mut pass, &mut fail, "open(O_RDWR) drop(private)", true, fd12_rw);
-    let pid12 = if fd12_rw != -1 { sys_fork() } else { -1 };
+    let pid12 = if fd12_rw >= 0 { sys_fork() } else { -1 };
     if pid12 == 0 {
         let mapped = sys_mmap(
             base12,
@@ -382,7 +393,7 @@ pub fn main()->usize{
             fd12_rw,
             0,
         );
-        if mapped != -1 {
+        if mapped >= 0 {
             unsafe {
                 core::ptr::write_volatile(mapped as *mut u8, b'P');
             }

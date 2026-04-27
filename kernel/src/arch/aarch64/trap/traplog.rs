@@ -1,8 +1,8 @@
+use crate::arch::memory::VirAddr;
+use crate::task::TASK_MANAER;
 use alloc::string::String;
 use core::arch::asm;
 use log::{debug, error};
-use crate::arch::memory::VirAddr;
-use crate::task::TASK_MANAER;
 pub(crate) struct TrapDetail {
     pub esr: u64,
     pub elr: u64,
@@ -250,12 +250,7 @@ impl TrapDetail {
         );
         error!(
             "{} detail: {} SP_EL0={:#x} SP_EL1={:#x} TTBR0_EL1={:#x} TTBR1_EL1={:#x}",
-            tag,
-            self.esr_detail,
-            self.sp_el0,
-            self.sp_el1,
-            self.ttbr0_el1,
-            self.ttbr1_el1
+            tag, self.esr_detail, self.sp_el0, self.sp_el1, self.ttbr0_el1, self.ttbr1_el1
         );
     }
 
@@ -266,12 +261,7 @@ impl TrapDetail {
         );
         debug!(
             "{} detail: {} SP_EL0={:#x} SP_EL1={:#x} TTBR0_EL1={:#x} TTBR1_EL1={:#x}",
-            tag,
-            self.esr_detail,
-            self.sp_el0,
-            self.sp_el1,
-            self.ttbr0_el1,
-            self.ttbr1_el1
+            tag, self.esr_detail, self.sp_el0, self.sp_el1, self.ttbr0_el1, self.ttbr1_el1
         );
     }
 }
@@ -292,8 +282,6 @@ pub(crate) fn log_unhandled_page_fault(
         error!("  PTE Flags: {:?}", flags);
     }
 }
-
-
 
 pub fn log_user_opcode_window(elr: u64) {
     use crate::arch::memory::PageTable;

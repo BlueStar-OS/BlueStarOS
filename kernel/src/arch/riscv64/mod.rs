@@ -19,14 +19,14 @@ use core::arch::global_asm;
 use log::debug;
 pub use riscv::register::satp;
 use riscv::register::sie;
+use riscv::register::sstatus;
 use riscv::register::stvec;
 use riscv::register::utvec::TrapMode;
-use riscv::register::sstatus;
 
 pub use sbi::*;
-pub use task::__switch;
 pub use task::TaskContext;
-pub use trap::{app_entry_point, kernel_mode_trap_handler, kernel_trap_handler,TrapContext};
+pub use task::__switch;
+pub use trap::{app_entry_point, kernel_mode_trap_handler, kernel_trap_handler, TrapContext};
 
 extern "C" {
     fn __kernel_mode_trap();
@@ -114,7 +114,6 @@ pub fn enable_timer_interrupt() {
     unsafe {
         sie::set_stimer();
     }
-    debug!("TIMER INTERUPT ENABLE!");
 }
 
 pub fn disable_timer_interrupt() {
@@ -122,7 +121,6 @@ pub fn disable_timer_interrupt() {
         sie::clear_stimer();
     }
 }
-
 
 pub fn enable_external_interrupt() {
     unsafe {

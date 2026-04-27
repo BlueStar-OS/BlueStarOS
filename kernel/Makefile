@@ -1,6 +1,8 @@
 # Building
 ARCH  ?= riscv64
 MODE := release
+QEMU_MACHINE ?= virt
+QEMU_PLAT ?=
 USER_DIR := ../user
 LOG ?= DEBUG
 
@@ -9,7 +11,6 @@ ifeq ($(ARCH), riscv64)
 TARGET := riscv64gc-unknown-none-elf
 KERNEL_ENTRY_PA := 0x80200000
 BOOTLOADER := ./bootloader/rustsbi-prototyper-jump.bin
-QEMU_MACHINE := virt
 QEMU_CPU :=
 QEMU_BIOS := 
 QEMU_KERNEL = -kernel $(KERNEL_ELF)
@@ -32,7 +33,6 @@ else ifeq ($(ARCH), aarch64)
 TARGET := aarch64-unknown-none-softfloat
 KERNEL_ENTRY_PA := 0x40080000
 BOOTLOADER :=
-QEMU_MACHINE := virt
 QEMU_CPU := -cpu cortex-a72
 QEMU_BIOS :=
 QEMU_KERNEL = -kernel $(KERNEL_BIN)
@@ -90,6 +90,8 @@ build: user-makeimg
 	@cargo clean
 	@rm -f $(KERNEL_ELF) $(KERNEL_BIN) src/BlueStarOS.elf src/BlueStarOS.bin
 	@LOG=$(LOG) cargo build --target $(TARGET) $(MODE_ARG) $(FEATURES_ARG) --offline
+	@# 从 ELF 提取内核符号表，生成 src/kernel_symbols.txt（用于 backtrace 函数名解析）
+	@rust-nm --demangle -n $(KERNEL_ELF) 2>/dev/null | grep ' [tT] ' | grep -v '^[0-9a-f]* t \.L' | awk '{addr=$$1; $$1=""; $$2=""; gsub(/^ +/, ""); print addr " " $$0}' > src/kernel_symbols.txt
 	$(OBJCOPY) $(KERNEL_ELF) --strip-all -O binary $(KERNEL_BIN)
 	@cp $(KERNEL_ELF) src/BlueStarOS.elf
 	@cp $(KERNEL_BIN) src/BlueStarOS.bin
@@ -123,7 +125,7 @@ run: run-inner
 run_consent: run-consent-inner
 
 run-inner: build
-	@qemu-system-$(ARCH) \
+	@$(QEMU_PLAT)qemu-system-$(ARCH) \
 		-machine $(QEMU_MACHINE) \
 		$(QEMU_CPU) \
 		-m 256m \
@@ -136,7 +138,7 @@ run-inner: build
 
 run-consent-inner: user-consent-img
 	@cargo build --target $(TARGET) $(MODE_ARG) $(FEATURES_ARG) --offline
-	@qemu-system-$(ARCH) \
+	@$(QEMU_PLAT)qemu-system-$(ARCH) \
 		-machine virt \
 		-kernel $(KERNEL_BIN) \
 		$(QEMU_DTB_ARG) \
@@ -151,12 +153,12 @@ run-consent-inner: user-consent-img
 
 debug: build
 	@tmux new-session -d \
-		"qemu-system-$(ARCH) -machine $(QEMU_MACHINE) $(QEMU_CPU) -m 256m -nographic $(QEMU_DEBUG_BOOT) $(QEMU_DTB_ARG) $(QEMU_DEVICE_ARGS) -s -S" && \
+		"$(QEMU_PLAT)qemu-system-$(ARCH) -machine $(QEMU_MACHINE) $(QEMU_CPU) -m 256m -nographic $(QEMU_DEBUG_BOOT) $(QEMU_DTB_ARG) $(QEMU_DEVICE_ARGS) -s -S" && \
 		tmux split-window -h "$(ARCH)-unknown-elf-gdb -ex 'file $(KERNEL_ELF)' $(GDB_SET_ARCH) -ex 'target remote localhost:1234'" && \
 		tmux -2 attach-session -d
 
 gdbserver: build
-	@qemu-system-$(ARCH) -machine $(QEMU_MACHINE) $(QEMU_CPU) -m 256m -nographic $(QEMU_DEBUG_BOOT) $(QEMU_DTB_ARG) $(QEMU_DEVICE_ARGS) -s 
+	@$(QEMU_PLAT)qemu-system-$(ARCH) -machine $(QEMU_MACHINE) $(QEMU_CPU) -m 256m -nographic $(QEMU_DEBUG_BOOT) $(QEMU_DTB_ARG) $(QEMU_DEVICE_ARGS) -s 
 
 gdbclient:
 	@$(ARCH)-unknown-elf-gdb -ex 'file $(KERNEL_ELF)' $(GDB_SET_ARCH) -ex 'target remote localhost:1234'

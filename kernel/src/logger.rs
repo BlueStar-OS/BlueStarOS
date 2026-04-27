@@ -1,6 +1,6 @@
 //! Global logger
 
-use crate::{config::*, time::get_time_ms};
+use crate::{config::*, time::get_time_us};
 use log::{debug, Level, LevelFilter, Log, Metadata, Record};
 
 /// a simple logger
@@ -21,13 +21,17 @@ impl Log for SimpleLogger {
             Level::Debug => 32, // Green
             Level::Trace => 90, // BrightBlack
         };
-        crate::kprintln!(
-            "\u{1B}[{}m[{:>5}] {}\u{1B}[0m",
-            color,
-            // get_time_ms(),
-            record.level(),
-            record.args(),
-        );
+        let us = get_time_us();
+        let sec = us / 1_000_000;
+        let usec = us % 1_000_000;
+        // 分两步打印：前缀（时间辍 + level）再拼接 record.args()
+        let module = record.module_path().unwrap_or("");
+        crate::console::kprint(format_args!(
+            "\u{1B}[{}m[{:>5}.{:06}] {:>5} {}: ",
+            color, sec, usec, record.level(), module,
+        ));
+        crate::console::kprint(*record.args());
+        crate::console::kprint(format_args!("\u{1B}[0m\n"));
     }
     fn flush(&self) {}
 }

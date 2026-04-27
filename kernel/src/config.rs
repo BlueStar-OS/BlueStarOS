@@ -80,12 +80,11 @@ pub const BIG_INT: usize = 1_000_000;
 ///文件系统每个Block大小
 pub const BLOCKSIZE: usize = 4096;
 
-
 ///系统架构字符串
 #[cfg(target_arch = "aarch64")]
-pub const ARCHITECTURE:&str = "aarch64";
+pub const ARCHITECTURE: &str = "aarch64";
 #[cfg(target_arch = "riscv64")]
-pub const ARCHITECTURE:&str ="riscv64";
+pub const ARCHITECTURE: &str = "riscv64";
 
 use crate::{sync::UPSafeCell, MapSet};
 use lazy_static::lazy_static;

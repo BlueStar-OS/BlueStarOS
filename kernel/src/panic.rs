@@ -16,5 +16,9 @@ fn panic(_info: &PanicInfo) -> ! {
         crate::kprintln!("[Kernel Panic]: {:?}", _info.message());
     }
 
+    crate::kprintln!("--- backtrace ---");
+    crate::arch::panic::backtrace();
+    crate::kprintln!("-----------------");
+
     shutdown()
 }

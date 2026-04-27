@@ -72,7 +72,16 @@ pub fn file_loader(file_path: &str) -> Vec<u8> {
         return bytes.to_vec();
     }
 
-
+    // rk3588 临时内联
+    // if file_path == "/test/init" {
+    //     let start = app_start as usize;
+    //     let end = app_end as usize;
+    //     if end <= start {
+    //         return vec![];
+    //     }
+    //     let bytes = unsafe { core::slice::from_raw_parts(start as *const u8, end - start) };
+    //     return bytes.to_vec();
+    // }
 
     let fd = match vfs_open(file_path, OpenFlags::empty()) {
         Ok(res) => res,
@@ -121,7 +130,7 @@ pub fn file_loader(file_path: &str) -> Vec<u8> {
         }
         out.extend_from_slice(&tmp[..n]);
     }
-    info!("Load app for {} success!", file_path);
+    debug!("Load app for {} success!", file_path);
     out
 }
 

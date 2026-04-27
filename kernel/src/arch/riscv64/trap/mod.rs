@@ -6,7 +6,7 @@ use riscv::register::sstatus::SPP;
 pub mod kernel_trap;
 pub mod user_trap;
 
-pub use kernel_trap::{kernel_mode_trap_handler};
+pub use kernel_trap::kernel_mode_trap_handler;
 pub use user_trap::{app_entry_point, kernel_trap_handler};
 
 #[repr(C)]

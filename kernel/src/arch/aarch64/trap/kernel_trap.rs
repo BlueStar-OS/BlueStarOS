@@ -1,10 +1,8 @@
 use log::error;
 
-use super::traplog::log_exception_detail;
 use super::traphandler::{dispatch_kernel_sync, gic_handle_irq_in_kernel};
+use super::traplog::log_exception_detail;
 use super::user_trap::app_entry_point;
-
-
 
 #[no_mangle]
 pub extern "C" fn kernel_trap_handler() {

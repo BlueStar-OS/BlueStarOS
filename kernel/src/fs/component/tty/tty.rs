@@ -3,11 +3,11 @@ use crate::arch::{disable_irq, enable_irq, wait_for_interrupt};
 use crate::disable_timer_interrupt;
 use crate::enable_timer_interrupt;
 use crate::fs::vfs::{File, OpenFlags, VfsFsError};
+use crate::info;
 use crate::task::TASK_MANAER;
 use alloc::sync::Arc;
 use core::fmt::{self, Write};
 use log::{error, warn};
-use crate::info;
 pub const FD_TYPE_STDIN: usize = 0;
 pub const FD_TYPE_STDOUT: usize = 1;
 pub const FD_TYPE_STDERR: usize = 2;
@@ -36,14 +36,17 @@ impl Stdin {
 
     #[inline]
     fn wait_input_event() {
+        // 关时钟
         disable_timer_interrupt();
+        // 开中断
         enable_irq();
         wait_for_interrupt();
+        // 关中断
         disable_irq();
+        // 开时钟
         enable_timer_interrupt();
 
-       
-        //TASK_MANAER.suspend_and_run_task();
+        TASK_MANAER.suspend_and_run_task();
     }
 
     /// `suspend_and_run_task()` 只能在 trap 顶层安全调用。
@@ -82,11 +85,6 @@ impl File for Stdin {
                 TASK_MANAER.suspend_and_run_task();
                 cha = Self::get_char();
             }
-            info!(
-                "[stdin.read] cha={:#x} '{}'",
-                cha,
-                cha as char
-            );
             *slot = cha as u8;
             read_count += 1;
             if *slot == 13 {

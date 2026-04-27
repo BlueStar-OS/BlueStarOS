@@ -6,7 +6,6 @@ use crate::{
 use buddy_system_allocator::LockedHeap;
 use log::{trace, warn};
 
-
 use lazy_static::lazy_static;
 
 #[global_allocator]

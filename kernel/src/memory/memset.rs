@@ -13,7 +13,9 @@ use core::cell::RefMut;
 use core::hint;
 use log::warn;
 use log::{debug, error, trace};
-
+use crate::error::BlueErr::*;
+use crate::error::BlueErr;
+use crate::IRPG_OFFSET;
 use crate::sync::UPSafeCell;
 use crate::{
     config::*,
@@ -21,27 +23,6 @@ use crate::{
 };
 use lazy_static::lazy_static;
 
-lazy_static! {
-    static ref NEXT_MMAP_ID: UPSafeCell<u64> = unsafe { UPSafeCell::new(1) };
-}
-
-fn alloc_mmap_id() -> u64 {
-    let mut cur = NEXT_MMAP_ID.lock();
-    let id = *cur;
-    *cur = cur.saturating_add(1);
-    id
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-enum SharedMmapKey {
-    Anon { mmap_id: u64, page_index: u64 },
-    File { inode_num: u32, file_page: u64 },
-}
-
-lazy_static! {
-    static ref SHARED_MMAP_PAGES: UPSafeCell<BTreeMap<SharedMmapKey, Weak<FramTracker>>> =
-        unsafe { UPSafeCell::new(BTreeMap::new()) };
-}
 ///开始和结束，一个范围,自动[start,end] start地址自动向下取整，end也向下取整，因为virnumrange用于代码映射，防止代码缺失, startva/PAGE =num+offset ,从num开始，endva/pagesize=endva+offset由于闭区间所以向下取整,防止多映射
 #[derive(Debug, Clone, Copy)]
 pub struct VirNumRange(pub VirNumber, pub VirNumber);
@@ -139,7 +120,6 @@ impl Iterator for VirNumRangeIter {
         let end = self.end;
         if current.0 <= end.0 {
             let cur = current.0;
-            debug!("cur:{}", cur);
             self.current.step();
             return Some(VirNumber(cur));
         } else {
@@ -230,13 +210,171 @@ pub enum MapType {
     Maped,      //不直接分配页帧
 }
 
+/// 单次mmap条目
 #[derive(Clone)]
-pub struct MmapInfo {
-    pub id: u64,
+pub struct MmapEntry {
+    /// 整个 mmap 区域的语义（SHARED/PRIVATE/FIXED/ANONYMOUS）
     pub flags: MmapFlags,
-    pub prot: MmapProt,
-    pub backing: Option<Arc<dyn File>>,
-    pub offset: usize,
+    /// mmap表
+    pub mmap_tree: BTreeMap<VirNumber, MmapEntryInfo>,
+}
+
+impl MmapEntry {
+    pub fn new() -> Self {
+        MmapEntry {
+            flags: MmapFlags::empty(),
+            mmap_tree: BTreeMap::new(),
+        }
+    }
+
+    pub fn with_flags(flags: MmapFlags) -> Self {
+        MmapEntry {
+            flags,
+            mmap_tree: BTreeMap::new(),
+        }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.mmap_tree.is_empty()
+    }
+
+    pub fn contains_vpn(&self, vpn: VirNumber) -> bool {
+        self.mmap_tree.contains_key(&vpn)
+    }
+
+    pub fn get(&self, vpn: VirNumber) -> Option<&MmapEntryInfo> {
+        self.mmap_tree.get(&vpn)
+    }
+
+    pub fn get_mut(&mut self, vpn: VirNumber) -> Option<&mut MmapEntryInfo> {
+        self.mmap_tree.get_mut(&vpn)
+    }
+
+    pub fn clone_for_fork(&self) -> Self {
+        let mut new_entry = MmapEntry::with_flags(self.flags);
+        for (vpn, info) in self.mmap_tree.iter() {
+            let cloned = if self.flags.contains(MmapFlags::SHARED) {
+                info.clone()
+            } else {
+                info.clone_without_frame()
+            };
+            new_entry.mmap_tree.insert(*vpn, cloned);
+        }
+        new_entry
+    }
+}
+
+#[derive(Clone)]
+pub enum MmapEntryInfo {
+    Anoy {
+        // 映射到哪个物理页帧上
+        frame: Weak<FramTracker>,
+        //映射权限
+        prot: MmapProt,
+    },
+    File {
+        file: Arc<dyn File>,
+        // 文件映射起始偏移
+        offset: usize,
+        // 文件映射长度
+        mmap_len: usize,
+        // 映射到哪个物理页帧上
+        frame: Weak<FramTracker>,
+        // 映射权限
+        prot: MmapProt,
+    },
+}
+
+impl MmapEntryInfo {
+    fn clone_without_frame(&self) -> Self {
+        match self {
+            Self::Anoy { prot, .. } => Self::Anoy {
+                frame: Weak::new(),
+                prot: *prot,
+            },
+            Self::File {
+                file,
+                offset,
+                mmap_len,
+                prot,
+                ..
+            } => Self::File {
+                file: file.clone(),
+                offset: *offset,
+                mmap_len: *mmap_len,
+                frame: Weak::new(),
+                prot: *prot,
+            },
+        }
+    }
+
+    fn upgrade_frame(&self) -> Option<Arc<FramTracker>> {
+        match self {
+            Self::Anoy { frame, .. } | Self::File { frame, .. } => frame.upgrade(),
+        }
+    }
+
+    fn set_frame(&mut self, new_frame: &Arc<FramTracker>) {
+        match self {
+            Self::Anoy { frame, .. } | Self::File { frame, .. } => {
+                *frame = Arc::downgrade(new_frame);
+            }
+        }
+    }
+
+    fn read_into_frame(&self, frame: &Arc<FramTracker>) -> Result<(), crate::fs::vfs::VfsFsError> {
+        let pa: PhysiAddr = frame.ppn.into();
+        let buf = unsafe { core::slice::from_raw_parts_mut(pa.0 as *mut u8, PAGE_SIZE) };
+        buf.fill(0);
+
+        match self {
+            Self::Anoy { .. } => Ok(()),
+            Self::File {
+                file,
+                offset,
+                mmap_len,
+                ..
+            } => {
+                let to_read = (*mmap_len).min(PAGE_SIZE);
+                if to_read == 0 {
+                    return Ok(());
+                }
+                match file.read_at(*offset, &mut buf[..to_read]) {
+                    Ok(n) => {
+                        if n < to_read {
+                            buf[n..to_read].fill(0);
+                        }
+                        Ok(())
+                    }
+                    Err(err) => Err(err),
+                }
+            }
+        }
+    }
+
+    fn write_back_from_frame(
+        &self,
+        frame: &Arc<FramTracker>,
+    ) -> Result<(), crate::fs::vfs::VfsFsError> {
+        let Self::File {
+            file,
+            offset,
+            mmap_len,
+            ..
+        } = self
+        else {
+            return Ok(());
+        };
+
+        let to_write = (*mmap_len).min(PAGE_SIZE);
+        if to_write == 0 {
+            return Ok(());
+        }
+
+        let pa: PhysiAddr = frame.ppn.into();
+        let buf = unsafe { core::slice::from_raw_parts(pa.0 as *const u8, to_write) };
+        file.write_at(*offset, buf).map(|_| ())
+    }
 }
 
 #[derive(Clone)]
@@ -247,8 +385,8 @@ pub struct MapArea {
     flags: MapAreaFlags,                               //访问标志
     pub frames: BTreeMap<VirNumber, Arc<FramTracker>>, //Maparea 持有的物理页
     map_type: MapType,
-    /// Some => this area is created by mmap syscall (lazy allocation / file-backed / shared semantics).
-    pub mmap: Option<MmapInfo>,
+    /// 非空 => 该 area 由 mmap 创建，按页记录懒分配/文件映射信息。
+    pub mmap: MmapEntry,
 }
 
 #[derive(Clone)]
@@ -257,6 +395,7 @@ pub struct MapSet {
     pub table: PageTable,
     areas: Vec<MapArea>,
     pub brk: VirAddr, //进程brk点
+    /// 该进程内核栈的虚拟页号范围
     pub kernel_stack_range: Option<VirNumRange>,
 }
 impl MapArea {
@@ -267,11 +406,16 @@ impl MapArea {
             flags,
             frames: BTreeMap::new(),
             map_type,
-            mmap: None,
+            mmap: MmapEntry::new(),
         }
     }
 
     /// `first_vpn_ppn` 补丁： 是否已经映射过这个vpn，如果有，请把那个vpn对应的ppnclone一份
+    /// 更新 MapArea 的访问权限标志（用于 mprotect）
+    pub fn set_flags(&mut self, flags: MapAreaFlags) {
+        self.flags = flags;
+    }
+
     pub fn map_one(
         &mut self,
         vpn: VirNumber,
@@ -347,7 +491,7 @@ impl MapArea {
     }
 
     ///复制MAPED映射的数据到物理页帧,maped方式才调用它(不包含判断)  必须按照elf格式的顺序复制,传入的data需要自行截断，有栈等映射不需要复制数据
-    pub fn copy_data(&mut self, data: Option<(usize, &[u8])>, table: &mut PageTable) {
+    pub fn copy_data(&mut self, data: Option<(IRPG_OFFSET, &[u8])>, table: &mut PageTable) {
         if data.is_none() {
             return;
         }
@@ -355,13 +499,19 @@ impl MapArea {
         // 解构出：页内偏移量(如0x40) 和 源数据切片
         let (mut page_offset, src_data) = data.unwrap();
 
+
+        // 先把range全部清0 bss等
+        self.range.clone().into_iter().for_each(|vpn| {
+            table.get_mut_byte(vpn).expect("Cant get mut slice").fill(0);
+        });
+
         let mut current_vpn = self.range.0;
         let mut current_src_idx = 0; // 记录源数据已经拷贝了多少字节
         let total_len = src_data.len();
 
         loop {
             // 1. 计算这一页还剩多少空间可以写 (4096 - offset)
-            let available_in_page = PAGE_SIZE - page_offset;
+            let available_in_page = PAGE_SIZE - page_offset.raw();
 
             // 2. 计算还剩多少源数据没拷
             let remaining_src = total_len - current_src_idx;
@@ -381,7 +531,7 @@ impl MapArea {
             let src = &src_data[current_src_idx..current_src_idx + copy_len];
 
             // 6. 【关键】目标数据：从 page_offset 往后写 copy_len 个
-            let dst = &mut dst_page[page_offset..page_offset + copy_len];
+            let dst = &mut dst_page[page_offset.raw()..page_offset.raw() + copy_len];
 
             // 执行拷贝
             dst.copy_from_slice(src);
@@ -391,7 +541,7 @@ impl MapArea {
             current_vpn.step();
 
             // 重点！除了第一页可能有偏移量，后续所有页都必须从 0 开始写
-            page_offset = 0;
+            page_offset = IRPG_OFFSET::new(0);
         }
     }
 }
@@ -474,7 +624,7 @@ impl MapSet {
     pub fn is_mmap_vpn(&self, vpn: VirNumber) -> bool {
         self.areas
             .iter()
-            .any(|area| area.mmap.is_some() && area.range.is_contain_thisvpn(vpn))
+            .any(|area| area.range.is_contain_thisvpn(vpn) && area.mmap.contains_vpn(vpn))
     }
 
     ///复制Mapset 解析每一个maparea的页表，申请新页然后将数据搬过去
@@ -494,9 +644,9 @@ impl MapSet {
         for area in self.areas.iter() {
             // 复制一份 MapArea 的元信息（range/flags/map_type + mmap 元数据）
             let mut new_area = MapArea::new(area.range, area.flags, area.map_type);
-            new_area.mmap = area.mmap.clone();
+            new_area.mmap = area.mmap.clone_for_fork();
 
-            if area.mmap.is_some() {
+            if !area.mmap.is_empty() {
                 // mmap 区域：只复制虚拟地址空间元数据，不建立页表项、不分配物理页
             } else {
                 match area.map_type {
@@ -570,149 +720,27 @@ impl MapSet {
         let statr = self.areas[index].range.left_point();
         let re = self.find_thisvpn_frame(statr);
         let area = &mut self.areas[index];
-        debug!("Find Map Area! vpn:{} ", vpn.0);
 
-        if let Some(info) = &area.mmap {
-            // mmap area: we do lazy allocation on page fault.
-            // - MAP_SHARED: pages may be shared across processes.
-            // - MAP_PRIVATE: pages are private to this process (no shared cache here).
-            if info.flags.contains(MmapFlags::SHARED) {
-                // Shared mapping:
-                // 1) Build a stable key identifying the backing object + page index.
-                //    - Anonymous MAP_SHARED: key is (mmap_id, page_index) so forked tasks can share.
-                //    - File-backed MAP_SHARED: key is (inode_num, file_page) so different fds/processes
-                //      mapping the same inode can reuse the same physical page.
-                // 2) Lookup a Weak<FramTracker> in global cache; if alive, reuse.
-                // 3) On cache miss, allocate a new frame.
-                //    - For file-backed: read page content from file into the freshly allocated frame.
-                //    - For anonymous: keep the frame zero-filled.
-                let page_index = vpn.0.saturating_sub(area.range.0 .0) as u64;
-                let key = if info.flags.contains(MmapFlags::ANONYMOUS) {
-                    SharedMmapKey::Anon {
-                        mmap_id: info.id,
-                        page_index,
-                    }
-                } else {
-                    let backing = match info.backing.as_ref() {
-                        Some(v) => v,
-                        None => {
-                            error!("mmap shared pagefault: missing backing file kill");
-                            TASK_MANAER.kail_current_task_and_run_next();
-                            return;
-                        }
-                    };
-                    let file_page = (info.offset / PAGE_SIZE) as u64 + page_index;
-                    let inode_num = match backing.stat() {
-                        Ok(st) => st.inode,
-                        Err(_e) => {
-                            error!("mmap shared pagefault: stat failed kill");
-                            TASK_MANAER.kail_current_task_and_run_next();
-                            return;
-                        }
-                    };
-                    SharedMmapKey::File {
-                        inode_num,
-                        file_page,
-                    }
-                };
-
-                let shared = SHARED_MMAP_PAGES.lock();
-                let existing = shared.get(&key).and_then(|w| w.upgrade());
-                drop(shared);
-
-                let frame = match existing {
-                    Some(f) => f,
-                    None => {
-                        let f =
-                            Arc::new(alloc_frame().expect("Memory Alloc Failed By shared mmap"));
-
-                        if !info.flags.contains(MmapFlags::ANONYMOUS) {
-                            // File-backed MAP_SHARED: populate page content at first touch.
-                            // Later faults in other processes will reuse this frame via the shared cache.
-                            let file = match info.backing.as_ref() {
-                                Some(v) => v,
-                                None => {
-                                    error!("mmap shared pagefault: missing backing file kill");
-                                    TASK_MANAER.kail_current_task_and_run_next();
-                                    return;
-                                }
-                            };
-                            let file_off = info
-                                .offset
-                                .saturating_add((page_index as usize).saturating_mul(PAGE_SIZE));
-                            let pa: PhysiAddr = f.ppn.into();
-                            let buf = unsafe {
-                                core::slice::from_raw_parts_mut(pa.0 as *mut u8, PAGE_SIZE)
-                            };
-                            match file.read_at(file_off, buf) {
-                                Ok(n) => {
-                                    if n < PAGE_SIZE {
-                                        buf[n..].fill(0);
-                                    }
-                                }
-                                Err(e) => {
-                                    error!(
-                                        "mmap shared pagefault: read_at failed off={} err={} kill",
-                                        file_off, e
-                                    );
-                                    TASK_MANAER.kail_current_task_and_run_next();
-                                    return;
-                                }
-                            }
-                        }
-
-                        // Insert as Weak to avoid keeping frames alive forever;
-                        // cache entry will naturally expire when the last Arc is dropped.
-                        let mut shared = SHARED_MMAP_PAGES.lock();
-                        shared.insert(key, Arc::downgrade(&f));
-                        f
-                    }
-                };
-
-                // Map (vpn -> ppn) and remember the Arc in this MapArea.frames.
-                area.map_one_with_frame(vpn, frame, &mut self.table);
-                return;
-            }
-
-            if info.flags.contains(MmapFlags::PRIVATE) && !info.flags.contains(MmapFlags::ANONYMOUS)
-            {
-                // Private, file-backed mapping:
-                // allocate a fresh frame for this process, then read file content into it.
-                // This does NOT use the global shared cache.
-                let file = match info.backing.as_ref() {
-                    Some(v) => v,
-                    None => {
-                        error!("mmap private pagefault: missing backing file kill");
+        if let Some(info) = area.mmap.get(vpn).cloned() {
+            let frame = match info.upgrade_frame() {
+                Some(frame) => frame,
+                None => {
+                    let frame = Arc::new(alloc_frame().expect("Memory Alloc Failed By mmap"));
+                    if let Err(err) = info.read_into_frame(&frame) {
+                        error!("mmap pagefault: populate frame failed err={} kill", err);
                         TASK_MANAER.kail_current_task_and_run_next();
                         return;
                     }
-                };
 
-                let frame = Arc::new(alloc_frame().expect("Memory Alloc Failed By private mmap"));
-                let file_off = info.offset.saturating_add(
-                    ((vpn.0.saturating_sub(area.range.0 .0)) as usize).saturating_mul(PAGE_SIZE),
-                );
-                let pa: PhysiAddr = frame.ppn.into();
-                let buf = unsafe { core::slice::from_raw_parts_mut(pa.0 as *mut u8, PAGE_SIZE) };
-                match file.read_at(file_off, buf) {
-                    Ok(n) => {
-                        if n < PAGE_SIZE {
-                            buf[n..].fill(0);
-                        }
+                    if let Some(info_mut) = area.mmap.get_mut(vpn) {
+                        info_mut.set_frame(&frame);
                     }
-                    Err(e) => {
-                        error!(
-                            "mmap private pagefault: read_at failed off={} err={} kill",
-                            file_off, e
-                        );
-                        TASK_MANAER.kail_current_task_and_run_next();
-                        return;
-                    }
+                    frame
                 }
+            };
 
-                area.map_one_with_frame(vpn, frame, &mut self.table);
-                return;
-            }
+            area.map_one_with_frame(vpn, frame, &mut self.table);
+            return;
         }
 
         // Fallback:
@@ -756,7 +784,7 @@ impl MapSet {
 
     ///mmap系统调用，创建一个有vpnrange的maparea，没有实际映射条目和物理页帧的maparea
     /// Linux/POSIX: mmap(addr, len, prot, flags, fd, offset)
-    /// 返回：成功返回映射起始地址；失败返回 -1
+    /// 返回：成功返回映射起始地址；失败返回负errno（EINVAL/ENOMEM/EBADF）
     pub fn mmap(
         &mut self,
         addr: VirAddr,
@@ -767,60 +795,95 @@ impl MapSet {
         offset: usize,
         fd_backing: Option<Arc<dyn File>>,
     ) -> isize {
-        //warn!("enter memset mmap");
         if len == 0 {
-            return -1;
+            warn!("memset::mmap: FAIL , addr: {:#x} len:{:#x} ",addr.0,len);
+            return BlueErr::EINVAL.as_isize();
         }
+
         if offset % PAGE_SIZE != 0 {
-            return -1;
+            warn!(
+                "memset::mmap: FAIL offset not page aligned: offset=0x{:x}",
+                offset
+            );
+            return BlueErr::EINVAL.as_isize();
         }
 
         // Reject integer overflow on offset+len (file-backed) and on addr+len (fixed address).
         if offset.checked_add(len).is_none() {
-            return -1;
+            warn!(
+                "memset::mmap: FAIL offset+len overflow: offset=0x{:x}, len=0x{:x}",
+                offset, len
+            );
+            return BlueErr::EINVAL.as_isize();
         }
 
         let prot = match MmapProt::from_bits(prot) {
             Some(v) => v,
-            None => return -1,
+            None => {
+                warn!("memset::mmap: FAIL invalid prot bits");
+                return BlueErr::EINVAL.as_isize();
+            }
         };
         let flags = match MmapFlags::from_bits(flags) {
             Some(v) => v,
-            None => return -1,
+            None => {
+                warn!("memset::mmap: FAIL invalid flags bits");
+                return BlueErr::EINVAL.as_isize();
+            }
         };
 
         let is_private = flags.contains(MmapFlags::PRIVATE);
         let is_shared = flags.contains(MmapFlags::SHARED);
         if !is_private && !is_shared {
-            return -1;
+            warn!("memset::mmap: FAIL neither MAP_PRIVATE nor MAP_SHARED");
+            return BlueErr::EINVAL.as_isize();
         }
         if is_private && is_shared {
-            return -1;
+            warn!("memset::mmap: FAIL MAP_PRIVATE and MAP_SHARED both set");
+            return BlueErr::EINVAL.as_isize();
         }
 
         // Support Anonymous and file-backed mmap
         if flags.contains(MmapFlags::ANONYMOUS) {
             if fd != -1 {
-                return -1;
+                warn!(
+                    "memset::mmap: FAIL MAP_ANONYMOUS requires fd=-1, got fd={}",
+                    fd
+                );
+                return BlueErr::EINVAL.as_isize();
             }
         } else {
             // file-backed
             if fd < 0 {
-                return -1;
+                warn!("memset::mmap: FAIL file-backed mmap requires non-negative fd");
+                return BlueErr::EBADF.as_isize();
             }
             if offset % PAGE_SIZE != 0 {
-                return -1;
+                warn!(
+                    "memset::mmap: FAIL file-backed offset not page aligned: offset=0x{:x}",
+                    offset
+                );
+                return BlueErr::EINVAL.as_isize();
             }
 
             let _backing = match &fd_backing {
                 Some(v) => v.clone(),
-                _ => return -1,
+                _ => {
+                    warn!("memset::mmap: FAIL file-backed mmap missing fd_backing");
+                    return BlueErr::EBADF.as_isize();
+                }
             };
         }
 
         let map_len = match len.checked_add(PAGE_SIZE - 1) {
             Some(v) => v & !(PAGE_SIZE - 1),
-            None => return -1,
+            None => {
+                warn!(
+                    "memset::mmap: FAIL map_len alignment overflow: len=0x{:x}, page_size=0x{:x}",
+                    len, PAGE_SIZE
+                );
+                return BlueErr::EINVAL.as_isize();
+            }
         };
         let is_fixed = flags.contains(MmapFlags::FIXED);
 
@@ -831,18 +894,35 @@ impl MapSet {
         if is_fixed {
             // MAP_FIXED: force address, and on overlap we must unmap then map.
             if addr.0 % PAGE_SIZE != 0 {
-                return -1;
+                warn!(
+                    "memset::mmap: FAIL MAP_FIXED addr not page aligned: addr=0x{:x}",
+                    addr.0
+                );
+                return BlueErr::EINVAL.as_isize();
             }
             if addr.0.checked_add(map_len).is_none() {
-                return -1;
+                warn!(
+                    "memset::mmap: FAIL MAP_FIXED addr+map_len overflow: addr=0x{:x}, map_len=0x{:x}",
+                    addr.0, map_len
+                );
+                return BlueErr::EINVAL.as_isize();
             }
             if addr.0.saturating_add(map_len) > upper {
-                return -1;
+                warn!(
+                    "memset::mmap: FAIL MAP_FIXED exceeds upper bound: end=0x{:x}, upper=0x{:x}",
+                    addr.0.saturating_add(map_len),
+                    upper
+                );
+                return BlueErr::ENOMEM.as_isize();
             }
             map_start = addr.0;
             if !self.range_is_free(map_start, map_len) {
                 if self.unmap_range(VirAddr(map_start), map_len) != 0 {
-                    return -1;
+                    warn!(
+                        "memset::mmap: FAIL MAP_FIXED overlap unmap failed: map_start=0x{:x}, map_len=0x{:x}",
+                        map_start, map_len
+                    );
+                    return BlueErr::EINVAL.as_isize();
                 }
             }
         } else {
@@ -854,13 +934,25 @@ impl MapSet {
                 } else {
                     map_start = match self.find_free_range(map_len) {
                         Some(v) => v,
-                        None => return -1,
+                        None => {
+                            warn!(
+                                "memset::mmap: FAIL no free range found for hint fallback: map_len=0x{:x}",
+                                map_len
+                            );
+                            return BlueErr::ENOMEM.as_isize();
+                        }
                     };
                 }
             } else {
                 map_start = match self.find_free_range(map_len) {
                     Some(v) => v,
-                    None => return -1,
+                    None => {
+                        warn!(
+                            "memset::mmap: FAIL no free range found: map_len=0x{:x}",
+                            map_len
+                        );
+                        return BlueErr::ENOMEM.as_isize();
+                    }
                 };
             }
         }
@@ -886,48 +978,94 @@ impl MapSet {
             mapflags |= MapAreaFlags::X;
         }
 
-        let id = alloc_mmap_id();
-
-        let info = MmapInfo {
-            id: id,
-            flags,
-            prot,
-            backing: if flags.contains(MmapFlags::ANONYMOUS) {
-                None
-            } else {
-                match fd_backing {
-                    Some(v) => Some(v),
-                    _ => return -1,
+        let mut mmap_entry = MmapEntry::with_flags(flags);
+        if flags.contains(MmapFlags::ANONYMOUS) {
+            for vpn in range {
+                mmap_entry.mmap_tree.insert(
+                    vpn,
+                    MmapEntryInfo::Anoy {
+                        frame: Weak::new(),
+                        prot,
+                    },
+                );
+            }
+        } else {
+            let file = match fd_backing {
+                Some(v) => v,
+                None => {
+                    warn!("memset::mmap: FAIL file-backed mmap lost fd_backing before setup");
+                    return BlueErr::EBADF.as_isize();
                 }
-            },
-            offset,
-        };
+            };
 
-        self.add_area(range, MapType::Maped, mapflags, None, Some(info));
+            for vpn in range {
+                let page_index = vpn.0.saturating_sub(start_vpn.0);
+                let page_offset = offset.saturating_add(page_index.saturating_mul(PAGE_SIZE));
+                let page_start = page_index.saturating_mul(PAGE_SIZE);
+                let page_len = len.saturating_sub(page_start).min(PAGE_SIZE);
+                mmap_entry.mmap_tree.insert(
+                    vpn,
+                    MmapEntryInfo::File {
+                        file: file.clone(),
+                        offset: page_offset,
+                        mmap_len: page_len,
+                        frame: Weak::new(),
+                        prot,
+                    },
+                );
+            }
+        }
+
+        self.add_area(range, MapType::Maped, mapflags, None, Some(mmap_entry));
+        debug!(
+            "memset::mmap: OK map_start=0x{:x}, map_len=0x{:x}, is_fixed={}, is_anon={}",
+            map_start,
+            map_len,
+            is_fixed,
+            flags.contains(MmapFlags::ANONYMOUS)
+        );
 
         map_start as isize
     }
 
     ///unmap系统调用,取消映射一个[start,end]范围的虚拟页面，并且设置对应页表项不合法
-    /// startVAR mmap起始地址 size:映射长度(会被裁剪，小于一个页取消映射一个页,不满一个页补全一个页) 返回-1代表失败 0代表成功
+    /// startVAR mmap起始地址 size:映射长度(会被裁剪，小于一个页取消映射一个页,不满一个页补全一个页) 返回负errno代表失败 0代表成功
     pub fn unmap_range(&mut self, startVAR: VirAddr, size: usize) -> isize {
         if size == 0 {
-            return -1;
+            debug!(
+                "memset::unmap_range: FAIL start_va=0x{:x}, size=0x{:x}, reason=size_is_zero",
+                startVAR.0,
+                size
+            );
+            return BlueErr::EINVAL.as_isize();
         }
+        
         let start_vpn: VirNumber = startVAR.floor_down();
         let end_vpn: VirNumber =
             VirAddr(startVAR.0.saturating_add(size).saturating_sub(1)).floor_down();
         let range: VirNumRange = VirNumRange(start_vpn, end_vpn);
 
         if !self.AallArea_Iscontain_thisVpn_plus(range) {
-            return -1;
+            debug!(
+                "memset::unmap_range: FAIL start_va=0x{:x}, size=0x{:x}, range={:?}, reason=range_not_fully_contained",
+                startVAR.0,
+                size,
+                range
+            );
+            return BlueErr::EINVAL.as_isize();
         }
 
-        let touches_non_mmap = self.areas.iter().any(|area| {
-            area.mmap.is_none() && !area.range.is_contain_thisvpnRange(range).is_empty()
+        let none_touches = self.areas.iter().all(|area| {
+            area.range.is_contain_thisvpnRange(range).is_empty()
         });
-        if touches_non_mmap {
-            return -1;
+        if none_touches {
+            debug!(
+                "memset::unmap_range: FAIL start_va=0x{:x}, size=0x{:x}, range={:?}, reason=none_touches_area",
+                startVAR.0,
+                size,
+                range
+            );
+            return BlueErr::EINVAL.as_isize();
         }
 
         let mut new_areas: Vec<MapArea> = Vec::with_capacity(self.areas.len());
@@ -942,16 +1080,10 @@ impl MapSet {
             }
             any_touched = true;
 
-            let info = match area.mmap.as_ref() {
-                Some(v) => v.clone(),
-                None => {
-                    // 无mmap信息的area,不动
-                    new_areas.push(area);
-                    continue;
-                }
-            };
-
-            let area_start = area.range.0;
+            if area.mmap.is_empty() {
+                new_areas.push(area);
+                continue;
+            }
 
             let unmap_start = if range.0 .0 > area.range.0 .0 {
                 range.0
@@ -973,71 +1105,23 @@ impl MapSet {
             });
             let mut need_munmap = split_aread_vec.1;
 
-            if info.flags.contains(MmapFlags::SHARED) && info.flags.contains(MmapFlags::ANONYMOUS) {
-                let mut shared = SHARED_MMAP_PAGES.lock();
-                for vpn in VirNumRange(unmap_start, unmap_end) {
-                    let page_index = vpn.0.saturating_sub(need_munmap.range.0 .0) as u64;
-                    let key = SharedMmapKey::Anon {
-                        mmap_id: info.id,
-                        page_index,
-                    };
-                    shared.remove(&key);
-                }
-            }
-
-            //处理有fd情况
-            if info.flags.contains(MmapFlags::SHARED) && !info.flags.contains(MmapFlags::ANONYMOUS)
-            {
-                let file_backing = match info.backing.as_ref() {
-                    Some(v) => v.clone(),
-                    None => {
-                        panic!("This area should be have a file backend, please check mmap.Will panic every mmap will break file!");
-                    }
-                };
-                for vpn in VirNumRange(unmap_start, unmap_end) {
-                    // Only write back pages that were actually faulted-in.
-                    let Some(frame) = need_munmap.frames.get(&vpn).cloned() else {
+            if need_munmap.mmap.flags.contains(MmapFlags::SHARED) {
+                for (vpn, info) in need_munmap.mmap.mmap_tree.iter() {
+                    let Some(frame) = need_munmap.frames.get(vpn).cloned() else {
                         continue;
                     };
-
-                    // Keep consistent with pagefault shared key:
-                    // file_page = (offset / PAGE_SIZE) + (vpn - area_start)
-                    let page_index = vpn.0.saturating_sub(area_start.0) as u64;
-                    let file_page = (info.offset / PAGE_SIZE) as u64 + page_index;
-                    let inode_num = match file_backing.stat() {
-                        Ok(st) => st.inode,
-                        Err(_e) => {
-                            error!("munmap: MAP_SHARED stat failed kill");
-                            TASK_MANAER.kail_current_task_and_run_next();
-                            return -1;
-                        }
-                    };
-                    let key = SharedMmapKey::File {
-                        inode_num,
-                        file_page,
-                    };
-
-                    // Write the whole page back.
-                    let file_off = info
-                        .offset
-                        .saturating_add((page_index as usize).saturating_mul(PAGE_SIZE));
-                    let pa: PhysiAddr = frame.ppn.into();
-                    let buf = unsafe { core::slice::from_raw_parts(pa.0 as *const u8, PAGE_SIZE) };
-                    match file_backing.write_at(file_off, buf) {
-                        Ok(_) => {}
-                        Err(e) => {
-                            error!(
-                                "munmap: MAP_SHARED write_back failed off={} err={} kill",
-                                file_off, e
-                            );
-                            TASK_MANAER.kail_current_task_and_run_next();
-                            return -1;
-                        }
+                    if let Err(err) = info.write_back_from_frame(&frame) {
+                        debug!(
+                            "memset::unmap_range: FAIL start_va=0x{:x}, size=0x{:x}, unmap_vpn={}, reason=shared_write_back_failed err={}",
+                            startVAR.0,
+                            size,
+                            vpn.0,
+                            err
+                        );
+                        error!("munmap: MAP_SHARED write_back failed err={} kill", err);
+                        TASK_MANAER.kail_current_task_and_run_next();
+                        return BlueErr::EIO.as_isize();
                     }
-
-                    // Remove cache entry for this page.
-                    let mut shared = SHARED_MMAP_PAGES.lock();
-                    shared.remove(&key);
                 }
             }
 
@@ -1058,85 +1142,179 @@ impl MapSet {
         if any_touched {
             0
         } else {
-            -1
+            debug!(
+                "memset::unmap_range: FAIL start_va=0x{:x}, size=0x{:x}, range={:?}, reason=no_overlapping_area_touched",
+                startVAR.0,
+                size,
+                range
+            );
+            BlueErr::EINVAL.as_isize()
         }
+    }
+
+    /// mprotect 系统调用：修改地址范围 [start_va, start_va+len) 的访问权限
+    ///
+    /// 流程：
+    /// 1. 找到与目标范围重叠的所有 VMA 区域
+    /// 2. 对每个区域进行切割（如果范围不完全覆盖 VMA 边界）
+    /// 3. 更新切割出的中间区域的 flags（MapAreaFlags）
+    /// 4. 对已映射的页表项，同步修改 PTE 中的 R/W/X 位
+    /// 5. 保留其他 PTE 标志位（V/A/D/G/U/DEV）不变
+    ///
+    /// 返回：0 成功，负errno失败（范围内没有 VMA 或有空洞）
+    pub fn mprotect_range(&mut self, start_va: VirAddr, len: usize, prot: usize) -> isize {
+        // 解析 prot 位，无效位组合直接拒绝
+        let prot = match MmapProt::from_bits(prot) {
+            Some(p) => p,
+            None => {
+                debug!("memset::mprotect_range: FAIL invalid prot bits 0x{:x}", prot);
+                return BlueErr::EINVAL.as_isize();
+            }
+        };
+
+        // 计算起止虚拟页号
+        let start_vpn: VirNumber = start_va.floor_down();
+        let end_vpn: VirNumber =
+            VirAddr(start_va.0.saturating_add(len).saturating_sub(1)).floor_down();
+        let range: VirNumRange = VirNumRange(start_vpn, end_vpn);
+
+        // 1. 检查范围内的每一个 VPN 都有 VMA 覆盖，不允许有空洞
+        for vpn in range {
+            if !self.AallArea_Iscontain_thisVpn(vpn) {
+                debug!(
+                    "memset::mprotect_range: FAIL start_va=0x{:x}, len=0x{:x}, vpn={}, reason=hole_in_range",
+                    start_va.0, len, vpn.0
+                );
+                return BlueErr::ENOMEM.as_isize();
+            }
+        }
+
+        // 2. 根据 prot 构建新的 MapAreaFlags（顶层必须始终保留 U 位）
+        let mut new_flags = MapAreaFlags::U;
+        if prot.contains(MmapProt::READ) {
+            new_flags |= MapAreaFlags::R;
+        }
+        if prot.contains(MmapProt::WRITE) {
+            new_flags |= MapAreaFlags::W;
+        }
+        if prot.contains(MmapProt::EXEC) {
+            new_flags |= MapAreaFlags::X;
+        }
+
+        // 3. 遍历所有区域：切割 + 更新标志 + 同步 PTE
+        // 步骤1已保证每个VPN都有VMA覆盖，因此至少存在一个交集区域
+        let mut new_areas: Vec<MapArea> = Vec::with_capacity(self.areas.len());
+
+        for area in self.areas.drain(..) {
+            if area.range.is_contain_thisvpnRange(range).is_empty() {
+                new_areas.push(area);
+                continue;
+            }
+
+            // 3a. 切割区域，分离出受影响的部分 (mid)
+            let (keep_areas, mut mid) = Self::split_area_by_range(area, range);
+            for keep in keep_areas {
+                new_areas.push(keep);
+            }
+
+            // 3b. 更新中间区域的 VMA 标志
+            mid.set_flags(new_flags);
+
+            // 3c. 同步页表：对 mid 内已映射的 PTE 更新 R/W/X 位
+            // MapAreaFlags 与 PTEFlags 位布局完全一致，直接转换
+            for vpn in mid.range {
+                if let Some(pte) = self.table.find_pte_vpn(vpn) {
+                    let mut cur = pte.flags();
+                    // 清除旧的 R/W/X 位
+                    cur.remove(PTEFlags::R | PTEFlags::W | PTEFlags::X);
+                    // 注入新的 R/W/X 位
+                    let new_pte_bits = PTEFlags::from_bits_truncate(new_flags.bits());
+                    cur.insert(new_pte_bits & (PTEFlags::R | PTEFlags::W | PTEFlags::X));
+                    pte.set_flags(cur);
+                }
+            }
+
+            new_areas.push(mid);
+        }
+
+        self.areas = new_areas;
+
+        debug!(
+            "memset::mprotect_range: OK range(0x{:x}-0x{:x}) -> {}{}{}",
+            start_va.0,
+            start_va.0.saturating_add(len),
+            if prot.contains(MmapProt::READ) { 'r' } else { '-' },
+            if prot.contains(MmapProt::WRITE) { 'w' } else { '-' },
+            if prot.contains(MmapProt::EXEC) { 'x' } else { '-' },
+        );
+        0
     }
 
     /// 分割一个area成二/三个不同area noneed,need
     pub fn split_area_by_range(area: MapArea, mid_range: VirNumRange) -> (Vec<MapArea>, MapArea) {
         debug!("Will be munmap:{:?} \n", mid_range);
-        let mut area = area;
         if mid_range.0 .0 <= area.range.0 .0 && mid_range.1 .0 >= area.range.1 .0 {
             let re: Vec<MapArea> = Vec::new();
             return (re, area);
         }
-        // 首先收集不需要munmap的frame
-        //需要包含
+        let area_start = area.range.0;
+        let area_end = area.range.1;
+        let start_vpn = VirNumber(core::cmp::max(mid_range.0 .0, area_start.0));
+        let end_vpn = VirNumber(core::cmp::min(mid_range.1 .0, area_end.0));
 
-        let start_vpn = if mid_range.0 .0 >= area.range.0 .0 {
-            mid_range.0 .0
-        } else {
-            area.range.0 .0
-        };
-        let end_vpn = if mid_range.1 .0 >= area.range.1 .0 {
-            area.range.1 .0
-        } else {
-            mid_range.1 .0
-        };
-
-        if start_vpn > area.range.0 .0 && end_vpn < area.range.1 .0 {
-            let left_noneed_frametrace = area.frames.split_off(&VirNumber(start_vpn));
-            let right_noneed_frametrace = area.frames.split_off(&VirNumber(end_vpn + 1));
-            let need_frametrace = area.frames;
-            let mut re: Vec<MapArea> = Vec::new();
-            let mut left = MapArea::new(
-                VirNumRange(area.range.0, VirNumber(start_vpn - 1)),
-                area.flags,
-                area.map_type,
-            );
-            left.frames = left_noneed_frametrace;
-            left.mmap = area.mmap.clone();
-            let mut mid = MapArea::new(mid_range, area.flags, area.map_type);
-            mid.frames = need_frametrace;
-            mid.mmap = area.mmap.clone();
-            let mut right = MapArea::new(
-                VirNumRange(VirNumber(end_vpn + 1), area.range.1),
-                area.flags,
-                area.map_type,
-            );
-            right.frames = right_noneed_frametrace;
-            right.mmap = area.mmap.clone();
-            re.push(left);
-            re.push(right);
-            return (re, mid);
-        } else {
-            let mut life_range: VirNumRange = VirNumRange(VirNumber(0), VirNumber(0));
-            if start_vpn > area.range.0 .0 {
-                life_range = VirNumRange(area.range.0, VirNumber(start_vpn - 1))
+        let mut left_frames: BTreeMap<VirNumber, Arc<FramTracker>> = BTreeMap::new();
+        let mut mid_frames: BTreeMap<VirNumber, Arc<FramTracker>> = BTreeMap::new();
+        let mut right_frames: BTreeMap<VirNumber, Arc<FramTracker>> = BTreeMap::new();
+        for (vpn, frame) in area.frames.into_iter() {
+            if vpn < start_vpn {
+                left_frames.insert(vpn, frame);
+            } else if vpn > end_vpn {
+                right_frames.insert(vpn, frame);
             } else {
-                life_range = VirNumRange(VirNumber(end_vpn + 1), area.range.1)
+                mid_frames.insert(vpn, frame);
             }
-            let mut re: Vec<MapArea> = Vec::new();
-            let mut no_munmap: BTreeMap<VirNumber, Arc<FramTracker>> = BTreeMap::new();
-            let mut need_munmap: BTreeMap<VirNumber, Arc<FramTracker>> = BTreeMap::new();
-            area.frames.into_iter().for_each(|kv| {
-                if !mid_range.is_contain_thisvpn(kv.0) {
-                    //不需要处理的
-                    no_munmap.insert(kv.0, kv.1);
-                } else {
-                    //需要处理munmap的
-                    need_munmap.insert(kv.0, kv.1);
-                }
-            });
-            let mut no_new_area = MapArea::new(life_range, area.flags, area.map_type);
-            no_new_area.frames = no_munmap;
-            no_new_area.mmap = area.mmap.clone();
-            let mut need_new_area = MapArea::new(mid_range, area.flags, area.map_type);
-            need_new_area.frames = need_munmap;
-            need_new_area.mmap = area.mmap.clone();
-            re.push(no_new_area);
-            return (re, need_new_area);
         }
+
+        let mut left_mmap = MmapEntry::with_flags(area.mmap.flags);
+        let mut mid_mmap = MmapEntry::with_flags(area.mmap.flags);
+        let mut right_mmap = MmapEntry::with_flags(area.mmap.flags);
+        for (vpn, info) in area.mmap.mmap_tree.into_iter() {
+            if vpn < start_vpn {
+                left_mmap.mmap_tree.insert(vpn, info);
+            } else if vpn > end_vpn {
+                right_mmap.mmap_tree.insert(vpn, info);
+            } else {
+                mid_mmap.mmap_tree.insert(vpn, info);
+            }
+        }
+
+        let mut keep_areas: Vec<MapArea> = Vec::new();
+        if area_start < start_vpn {
+            let mut left = MapArea::new(
+                VirNumRange(area_start, VirNumber(start_vpn.0 - 1)),
+                area.flags,
+                area.map_type,
+            );
+            left.frames = left_frames;
+            left.mmap = left_mmap;
+            keep_areas.push(left);
+        }
+
+        if end_vpn < area_end {
+            let mut right = MapArea::new(
+                VirNumRange(VirNumber(end_vpn.0 + 1), area_end),
+                area.flags,
+                area.map_type,
+            );
+            right.frames = right_frames;
+            right.mmap = right_mmap;
+            keep_areas.push(right);
+        }
+
+        let mut mid = MapArea::new(VirNumRange(start_vpn, end_vpn), area.flags, area.map_type);
+        mid.frames = mid_frames;
+        mid.mmap = mid_mmap;
+        (keep_areas, mid)
     }
 
     ///从elf解析数据创建应用地址空间 Mapset entry user_stack,kernel_sp
@@ -1159,10 +1337,7 @@ impl MapSet {
         let ph_count = elf_header.pt2.ph_count();
         let mut max_end_vpn = VirNumber(0); //为elf结尾所在段+1
         let entry_point = elf.header.pt2.entry_point();
-        debug!(
-            "ELF entry point: {:#x}, program headers: {}",
-            entry_point, ph_count
-        );
+       
         for i in 0..ph_count {
             let ph = elf.program_header(i).unwrap();
             if ph.get_type().unwrap() == xmas_elf::program::Type::Load {
@@ -1180,19 +1355,16 @@ impl MapSet {
                     map_perm |= MapAreaFlags::X;
                 }
 
-                debug!(
-                    "  [{}] Mapping segment: [{:#x}, {:#x}), perm: {:?}",
-                    i, start_va.0, end_va.0, map_perm
-                );
+              
 
                 max_end_vpn = end_va.floor_up();
 
                 memory_set.add_area(
-                    VirNumRange::new(start_va, end_va), // bug!!!!!! 范围range权限覆盖
+                    VirNumRange::new(start_va, end_va),
                     MapType::Maped,
                     map_perm,
                     Some((
-                        start_va.0 % PAGE_SIZE,
+                        IRPG_OFFSET::new(start_va.0 % PAGE_SIZE),
                         &elf.input[ph.offset() as usize..(ph.offset() + ph.file_size()) as usize],
                     )),
                     None,
@@ -1209,10 +1381,7 @@ impl MapSet {
         let userstack_start_vpn = VirNumber(max_end_vpn.0 + 1); //留guradpage
         let userstack_end_vpn = VirNumber(userstack_start_vpn.0 + 1);
         let user_sp: VirAddr = VirAddr(userstack_end_vpn.0 * PAGE_SIZE + PAGE_SIZE); //因为结尾不包含，属于下一个页面
-        debug!(
-            "  Mapping user stack: vpn={:#x}, sp={:#x}",
-            userstack_start_vpn.0, user_sp.0
-        );
+       
         memory_set.add_area(
             VirNumRange(userstack_start_vpn, userstack_end_vpn),
             MapType::Maped,
@@ -1222,7 +1391,6 @@ impl MapSet {
         );
         //映射用户堆 初始0 通过brk生长---------------------------------------------+0
         let userheap_start_end_vpn = VirNumber(userstack_end_vpn.0 + 1); //无需guardpage，堆不会向下溢出
-        debug!("  Mapping user heap: vpn={:#x}", userheap_start_end_vpn.0);
         memory_set.add_area(
             VirNumRange(userheap_start_end_vpn, userheap_start_end_vpn),
             MapType::Maped,
@@ -1402,12 +1570,12 @@ impl MapSet {
         range: VirNumRange,
         map_type: MapType,
         flags: MapAreaFlags,
-        data: Option<(usize, &[u8])>,
-        mmap: Option<MmapInfo>,
+        data: Option<(IRPG_OFFSET, &[u8])>,
+        mmap: Option<MmapEntry>,
     ) {
         let mut area = MapArea::new(range, flags, map_type);
-        area.mmap = mmap;
-        if area.mmap.is_none() {
+        area.mmap = mmap.unwrap_or_else(MmapEntry::new);
+        if area.mmap.is_empty() {
             //查找已经vpn映射过的ppn 以range.0为目标
             let target = range.left_point();
 
@@ -1686,52 +1854,16 @@ impl Drop for MapSet {
         // 算了，要复制栈，unwind整条调用链
 
         for area in self.areas.iter() {
-            let Some(info) = area.mmap.as_ref() else {
-                continue;
-            };
-
-            if info.flags.contains(MmapFlags::SHARED) && info.flags.contains(MmapFlags::ANONYMOUS) {
-                let mut shared = SHARED_MMAP_PAGES.lock();
-                for vpn in VirNumRange(area.range.0, area.range.1) {
-                    let page_index = vpn.0.saturating_sub(area.range.0 .0) as u64;
-                    let key = SharedMmapKey::Anon {
-                        mmap_id: info.id,
-                        page_index,
-                    };
-                    shared.remove(&key);
-                }
+            if area.mmap.is_empty() {
                 continue;
             }
 
-            if info.flags.contains(MmapFlags::SHARED) && !info.flags.contains(MmapFlags::ANONYMOUS)
-            {
-                let file_backing = match info.backing.as_ref() {
-                    Some(v) => v.clone(),
-                    None => continue,
-                };
-
-                for (vpn, frame) in area.frames.iter() {
-                    let page_index = vpn.0.saturating_sub(area.range.0 .0) as u64;
-                    let file_page = (info.offset / PAGE_SIZE) as u64 + page_index;
-                    let inode_num = match file_backing.stat() {
-                        Ok(st) => st.inode,
-                        Err(_e) => {
-                            // On drop path, avoid killing task; best-effort cleanup.
-                            continue;
-                        }
+            if area.mmap.flags.contains(MmapFlags::SHARED) {
+                for (vpn, info) in area.mmap.mmap_tree.iter() {
+                    let Some(frame) = area.frames.get(vpn) else {
+                        continue;
                     };
-                    let key = SharedMmapKey::File {
-                        inode_num,
-                        file_page,
-                    };
-                    let file_off = info
-                        .offset
-                        .saturating_add((page_index as usize).saturating_mul(PAGE_SIZE));
-                    let pa: PhysiAddr = frame.ppn.into();
-                    let buf = unsafe { core::slice::from_raw_parts(pa.0 as *const u8, PAGE_SIZE) };
-                    let _ = file_backing.write_at(file_off, buf);
-                    let mut shared = SHARED_MMAP_PAGES.lock();
-                    shared.remove(&key);
+                    let _ = info.write_back_from_frame(frame);
                 }
             }
         }

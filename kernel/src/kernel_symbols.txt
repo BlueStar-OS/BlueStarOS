@@ -1,0 +1,1064 @@
+0000000080200000 _blue_start
+0000000080200000 skernel
+0000000080200000 stext
+0000000080201000 __kernel_trap
+0000000080201000 straper
+0000000080201080 __kernel_refume
+00000000802010e0 __kernel_mode_trap
+0000000080201118 __kernel_mode_trap_return
+0000000080202000 <alloc::collections::btree::node::Handle<alloc::collections::btree::node::NodeRef<alloc::collections::btree::node::marker::Mut, alloc::string::String, u32, alloc::collections::btree::node::marker::LeafOrInternal>, alloc::collections::btree::node::marker::KV>>::remove_kv_tracking::<<alloc::collections::btree::map::entry::OccupiedEntry<alloc::string::String, u32>>::remove_kv::{closure#0}, alloc::alloc::Global>
+0000000080202150 <alloc::collections::btree::node::Handle<alloc::collections::btree::node::NodeRef<alloc::collections::btree::node::marker::Mut, rsext4::bmalloc::AbsoluteBN, rsext4::cache::data_block::CachedBlock, alloc::collections::btree::node::marker::LeafOrInternal>, alloc::collections::btree::node::marker::KV>>::remove_kv_tracking::<<alloc::collections::btree::map::entry::OccupiedEntry<rsext4::bmalloc::AbsoluteBN, rsext4::cache::data_block::CachedBlock>>::remove_kv::{closure#0}, alloc::alloc::Global>
+0000000080202306 <alloc::collections::btree::node::Handle<alloc::collections::btree::node::NodeRef<alloc::collections::btree::node::marker::Mut, rsext4::bmalloc::InodeNumber, rsext4::cache::inode_table::CachedInode, alloc::collections::btree::node::marker::LeafOrInternal>, alloc::collections::btree::node::marker::KV>>::remove_kv_tracking::<<alloc::collections::btree::map::entry::OccupiedEntry<rsext4::bmalloc::InodeNumber, rsext4::cache::inode_table::CachedInode>>::remove_kv::{closure#0}, alloc::alloc::Global>
+00000000802024bc <alloc::collections::btree::node::Handle<alloc::collections::btree::node::NodeRef<alloc::collections::btree::node::marker::Mut, rsext4::cache::bitmap::CacheKey, rsext4::cache::bitmap::CachedBitmap, alloc::collections::btree::node::marker::LeafOrInternal>, alloc::collections::btree::node::marker::KV>>::remove_kv_tracking::<<alloc::collections::btree::map::entry::OccupiedEntry<rsext4::cache::bitmap::CacheKey, rsext4::cache::bitmap::CachedBitmap>>::remove_kv::{closure#0}, alloc::alloc::Global>
+0000000080202686 <alloc::collections::btree::node::Handle<alloc::collections::btree::node::NodeRef<alloc::collections::btree::node::marker::Mut, os::fs::vfs::root::define::MountPath, alloc::sync::Arc<spin::mutex::Mutex<dyn os::fs::vfs::vfs::VfsFs>>, alloc::collections::btree::node::marker::LeafOrInternal>, alloc::collections::btree::node::marker::KV>>::remove_kv_tracking::<<alloc::collections::btree::map::entry::OccupiedEntry<os::fs::vfs::root::define::MountPath, alloc::sync::Arc<spin::mutex::Mutex<dyn os::fs::vfs::vfs::VfsFs>>>>::remove_kv::{closure#0}, alloc::alloc::Global>
+00000000802027e2 <alloc::collections::btree::node::Handle<alloc::collections::btree::node::NodeRef<alloc::collections::btree::node::marker::Mut, os::arch::riscv64::memory::address::VirNumber, alloc::sync::Arc<os::memory::frame_allocator::FramTracker>, alloc::collections::btree::node::marker::LeafOrInternal>, alloc::collections::btree::node::marker::KV>>::remove_kv_tracking::<<alloc::collections::btree::map::entry::OccupiedEntry<os::arch::riscv64::memory::address::VirNumber, alloc::sync::Arc<os::memory::frame_allocator::FramTracker>>>::remove_kv::{closure#0}, alloc::alloc::Global>
+00000000802028c2 <alloc::collections::btree::node::Handle<alloc::collections::btree::node::NodeRef<alloc::collections::btree::node::marker::Mut, u32, os::fs::fs_backend::ramfs::ramfs::Node, alloc::collections::btree::node::marker::LeafOrInternal>, alloc::collections::btree::node::marker::KV>>::remove_kv_tracking::<<alloc::collections::btree::map::entry::OccupiedEntry<u32, os::fs::fs_backend::ramfs::ramfs::Node>>::remove_kv::{closure#0}, alloc::alloc::Global>
+0000000080202a58 <alloc::collections::btree::node::BalancingContext<alloc::string::String, u32>>::do_merge::<<alloc::collections::btree::node::BalancingContext<alloc::string::String, u32>>::merge_tracking_child<alloc::alloc::Global>::{closure#0}, alloc::collections::btree::node::NodeRef<alloc::collections::btree::node::marker::Mut, alloc::string::String, u32, alloc::collections::btree::node::marker::LeafOrInternal>, alloc::alloc::Global>
+0000000080202ca8 <alloc::collections::btree::node::BalancingContext<rsext4::bmalloc::AbsoluteBN, rsext4::cache::data_block::CachedBlock>>::do_merge::<<alloc::collections::btree::node::BalancingContext<rsext4::bmalloc::AbsoluteBN, rsext4::cache::data_block::CachedBlock>>::merge_tracking_child<alloc::alloc::Global>::{closure#0}, alloc::collections::btree::node::NodeRef<alloc::collections::btree::node::marker::Mut, rsext4::bmalloc::AbsoluteBN, rsext4::cache::data_block::CachedBlock, alloc::collections::btree::node::marker::LeafOrInternal>, alloc::alloc::Global>
+0000000080202f02 <alloc::collections::btree::node::BalancingContext<rsext4::bmalloc::InodeNumber, rsext4::cache::inode_table::CachedInode>>::do_merge::<<alloc::collections::btree::node::BalancingContext<rsext4::bmalloc::InodeNumber, rsext4::cache::inode_table::CachedInode>>::merge_tracking_child<alloc::alloc::Global>::{closure#0}, alloc::collections::btree::node::NodeRef<alloc::collections::btree::node::marker::Mut, rsext4::bmalloc::InodeNumber, rsext4::cache::inode_table::CachedInode, alloc::collections::btree::node::marker::LeafOrInternal>, alloc::alloc::Global>
+000000008020317c <alloc::collections::btree::node::BalancingContext<rsext4::cache::bitmap::CacheKey, rsext4::cache::bitmap::CachedBitmap>>::do_merge::<<alloc::collections::btree::node::BalancingContext<rsext4::cache::bitmap::CacheKey, rsext4::cache::bitmap::CachedBitmap>>::merge_tracking_child<alloc::alloc::Global>::{closure#0}, alloc::collections::btree::node::NodeRef<alloc::collections::btree::node::marker::Mut, rsext4::cache::bitmap::CacheKey, rsext4::cache::bitmap::CachedBitmap, alloc::collections::btree::node::marker::LeafOrInternal>, alloc::alloc::Global>
+00000000802033ea <alloc::collections::btree::node::BalancingContext<os::fs::vfs::root::define::MountPath, alloc::sync::Arc<spin::mutex::Mutex<dyn os::fs::vfs::vfs::VfsFs>>>>::do_merge::<<alloc::collections::btree::node::BalancingContext<os::fs::vfs::root::define::MountPath, alloc::sync::Arc<spin::mutex::Mutex<dyn os::fs::vfs::vfs::VfsFs>>>>::merge_tracking_child<alloc::alloc::Global>::{closure#0}, alloc::collections::btree::node::NodeRef<alloc::collections::btree::node::marker::Mut, os::fs::vfs::root::define::MountPath, alloc::sync::Arc<spin::mutex::Mutex<dyn os::fs::vfs::vfs::VfsFs>>, alloc::collections::btree::node::marker::LeafOrInternal>, alloc::alloc::Global>
+0000000080203644 <alloc::collections::btree::node::BalancingContext<os::arch::riscv64::memory::address::VirNumber, alloc::sync::Arc<os::memory::frame_allocator::FramTracker>>>::do_merge::<<alloc::collections::btree::node::BalancingContext<os::arch::riscv64::memory::address::VirNumber, alloc::sync::Arc<os::memory::frame_allocator::FramTracker>>>::merge_tracking_child<alloc::alloc::Global>::{closure#0}, alloc::collections::btree::node::NodeRef<alloc::collections::btree::node::marker::Mut, os::arch::riscv64::memory::address::VirNumber, alloc::sync::Arc<os::memory::frame_allocator::FramTracker>, alloc::collections::btree::node::marker::LeafOrInternal>, alloc::alloc::Global>
+000000008020384a <alloc::collections::btree::node::BalancingContext<u32, os::fs::fs_backend::ramfs::ramfs::Node>>::do_merge::<<alloc::collections::btree::node::BalancingContext<u32, os::fs::fs_backend::ramfs::ramfs::Node>>::merge_tracking_child<alloc::alloc::Global>::{closure#0}, alloc::collections::btree::node::NodeRef<alloc::collections::btree::node::marker::Mut, u32, os::fs::fs_backend::ramfs::ramfs::Node, alloc::collections::btree::node::marker::LeafOrInternal>, alloc::alloc::Global>
+0000000080203aaa <alloc::collections::btree::node::Handle<alloc::collections::btree::node::NodeRef<alloc::collections::btree::node::marker::Mut, alloc::string::String, os::driver::dtb::node::Property, alloc::collections::btree::node::marker::Leaf>, alloc::collections::btree::node::marker::Edge>>::insert_recursing::<alloc::alloc::Global, <alloc::collections::btree::map::entry::VacantEntry<alloc::string::String, os::driver::dtb::node::Property>>::insert_entry::{closure#0}>
+000000008020463c <alloc::collections::btree::node::Handle<alloc::collections::btree::node::NodeRef<alloc::collections::btree::node::marker::Mut, alloc::string::String, u32, alloc::collections::btree::node::marker::Leaf>, alloc::collections::btree::node::marker::Edge>>::insert_recursing::<alloc::alloc::Global, <alloc::collections::btree::map::entry::VacantEntry<alloc::string::String, u32>>::insert_entry::{closure#0}>
+0000000080204f2c <alloc::collections::btree::node::Handle<alloc::collections::btree::node::NodeRef<alloc::collections::btree::node::marker::Mut, rsext4::bmalloc::AbsoluteBN, rsext4::cache::data_block::CachedBlock, alloc::collections::btree::node::marker::Leaf>, alloc::collections::btree::node::marker::Edge>>::insert_recursing::<alloc::alloc::Global, <alloc::collections::btree::map::entry::VacantEntry<rsext4::bmalloc::AbsoluteBN, rsext4::cache::data_block::CachedBlock>>::insert_entry::{closure#0}>
+0000000080205964 <alloc::collections::btree::node::Handle<alloc::collections::btree::node::NodeRef<alloc::collections::btree::node::marker::Mut, rsext4::bmalloc::InodeNumber, rsext4::cache::inode_table::CachedInode, alloc::collections::btree::node::marker::Leaf>, alloc::collections::btree::node::marker::Edge>>::insert_recursing::<alloc::alloc::Global, <alloc::collections::btree::map::entry::VacantEntry<rsext4::bmalloc::InodeNumber, rsext4::cache::inode_table::CachedInode>>::insert_entry::{closure#0}>
+0000000080206234 <alloc::collections::btree::node::Handle<alloc::collections::btree::node::NodeRef<alloc::collections::btree::node::marker::Mut, rsext4::cache::bitmap::CacheKey, rsext4::cache::bitmap::CachedBitmap, alloc::collections::btree::node::marker::Leaf>, alloc::collections::btree::node::marker::Edge>>::insert_recursing::<alloc::alloc::Global, <alloc::collections::btree::map::entry::VacantEntry<rsext4::cache::bitmap::CacheKey, rsext4::cache::bitmap::CachedBitmap>>::insert_entry::{closure#0}>
+0000000080206f9e <alloc::collections::btree::node::Handle<alloc::collections::btree::node::NodeRef<alloc::collections::btree::node::marker::Mut, os::fs::vfs::root::define::MountPath, alloc::sync::Arc<spin::mutex::Mutex<dyn os::fs::vfs::vfs::VfsFs>>, alloc::collections::btree::node::marker::Leaf>, alloc::collections::btree::node::marker::Edge>>::insert_recursing::<alloc::alloc::Global, <alloc::collections::btree::map::entry::VacantEntry<os::fs::vfs::root::define::MountPath, alloc::sync::Arc<spin::mutex::Mutex<dyn os::fs::vfs::vfs::VfsFs>>>>::insert_entry::{closure#0}>
+000000008020788a <alloc::collections::btree::node::Handle<alloc::collections::btree::node::NodeRef<alloc::collections::btree::node::marker::Mut, os::arch::riscv64::memory::address::VirNumber, alloc::sync::Arc<os::memory::frame_allocator::FramTracker>, alloc::collections::btree::node::marker::Leaf>, alloc::collections::btree::node::marker::Edge>>::insert_recursing::<alloc::alloc::Global, <alloc::collections::btree::map::entry::VacantEntry<os::arch::riscv64::memory::address::VirNumber, alloc::sync::Arc<os::memory::frame_allocator::FramTracker>>>::insert_entry::{closure#0}>
+0000000080207e26 <alloc::collections::btree::node::Handle<alloc::collections::btree::node::NodeRef<alloc::collections::btree::node::marker::Mut, os::arch::riscv64::memory::address::VirNumber, os::memory::memset::MmapEntryInfo, alloc::collections::btree::node::marker::Leaf>, alloc::collections::btree::node::marker::Edge>>::insert_recursing::<alloc::alloc::Global, <alloc::collections::btree::map::entry::VacantEntry<os::arch::riscv64::memory::address::VirNumber, os::memory::memset::MmapEntryInfo>>::insert_entry::{closure#0}>
+0000000080208642 <alloc::collections::btree::node::Handle<alloc::collections::btree::node::NodeRef<alloc::collections::btree::node::marker::Mut, u32, rsext4::bmalloc::AbsoluteBN, alloc::collections::btree::node::marker::Leaf>, alloc::collections::btree::node::marker::Edge>>::insert_recursing::<alloc::alloc::Global, <alloc::collections::btree::map::entry::VacantEntry<u32, rsext4::bmalloc::AbsoluteBN>>::insert_entry::{closure#0}>
+0000000080208bf8 <alloc::collections::btree::node::Handle<alloc::collections::btree::node::NodeRef<alloc::collections::btree::node::marker::Mut, u32, os::fs::fs_backend::ramfs::ramfs::Node, alloc::collections::btree::node::marker::Leaf>, alloc::collections::btree::node::marker::Edge>>::insert_recursing::<alloc::alloc::Global, <alloc::collections::btree::map::entry::VacantEntry<u32, os::fs::fs_backend::ramfs::ramfs::Node>>::insert_entry::{closure#0}>
+0000000080209602 <alloc::collections::btree::node::Handle<alloc::collections::btree::node::NodeRef<alloc::collections::btree::node::marker::Mut, rsext4::bmalloc::InodeNumber, rsext4::cache::inode_table::CachedInode, alloc::collections::btree::node::marker::Internal>, alloc::collections::btree::node::marker::KV>>::split::<alloc::alloc::Global>
+00000000802097f6 <alloc::collections::btree::node::Handle<alloc::collections::btree::node::NodeRef<alloc::collections::btree::node::marker::Mut, os::arch::riscv64::memory::address::VirNumber, alloc::sync::Arc<os::memory::frame_allocator::FramTracker>, alloc::collections::btree::node::marker::Internal>, alloc::collections::btree::node::marker::KV>>::split::<alloc::alloc::Global>
+0000000080209992 <alloc::collections::btree::node::Handle<alloc::collections::btree::node::NodeRef<alloc::collections::btree::node::marker::Mut, os::arch::riscv64::memory::address::VirNumber, os::memory::memset::MmapEntryInfo, alloc::collections::btree::node::marker::Internal>, alloc::collections::btree::node::marker::KV>>::split::<alloc::alloc::Global>
+0000000080209bb0 <alloc::collections::btree::node::Handle<alloc::collections::btree::node::NodeRef<alloc::collections::btree::node::marker::Mut, u32, rsext4::bmalloc::AbsoluteBN, alloc::collections::btree::node::marker::Internal>, alloc::collections::btree::node::marker::KV>>::split::<alloc::alloc::Global>
+0000000080209d52 <alloc::collections::btree::node::Handle<alloc::collections::btree::node::NodeRef<alloc::collections::btree::node::marker::Mut, alloc::string::String, u32, alloc::collections::btree::node::marker::Leaf>, alloc::collections::btree::node::marker::KV>>::remove_leaf_kv::<<alloc::collections::btree::map::entry::OccupiedEntry<alloc::string::String, u32>>::remove_kv::{closure#0}, alloc::alloc::Global>
+000000008020a274 <alloc::collections::btree::node::Handle<alloc::collections::btree::node::NodeRef<alloc::collections::btree::node::marker::Mut, rsext4::bmalloc::AbsoluteBN, rsext4::cache::data_block::CachedBlock, alloc::collections::btree::node::marker::Leaf>, alloc::collections::btree::node::marker::KV>>::remove_leaf_kv::<<alloc::collections::btree::map::entry::OccupiedEntry<rsext4::bmalloc::AbsoluteBN, rsext4::cache::data_block::CachedBlock>>::remove_kv::{closure#0}, alloc::alloc::Global>
+000000008020a7e2 <alloc::collections::btree::node::Handle<alloc::collections::btree::node::NodeRef<alloc::collections::btree::node::marker::Mut, rsext4::bmalloc::InodeNumber, rsext4::cache::inode_table::CachedInode, alloc::collections::btree::node::marker::Leaf>, alloc::collections::btree::node::marker::KV>>::remove_leaf_kv::<<alloc::collections::btree::map::entry::OccupiedEntry<rsext4::bmalloc::InodeNumber, rsext4::cache::inode_table::CachedInode>>::remove_kv::{closure#0}, alloc::alloc::Global>
+000000008020adde <alloc::collections::btree::node::Handle<alloc::collections::btree::node::NodeRef<alloc::collections::btree::node::marker::Mut, rsext4::cache::bitmap::CacheKey, rsext4::cache::bitmap::CachedBitmap, alloc::collections::btree::node::marker::Leaf>, alloc::collections::btree::node::marker::KV>>::remove_leaf_kv::<<alloc::collections::btree::map::entry::OccupiedEntry<rsext4::cache::bitmap::CacheKey, rsext4::cache::bitmap::CachedBitmap>>::remove_kv::{closure#0}, alloc::alloc::Global>
+000000008020b368 <alloc::collections::btree::node::Handle<alloc::collections::btree::node::NodeRef<alloc::collections::btree::node::marker::Mut, os::fs::vfs::root::define::MountPath, alloc::sync::Arc<spin::mutex::Mutex<dyn os::fs::vfs::vfs::VfsFs>>, alloc::collections::btree::node::marker::Leaf>, alloc::collections::btree::node::marker::KV>>::remove_leaf_kv::<<alloc::collections::btree::map::entry::OccupiedEntry<os::fs::vfs::root::define::MountPath, alloc::sync::Arc<spin::mutex::Mutex<dyn os::fs::vfs::vfs::VfsFs>>>>::remove_kv::{closure#0}, alloc::alloc::Global>
+000000008020b892 <alloc::collections::btree::node::Handle<alloc::collections::btree::node::NodeRef<alloc::collections::btree::node::marker::Mut, os::arch::riscv64::memory::address::VirNumber, alloc::sync::Arc<os::memory::frame_allocator::FramTracker>, alloc::collections::btree::node::marker::Leaf>, alloc::collections::btree::node::marker::KV>>::remove_leaf_kv::<<alloc::collections::btree::map::entry::OccupiedEntry<os::arch::riscv64::memory::address::VirNumber, alloc::sync::Arc<os::memory::frame_allocator::FramTracker>>>::remove_kv::{closure#0}, alloc::alloc::Global>
+000000008020bd3e <alloc::collections::btree::node::Handle<alloc::collections::btree::node::NodeRef<alloc::collections::btree::node::marker::Mut, u32, os::fs::fs_backend::ramfs::ramfs::Node, alloc::collections::btree::node::marker::Leaf>, alloc::collections::btree::node::marker::KV>>::remove_leaf_kv::<<alloc::collections::btree::map::entry::OccupiedEntry<u32, os::fs::fs_backend::ramfs::ramfs::Node>>::remove_kv::{closure#0}, alloc::alloc::Global>
+000000008020c28a <alloc::collections::btree::node::NodeRef<alloc::collections::btree::node::marker::Immut, alloc::string::String, os::driver::dtb::node::Property, alloc::collections::btree::node::marker::LeafOrInternal>>::search_tree::<str>
+000000008020c350 <alloc::collections::btree::node::NodeRef<alloc::collections::btree::node::marker::Immut, u32, rsext4::bmalloc::AbsoluteBN, alloc::collections::btree::node::marker::LeafOrInternal>>::find_leaf_edges_spanning_range::<u32, core::ops::range::RangeFrom<u32>>
+000000008020c4fc <alloc::collections::btree::node::Handle<alloc::collections::btree::node::NodeRef<alloc::collections::btree::node::marker::Dying, os::arch::riscv64::memory::address::VirNumber, alloc::sync::Arc<os::memory::frame_allocator::FramTracker>, alloc::collections::btree::node::marker::Leaf>, alloc::collections::btree::node::marker::Edge>>::deallocating_next_unchecked::<alloc::alloc::Global>
+000000008020c5dc <alloc::collections::btree::node::BalancingContext<alloc::string::String, u32>>::bulk_steal_left
+000000008020c80c <alloc::collections::btree::node::BalancingContext<alloc::string::String, u32>>::bulk_steal_right
+000000008020ca20 <alloc::collections::btree::node::BalancingContext<rsext4::bmalloc::AbsoluteBN, rsext4::cache::data_block::CachedBlock>>::bulk_steal_left
+000000008020ccc2 <alloc::collections::btree::node::BalancingContext<rsext4::bmalloc::AbsoluteBN, rsext4::cache::data_block::CachedBlock>>::bulk_steal_right
+000000008020cf4c <alloc::collections::btree::node::BalancingContext<rsext4::bmalloc::InodeNumber, rsext4::cache::inode_table::CachedInode>>::bulk_steal_left
+000000008020d1ce <alloc::collections::btree::node::BalancingContext<rsext4::bmalloc::InodeNumber, rsext4::cache::inode_table::CachedInode>>::bulk_steal_right
+000000008020d462 <alloc::collections::btree::node::BalancingContext<rsext4::cache::bitmap::CacheKey, rsext4::cache::bitmap::CachedBitmap>>::bulk_steal_left
+000000008020d71a <alloc::collections::btree::node::BalancingContext<rsext4::cache::bitmap::CacheKey, rsext4::cache::bitmap::CachedBitmap>>::bulk_steal_right
+000000008020d9b8 <alloc::collections::btree::node::BalancingContext<os::fs::vfs::root::define::MountPath, alloc::sync::Arc<spin::mutex::Mutex<dyn os::fs::vfs::vfs::VfsFs>>>>::bulk_steal_left
+000000008020dbd8 <alloc::collections::btree::node::BalancingContext<os::fs::vfs::root::define::MountPath, alloc::sync::Arc<spin::mutex::Mutex<dyn os::fs::vfs::vfs::VfsFs>>>>::bulk_steal_right
+000000008020dde8 <alloc::collections::btree::node::BalancingContext<os::arch::riscv64::memory::address::VirNumber, alloc::sync::Arc<os::memory::frame_allocator::FramTracker>>>::bulk_steal_left
+000000008020dfb4 <alloc::collections::btree::node::BalancingContext<os::arch::riscv64::memory::address::VirNumber, alloc::sync::Arc<os::memory::frame_allocator::FramTracker>>>::bulk_steal_right
+000000008020e17a <alloc::collections::btree::node::BalancingContext<u32, os::fs::fs_backend::ramfs::ramfs::Node>>::bulk_steal_left
+000000008020e40c <alloc::collections::btree::node::BalancingContext<u32, os::fs::fs_backend::ramfs::ramfs::Node>>::bulk_steal_right
+000000008020e680 core::slice::sort::unstable::quicksort::quicksort::<rsext4::bmalloc::AbsoluteBN, <rsext4::bmalloc::AbsoluteBN as core::cmp::PartialOrd>::lt>
+000000008020e948 core::slice::sort::unstable::quicksort::quicksort::<rsext4::disknode::extent::Ext4Extent, <[rsext4::disknode::extent::Ext4Extent]>::sort_unstable_by_key<u32, <rsext4::extents_tree::root::ExtentTree>::remove_extend::leaf_step<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>::{closure#4}>::{closure#0}>
+000000008020ee14 core::slice::sort::unstable::quicksort::quicksort::<rsext4::disknode::extent::Ext4ExtentIdx, <[rsext4::disknode::extent::Ext4ExtentIdx]>::sort_unstable_by_key<u32, <rsext4::extents_tree::root::ExtentTree>::remove_extend::step_recursive<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>::{closure#1}>::{closure#0}>
+000000008020f2e0 core::slice::sort::unstable::quicksort::quicksort::<(u32, rsext4::bmalloc::AbsoluteBN), <[(u32, rsext4::bmalloc::AbsoluteBN)]>::sort_unstable_by_key<u32, rsext4::loopfile::resolve_inode_block_allextend<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>::{closure#0}>::{closure#0}>
+000000008020f67c <virtio_drivers::blk::VirtIOBlk<os::arch::riscv64::driver::virtio_blk::block::VirtioHal>>::read_block
+000000008020f772 <virtio_drivers::blk::VirtIOBlk<os::arch::riscv64::driver::virtio_blk::block::VirtioHal>>::write_block
+000000008020f868 <virtio_drivers::blk::VirtIOBlk<os::arch::riscv64::driver::virtio_blk::block::VirtioHal>>::new
+000000008020fb8a <virtio_drivers::queue::VirtQueue<os::arch::riscv64::driver::virtio_blk::block::VirtioHal>>::add
+000000008020fcfa <virtio_drivers::queue::VirtQueue<os::arch::riscv64::driver::virtio_blk::block::VirtioHal>>::pop_used
+000000008020fdce <riscv::register::scause::Scause>::cause
+000000008020fe34 <os::memory::memset::MapArea>::map_one
+0000000080210176 <os::memory::memset::MapSet>::new_kernel
+0000000080210e08 <os::memory::memset::MapSet>::unmap_range
+0000000080212122 <os::memory::memset::MapSet>::clone_mapset
+0000000080212918 <os::memory::memset::MapSet>::range_is_free
+0000000080212a02 <os::memory::memset::MapSet>::find_free_range
+0000000080212b74 <os::memory::memset::MapSet>::alloc_kernel_stack
+0000000080212d62 <os::memory::memset::MapSet>::split_area_by_range
+000000008021385c <os::memory::memset::MapSet>::dealloc_kernel_stack_id0
+0000000080213a4c <os::memory::memset::MapSet>::findarea_allocFrame_and_setPte
+000000008021418a <os::memory::memset::MapSet>::mmap
+0000000080214dce <os::memory::memset::MapSet>::add_area
+000000008021512c <os::memory::memset::MapSet>::from_elf
+00000000802156ce os::arch::riscv64::arch_init
+0000000080215fea os::syscall::sys_mprotect::sys_mprotect
+0000000080216a48 os::arch::riscv64::trap::user_trap::log_user_fault_detail
+0000000080216ba8 <&volatile::Volatile<u32> as core::fmt::Debug>::fmt
+0000000080216be0 <&mut virtio_drivers::blk::BlkConfig as core::fmt::Debug>::fmt
+0000000080216cd0 <volatile::Volatile<u8> as core::fmt::Debug>::fmt
+0000000080216d06 <volatile::Volatile<u32> as core::fmt::Debug>::fmt
+0000000080216d3c <volatile::Volatile<u16> as core::fmt::Debug>::fmt
+0000000080216d72 <volatile::Volatile<u64> as core::fmt::Debug>::fmt
+0000000080216da8 <os::memory::memset::MapSet as core::ops::drop::Drop>::drop
+0000000080216fb8 <riscv::register::scause::Trap as core::fmt::Debug>::fmt
+000000008021700e <os::memory::memset::VirNumRange as core::fmt::Debug>::fmt
+0000000080217050 <os::arch::riscv64::memory::address::VirNumber as core::fmt::Debug>::fmt
+0000000080217086 app_entry_point
+00000000802170ce kernel_trap_handler
+0000000080217468 <core::str::pattern::TwoWaySearcher>::next::<core::str::pattern::MatchOnly>
+00000000802175dc core::slice::sort::stable::drift::sort::<alloc::string::String, <alloc::string::String as core::cmp::PartialOrd>::lt>
+0000000080217e12 core::slice::sort::stable::drift::sort::<os::fs::vfs::root::block_device::FilesystemProbeCandidate, <[os::fs::vfs::root::block_device::FilesystemProbeCandidate]>::sort_by_key<bool, <os::fs::vfs::root::define::RootFs>::mount_ext4_root::{closure#0}>::{closure#0}>
+00000000802184a2 core::slice::sort::stable::drift::sort::<(rsext4::bmalloc::AbsoluteBN, alloc::vec::Vec<u8>), <[(rsext4::bmalloc::AbsoluteBN, alloc::vec::Vec<u8>)]>::sort_by_key<rsext4::bmalloc::AbsoluteBN, <rsext4::cache::data_block::DataBlockCache>::flush_all<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>::{closure#2}>::{closure#0}>
+0000000080218b06 core::slice::sort::stable::drift::sort::<(rsext4::bmalloc::AbsoluteBN, usize, alloc::vec::Vec<u8>), <[(rsext4::bmalloc::AbsoluteBN, usize, alloc::vec::Vec<u8>)]>::sort_by_key<(rsext4::bmalloc::AbsoluteBN, usize), <rsext4::cache::inode_table::InodeCache>::flush_all<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>::{closure#2}>::{closure#0}>
+00000000802190ec core::slice::sort::stable::drift::sort::<(rsext4::cache::bitmap::CacheKey, rsext4::bmalloc::AbsoluteBN, alloc::vec::Vec<u8>), <[(rsext4::cache::bitmap::CacheKey, rsext4::bmalloc::AbsoluteBN, alloc::vec::Vec<u8>)]>::sort_by_key<rsext4::bmalloc::AbsoluteBN, <rsext4::cache::bitmap::BitmapCache>::flush_all<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>::{closure#2}>::{closure#0}>
+00000000802197ca core::slice::sort::stable::drift::sort::<(u8, alloc::vec::Vec<u16>), <[(u8, alloc::vec::Vec<u16>)]>::sort_by_key<u8, os::fs::fs_backend::fat32::fat32::build_lfn_name::{closure#0}>::{closure#0}>
+0000000080219e36 <os::task::task::TaskControlBlock>::new_exec_task_with_elf
+000000008021a32a <os::task::task::TaskControlBlock>::push_args_to_user_stack
+000000008021a7cc <os::task::task::TaskControlBlock>::new
+000000008021b094 <os::task::task::TaskManager>::get_current_fd
+000000008021b236 <os::task::task::TaskManager>::run_first_task (.llvm.17331779104646516195)
+000000008021b528 <os::task::task::TaskManager>::get_current_cwd
+000000008021b75e <os::task::task::TaskManager>::set_current_cwd
+000000008021b91a <os::task::task::TaskManager>::close_current_fd
+000000008021bb98 <os::task::task::TaskManager>::get_current_stap
+000000008021bd06 <os::task::task::TaskManager>::reap_zombie_child
+000000008021c214 <os::task::task::TaskManager>::get_current_trapcx
+000000008021c380 <os::task::task::TaskManager>::mark_current_zombie
+000000008021c514 <os::task::task::TaskManager>::alloc_fd_for_current
+000000008021c790 <os::task::task::TaskManager>::suspend_and_run_task
+000000008021cd2a <os::task::task::TaskManager>::wake_task_from_blocking
+000000008021cfa8 <os::task::task::TaskManager>::stride_select_task_inner
+000000008021d14e <os::task::task::TaskManager>::resolve_current_task_signal
+000000008021d57e <os::task::task::TaskManager>::kail_current_task_and_run_next
+000000008021d60c <os::task::task::TaskManager>::reparent_current_children_to_init
+000000008021dc7e <os::task::task::TaskManager>::blocking_current_task_and_run_next
+000000008021e23c <os::driver::dtb::devices::DeviceScanner>::find_buses
+000000008021e474 <os::driver::dtb::devices::DeviceScanner>::find_memory
+000000008021e6ac <os::driver::dtb::devices::DeviceScanner>::find_ic_recursive (.llvm.17331779104646516195)
+000000008021ec1e <os::driver::dtb::devices::DeviceScanner>::find_mmio_devices
+000000008021ee56 <os::driver::dtb::devices::DeviceScanner>::find_bus_recursive (.llvm.17331779104646516195)
+000000008021f662 <os::driver::dtb::devices::DeviceScanner>::find_cpus_recursive (.llvm.17331779104646516195)
+000000008021fa46 <os::driver::dtb::devices::DeviceScanner>::find_gpio_recursive (.llvm.17331779104646516195)
+0000000080220094 <os::driver::dtb::devices::DeviceScanner>::find_mmio_recursive (.llvm.17331779104646516195)
+0000000080220bf8 <os::driver::dtb::devices::DeviceScanner>::find_gpio_controllers
+0000000080220e30 <os::driver::dtb::devices::DeviceScanner>::find_memory_recursive (.llvm.17331779104646516195)
+00000000802212b6 <os::driver::dtb::devices::DeviceScanner>::find_interrupt_controllers
+00000000802214ee os::task::task::build_auxv
+000000008022198a os::task::task::run_first_task
+00000000802219a2 os::fs::component::tty::tty::print
+0000000080221a76 <os::fs::component::tty::tty::Stdin as core::any::Any>::type_id
+0000000080221a9a <os::fs::component::tty::tty::Stderr as core::any::Any>::type_id
+0000000080221abe <os::fs::component::tty::tty::Stdout as core::any::Any>::type_id
+0000000080221ae2 <os::task::Signal as core::fmt::Debug>::fmt
+0000000080221b18 <os::task::task::ProcessId as core::ops::drop::Drop>::drop
+0000000080221caa <os::fs::component::tty::tty::Stdin as os::fs::vfs::vfs::File>::read
+0000000080221e74 <os::fs::component::tty::tty::Stdin as os::fs::vfs::vfs::File>::write
+0000000080221e8e <os::fs::component::tty::tty::Stderr as os::fs::vfs::vfs::File>::read
+0000000080221ea8 <os::fs::component::tty::tty::Stderr as os::fs::vfs::vfs::File>::write
+0000000080221efc <os::task::task::TaskControlBlock as core::ops::drop::Drop>::drop
+0000000080222054 <os::fs::component::tty::tty::Stdout as core::fmt::Write>::write_str (.llvm.17331779104646516195)
+00000000802220e0 <core::fmt::Error as core::fmt::Debug>::fmt (.llvm.17331779104646516195)
+0000000080222104 <os::fs::component::tty::tty::Stdout as os::fs::vfs::vfs::File>::write
+0000000080222134 <os::task::task::TASK_MANAER as core::ops::deref::Deref>::deref
+0000000080222174 <&str as core::str::pattern::Pattern>::is_contained_in
+0000000080222332 <os::fs::component::tty::tty::Stdin as os::fs::vfs::vfs::File>::getdents64
+000000008022234e <os::fs::component::tty::tty::Stdin as os::fs::vfs::vfs::File>::stat
+0000000080222368 <os::fs::component::tty::tty::Stdin as os::fs::vfs::vfs::File>::flush
+000000008022237a <os::fs::component::tty::tty::Stdin as os::fs::vfs::vfs::File>::lseek
+0000000080222394 <os::fs::component::tty::tty::Stdin as os::fs::vfs::vfs::File>::read_at
+00000000802223ae <os::fs::component::tty::tty::Stdin as os::fs::vfs::vfs::File>::write_at
+00000000802223c8 <os::fs::component::tty::tty::Stdout as core::fmt::Write>::write_char (.llvm.17331779104646516195)
+00000000802224d6 <os::fs::component::tty::tty::Stdout as core::fmt::Write>::write_fmt (.llvm.17331779104646516195)
+00000000802224f8 <rsext4::jbd2::jbdstruct::JBD2DEVSYSTEM>::commit_transaction::<os::fs::fs_backend::ext4_backend::Ext4BlockDevice> (.llvm.6964199394863979445)
+0000000080223328 <rsext4::jbd2::jbdstruct::JBD2DEVSYSTEM>::set_next_log_block::<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>
+00000000802234c2 <rsext4::cache::bitmap::BitmapCache>::get_or_load::<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>
+00000000802238d6 <rsext4::cache::bitmap::BitmapCache>::get_or_load_mut::<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>
+0000000080223c72 <rsext4::cache::bitmap::BitmapCache>::write_bitmap_static::<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>
+0000000080223dd6 <rsext4::cache::bitmap::BitmapCache>::modify::<os::fs::fs_backend::ext4_backend::Ext4BlockDevice, <rsext4::ext4::fs::Ext4FileSystem>::free_block<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>::{closure#0}>
+000000008022401e <rsext4::cache::bitmap::BitmapCache>::modify::<os::fs::fs_backend::ext4_backend::Ext4BlockDevice, <rsext4::ext4::fs::Ext4FileSystem>::free_inode<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>::{closure#0}>
+0000000080224266 <rsext4::cache::bitmap::BitmapCache>::modify::<os::fs::fs_backend::ext4_backend::Ext4BlockDevice, <rsext4::ext4::fs::Ext4FileSystem>::alloc_blocks<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>::{closure#1}>
+0000000080224496 <rsext4::cache::bitmap::BitmapCache>::modify::<os::fs::fs_backend::ext4_backend::Ext4BlockDevice, <rsext4::ext4::fs::Ext4FileSystem>::alloc_inodes<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>::{closure#1}>
+000000008022476a <rsext4::cache::bitmap::BitmapCache>::evict_lru::<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>
+00000000802249de <rsext4::cache::bitmap::BitmapCache>::flush_all::<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>
+0000000080224ed2 rsext4::file::blocks::build_file_block_mapping::<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>
+000000008022525a rsext4::jbd2::jbd2::create_journal_entry::<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>
+0000000080225770 core::slice::sort::unstable::ipnsort::<rsext4::bmalloc::AbsoluteBN, <rsext4::bmalloc::AbsoluteBN as core::cmp::PartialOrd>::lt>
+00000000802258a2 core::slice::sort::unstable::ipnsort::<rsext4::disknode::extent::Ext4Extent, <[rsext4::disknode::extent::Ext4Extent]>::sort_unstable_by_key<u32, <rsext4::extents_tree::root::ExtentTree>::remove_extend::leaf_step<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>::{closure#4}>::{closure#0}>
+0000000080225a02 core::slice::sort::unstable::ipnsort::<rsext4::disknode::extent::Ext4ExtentIdx, <[rsext4::disknode::extent::Ext4ExtentIdx]>::sort_unstable_by_key<u32, <rsext4::extents_tree::root::ExtentTree>::remove_extend::step_recursive<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>::{closure#1}>::{closure#0}>
+0000000080225b62 core::slice::sort::unstable::ipnsort::<(u32, rsext4::bmalloc::AbsoluteBN), <[(u32, rsext4::bmalloc::AbsoluteBN)]>::sort_unstable_by_key<u32, rsext4::loopfile::resolve_inode_block_allextend<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>::{closure#0}>::{closure#0}>
+0000000080225c9c <alloc::raw_vec::RawVecInner<_>>::reserve::do_reserve_and_handle::<alloc::alloc::Global>
+0000000080225d28 <core::iter::adapters::map::Map<alloc::collections::btree::map::Iter<rsext4::bmalloc::AbsoluteBN, rsext4::cache::data_block::CachedBlock>, core::iter::traits::iterator::Iterator::min_by_key::key<(&rsext4::bmalloc::AbsoluteBN, &rsext4::cache::data_block::CachedBlock), u64, <rsext4::cache::data_block::DataBlockCache>::evict_lru<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>::{closure#0}>::{closure#0}> as core::iter::traits::iterator::Iterator>::fold::<(u64, (&rsext4::bmalloc::AbsoluteBN, &rsext4::cache::data_block::CachedBlock)), core::iter::traits::iterator::Iterator::min_by::fold<(u64, (&rsext4::bmalloc::AbsoluteBN, &rsext4::cache::data_block::CachedBlock)), core::iter::traits::iterator::Iterator::min_by_key::compare<(&rsext4::bmalloc::AbsoluteBN, &rsext4::cache::data_block::CachedBlock), u64>>::{closure#0}>
+0000000080225e3a <core::iter::adapters::map::Map<alloc::collections::btree::map::Iter<rsext4::bmalloc::InodeNumber, rsext4::cache::inode_table::CachedInode>, core::iter::traits::iterator::Iterator::min_by_key::key<(&rsext4::bmalloc::InodeNumber, &rsext4::cache::inode_table::CachedInode), u64, <rsext4::cache::inode_table::InodeCache>::evict_lru<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>::{closure#0}>::{closure#0}> as core::iter::traits::iterator::Iterator>::fold::<(u64, (&rsext4::bmalloc::InodeNumber, &rsext4::cache::inode_table::CachedInode)), core::iter::traits::iterator::Iterator::min_by::fold<(u64, (&rsext4::bmalloc::InodeNumber, &rsext4::cache::inode_table::CachedInode)), core::iter::traits::iterator::Iterator::min_by_key::compare<(&rsext4::bmalloc::InodeNumber, &rsext4::cache::inode_table::CachedInode), u64>>::{closure#0}>
+0000000080225f70 <rsext4::blockdev::cached_device::BlockDev<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>>::read_block
+0000000080226058 <rsext4::blockdev::cached_device::BlockDev<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>>::flush
+00000000802260d2 <rsext4::blockdev::journal::Jbd2Dev<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>>::read_block
+00000000802261ba <rsext4::blockdev::journal::Jbd2Dev<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>>::write_block
+0000000080226510 <rsext4::blockdev::journal::Jbd2Dev<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>>::write_blocks
+0000000080226918 <rsext4::blockdev::journal::Jbd2Dev<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>>::umount_commit
+0000000080226a32 <rsext4::blockdev::journal::Jbd2Dev<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>>::journal_replay
+0000000080227d0e <rsext4::blockdev::journal::Jbd2Dev<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>>::set_journal_superblock
+0000000080227dde <alloc::raw_vec::RawVec<[u8; 4096]>>::grow_one
+0000000080227e36 <alloc::raw_vec::RawVec<alloc::sync::Arc<spin::mutex::Mutex<dyn os::fs::vfs::vblock::BlockDevTrait>>>>::grow_one
+0000000080227e36 <alloc::raw_vec::RawVec<core::option::Option<alloc::sync::Arc<dyn os::fs::vfs::vfs::File>>>>::grow_one
+0000000080227e36 <alloc::raw_vec::RawVec<os::task::signal::OsSignal>>::grow_one
+0000000080227e36 <alloc::raw_vec::RawVec<os::memory::memorymodel::PhysMemoryRange>>::grow_one
+0000000080227e36 <alloc::raw_vec::RawVec<os::driver::dtb::node::RegBlock>>::grow_one
+0000000080227e36 <alloc::raw_vec::RawVec<os::arch::riscv64::driver::virtio_blk::block::VirtioMmioDevice>>::grow_one
+0000000080227e36 <alloc::raw_vec::RawVec<&mut [u8]>>::grow_one
+0000000080227e36 <alloc::raw_vec::RawVec<&str>>::grow_one
+0000000080227e36 <alloc::raw_vec::RawVec<(usize, usize)>>::grow_one
+0000000080227e92 <alloc::raw_vec::RawVec<alloc::sync::Arc<os::sync::up::UPSafeCell<os::task::task::TaskControlBlock>>>>::grow_one
+0000000080227e92 <alloc::raw_vec::RawVec<rsext4::bmalloc::AbsoluteBN>>::grow_one
+0000000080227e92 <alloc::raw_vec::RawVec<os::memory::frame_allocator::FramTracker>>::grow_one
+0000000080227e92 <alloc::raw_vec::RawVec<os::arch::riscv64::memory::address::VirNumber>>::grow_one
+0000000080227e92 <alloc::raw_vec::RawVec<&mut [u8; 4096]>>::grow_one
+0000000080227e92 <alloc::raw_vec::RawVec<&os::driver::dtb::node::DeviceNode>>::grow_one
+0000000080227e92 <alloc::raw_vec::RawVec<usize>>::grow_one
+0000000080227eee <alloc::raw_vec::RawVec<alloc::string::String>>::grow_one
+0000000080227eee <alloc::raw_vec::RawVec<os::memory::PreFlectMemory>>::grow_one
+0000000080227eee <alloc::raw_vec::RawVec<os::symbols::Sym>>::grow_one
+0000000080227eee <alloc::raw_vec::RawVec<os::memory::frame_allocator::PageRange>>::grow_one
+0000000080227eee <alloc::raw_vec::RawVec<os::fs::partition::mbr::MbrPartitionEntry>>::grow_one
+0000000080227f4a <alloc::raw_vec::RawVec<rsext4::bmalloc::InodeNumber>>::grow_one
+0000000080227fa6 <alloc::raw_vec::RawVec<rsext4::blockgroup_description::desc::Ext4GroupDesc>>::grow_one
+0000000080228004 <alloc::raw_vec::RawVec<rsext4::jbd2::jbdstruct::Jbd2Update>>::grow_one
+0000000080228060 <alloc::raw_vec::RawVec<rsext4::jbd2::jbdstruct::JournalBlockTagS>>::grow_one
+00000000802280bc <alloc::raw_vec::RawVec<rsext4::disknode::inode::Ext4Inode>>::grow_one
+000000008022811a <alloc::raw_vec::RawVec<os::task::task::ProcessId>>::grow_one
+000000008022811a <alloc::raw_vec::RawVec<u32>>::grow_one
+0000000080228176 <alloc::raw_vec::RawVec<os::memory::memset::MapArea>>::grow_one
+0000000080228176 <alloc::raw_vec::RawVec<os::driver::dtb::devices::InterruptController>>::grow_one
+00000000802281d4 <alloc::raw_vec::RawVec<os::fs::partition::gpt::GptPartitionEntry>>::grow_one
+0000000080228232 <alloc::raw_vec::RawVec<os::driver::dtb::node::DeviceNode>>::grow_one
+0000000080228232 <alloc::raw_vec::RawVec<os::driver::dtb::devices::MmioDevice>>::grow_one
+0000000080228290 <alloc::raw_vec::RawVec<os::driver::dtb::devices::MemoryInfo>>::grow_one
+00000000802282ee <alloc::raw_vec::RawVec<os::driver::dtb::devices::GpioController>>::grow_one
+000000008022834c <alloc::raw_vec::RawVec<os::driver::dtb::devices::CpuInfo>>::grow_one
+00000000802283aa <alloc::raw_vec::RawVec<os::driver::dtb::devices::BusBridge>>::grow_one
+0000000080228408 <alloc::raw_vec::RawVec<os::fs::vfs::root::block_device::FilesystemProbeCandidate>>::grow_one
+0000000080228466 <alloc::raw_vec::RawVec<rsext4::file::delete::delete_dir::DirFrame>>::grow_one
+00000000802284c4 <alloc::raw_vec::RawVec<(alloc::string::String, rsext4::bmalloc::InodeNumber, rsext4::disknode::inode::Ext4Inode, alloc::string::String)>>::grow_one
+0000000080228522 <alloc::raw_vec::RawVec<(rsext4::bmalloc::AbsoluteBN, [u8; 4096])>>::grow_one
+000000008022857e <alloc::raw_vec::RawVec<(rsext4::bmalloc::InodeNumber, alloc::string::String)>>::grow_one
+000000008022857e <alloc::raw_vec::RawVec<(os::memory::memset::VirNumRange, core::option::Option<usize>)>>::grow_one
+000000008022857e <alloc::raw_vec::RawVec<(u8, alloc::vec::Vec<u16>)>>::grow_one
+000000008022857e <alloc::raw_vec::RawVec<(usize, alloc::vec::Vec<os::memory::frame_allocator::FramTracker>)>>::grow_one
+00000000802285dc <alloc::raw_vec::RawVec<u16>>::grow_one
+0000000080228638 <alloc::raw_vec::RawVecInner>::finish_grow (.llvm.6964199394863979445)
+000000008022870c <alloc::raw_vec::RawVecInner>::try_allocate_in
+00000000802287b2 <rsext4::error::errno::Errno as core::fmt::Debug>::fmt
+00000000802287ee <rsext4::error::Ext4Error as core::fmt::Debug>::fmt (.llvm.6964199394863979445)
+000000008022884a <rsext4::cache::bitmap::BitmapType as core::fmt::Debug>::fmt
+000000008022888a <rsext4::ext4::fs::Ext4FileSystem>::modify_inode::<os::fs::fs_backend::ext4_backend::Ext4BlockDevice, <rsext4::ext4::fs::Ext4FileSystem>::mount<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>::{closure#3}>
+0000000080228a48 <rsext4::ext4::fs::Ext4FileSystem>::get_inode_by_num::<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>
+0000000080228b3e <rsext4::ext4::fs::Ext4FileSystem>::free_block::<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>
+0000000080228efc <rsext4::ext4::fs::Ext4FileSystem>::free_inode::<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>
+000000008022928c <rsext4::ext4::fs::Ext4FileSystem>::alloc_block::<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>
+0000000080229316 <rsext4::ext4::fs::Ext4FileSystem>::alloc_inode::<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>
+0000000080229c00 <rsext4::ext4::fs::Ext4FileSystem>::alloc_blocks::<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>
+000000008022a54e <rsext4::ext4::fs::Ext4FileSystem>::mount::<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>
+000000008022c246 <rsext4::ext4::fs::Ext4FileSystem>::find_file::<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>
+000000008022c44c <rsext4::ext4::fs::Ext4FileSystem>::apply_inode_dtime::<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>
+000000008022c63a <rsext4::ext4::fs::Ext4FileSystem>::apply_inode_metadata::<os::fs::fs_backend::ext4_backend::Ext4BlockDevice> (.llvm.122657611274504865)
+000000008022c7f2 <rsext4::ext4::fs::Ext4FileSystem>::finalize_inode_update::<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>
+000000008022ce32 <rsext4::ext4::fs::Ext4FileSystem>::set_inode_links_count::<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>
+000000008022d01e <rsext4::ext4::fs::Ext4FileSystem>::touch_inode_atime_if_needed::<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>
+000000008022d180 <rsext4::ext4::fs::Ext4FileSystem>::touch_inode_ctime_for_link_change::<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>
+000000008022d206 <rsext4::cache::data_block::DataBlockCache>::modify_new::<os::fs::fs_backend::ext4_backend::Ext4BlockDevice, rsext4::file::create::mkfile<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>::{closure#0}>
+000000008022d2b2 <rsext4::cache::data_block::DataBlockCache>::get_or_load::<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>
+000000008022d5aa <rsext4::cache::data_block::DataBlockCache>::get_or_load_mut::<os::fs::fs_backend::ext4_backend::Ext4BlockDevice> (.llvm.122657611274504865)
+000000008022d84a <rsext4::cache::data_block::DataBlockCache>::modify::<os::fs::fs_backend::ext4_backend::Ext4BlockDevice, rsext4::dir::insert::insert_dir_entry<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>::{closure#0}>
+000000008022db28 <rsext4::cache::data_block::DataBlockCache>::modify::<os::fs::fs_backend::ext4_backend::Ext4BlockDevice, rsext4::dir::insert::insert_dir_entry<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>::{closure#1}>
+000000008022dcb8 <rsext4::cache::data_block::DataBlockCache>::modify::<os::fs::fs_backend::ext4_backend::Ext4BlockDevice, rsext4::file::io::write_inode_data<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>::{closure#1}>
+000000008022ddbe <rsext4::cache::data_block::DataBlockCache>::modify::<os::fs::fs_backend::ext4_backend::Ext4BlockDevice, rsext4::file::delete::remove_inodeentry_from_parentdir<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>::{closure#0}>
+000000008022e16a <rsext4::cache::data_block::DataBlockCache>::modify::<os::fs::fs_backend::ext4_backend::Ext4BlockDevice, rsext4::file::rename::mv<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>::{closure#2}>
+000000008022e2d0 <rsext4::cache::data_block::DataBlockCache>::evict_lru::<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>
+000000008022e542 <rsext4::cache::data_block::DataBlockCache>::flush_all::<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>
+000000008022e98a rsext4::ext4::sync::umount::<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>
+000000008022f07c <rsext4::error::errno::Errno as core::fmt::Debug>::fmt
+000000008022f0b8 <rsext4::error::Ext4Error as core::fmt::Debug>::fmt
+000000008022f114 <alloc::collections::btree::map::BTreeMap<alloc::string::String, u32>>::remove::<alloc::string::String>
+000000008022f29c <alloc::collections::btree::map::BTreeMap<rsext4::bmalloc::AbsoluteBN, rsext4::cache::data_block::CachedBlock>>::remove::<rsext4::bmalloc::AbsoluteBN>
+000000008022f412 <alloc::collections::btree::map::BTreeMap<rsext4::bmalloc::InodeNumber, rsext4::cache::inode_table::CachedInode>>::remove::<rsext4::bmalloc::InodeNumber>
+000000008022f5a8 <alloc::collections::btree::map::BTreeMap<rsext4::cache::bitmap::CacheKey, rsext4::cache::bitmap::CachedBitmap>>::remove::<rsext4::cache::bitmap::CacheKey>
+000000008022f73e <alloc::collections::btree::map::BTreeMap<os::fs::vfs::root::define::MountPath, alloc::sync::Arc<spin::mutex::Mutex<dyn os::fs::vfs::vfs::VfsFs>>>>::get::<os::fs::vfs::root::define::MountPath>
+000000008022f7d4 <alloc::collections::btree::map::BTreeMap<os::fs::vfs::root::define::MountPath, alloc::sync::Arc<spin::mutex::Mutex<dyn os::fs::vfs::vfs::VfsFs>>>>::remove::<os::fs::vfs::root::define::MountPath>
+000000008022f932 <alloc::collections::btree::map::BTreeMap<u32, os::fs::fs_backend::ramfs::ramfs::Node>>::remove::<u32>
+000000008022fa94 bitflags::parser::to_writer::<os::arch::riscv64::memory::address::PTEFlags, &mut core::fmt::Formatter>
+000000008022fbd8 <alloc::collections::btree::map::BTreeMap<_, _, _> as core::clone::Clone>::clone::clone_subtree::<os::arch::riscv64::memory::address::VirNumber, alloc::sync::Arc<os::memory::frame_allocator::FramTracker>, alloc::alloc::Global> (.llvm.6401810833609262242)
+000000008022fe68 <alloc::collections::btree::map::BTreeMap<_, _, _> as core::clone::Clone>::clone::clone_subtree::<os::arch::riscv64::memory::address::VirNumber, os::memory::memset::MmapEntryInfo, alloc::alloc::Global> (.llvm.6401810833609262242)
+0000000080230204 <alloc::collections::btree::map::BTreeMap<alloc::string::String, os::driver::dtb::node::Property>>::insert
+0000000080230396 <alloc::collections::btree::map::BTreeMap<alloc::string::String, u32>>::insert
+00000000802304e2 <alloc::collections::btree::map::BTreeMap<os::fs::vfs::root::define::MountPath, alloc::sync::Arc<spin::mutex::Mutex<dyn os::fs::vfs::vfs::VfsFs>>>>::insert
+00000000802305f6 <alloc::collections::btree::map::BTreeMap<os::arch::riscv64::memory::address::VirNumber, os::memory::memset::MmapEntryInfo>>::insert
+00000000802306d0 <alloc::sync::Arc<dyn os::fs::vfs::vfs::File>>::drop_slow
+0000000080230754 <alloc::sync::Arc<spin::mutex::Mutex<dyn os::fs::vfs::vfs::VfsFs>>>::drop_slow
+0000000080230754 <alloc::sync::Arc<spin::mutex::Mutex<dyn os::fs::vfs::vblock::BlockDevTrait>>>::drop_slow
+00000000802307f4 <alloc::sync::Arc<spin::mutex::Mutex<os::fs::fs_backend::ext4_backend::ext4::Ext4Fs>>>::drop_slow
+0000000080230938 <alloc::sync::Arc<os::sync::up::UPSafeCell<os::task::task::TaskControlBlock>>>::drop_slow
+0000000080230d18 <alloc::sync::Arc<os::sync::up::UPSafeCell<os::fs::component::pipe::pipe::PipeRingBuffer>>>::drop_slow
+0000000080230dd6 <alloc::sync::Arc<os::sync::up::UPSafeCell<os::fs::component::pipe::pipe::Pipe>>>::drop_slow
+0000000080230e48 <alloc::sync::Arc<os::memory::frame_allocator::FramTracker>>::drop_slow
+0000000080230ea0 os::task::file_loader
+0000000080231566 os::memory::register_kernel_mmio
+00000000802316c0 os::driver::dtb::run_device_probes
+0000000080231820 os::driver::dtb::init
+00000000802337a8 os::syscall::sys_mmap::sys_mmap
+0000000080233aa2 os::arch::riscv64::memory::active_memset
+0000000080233bc4 os::arch::riscv64::driver::keyboard::enable_uart_rx_interrupt
+0000000080233dbc os::arch::riscv64::driver::keyboard::keyboard_interrupt_handler
+00000000802346a0 <alloc::collections::btree::map::BTreeMap<alloc::string::String, os::driver::dtb::node::Property> as core::ops::drop::Drop>::drop
+000000008023488a <alloc::collections::btree::map::BTreeMap<alloc::string::String, u32> as core::ops::drop::Drop>::drop
+0000000080234a2a <alloc::collections::btree::map::BTreeMap<rsext4::bmalloc::AbsoluteBN, rsext4::cache::data_block::CachedBlock> as core::ops::drop::Drop>::drop
+0000000080234a2a <alloc::collections::btree::map::BTreeMap<rsext4::cache::bitmap::CacheKey, rsext4::cache::bitmap::CachedBitmap> as core::ops::drop::Drop>::drop
+0000000080234bd2 <alloc::collections::btree::map::BTreeMap<rsext4::bmalloc::InodeNumber, rsext4::cache::inode_table::CachedInode> as core::ops::drop::Drop>::drop
+0000000080234d78 <alloc::collections::btree::map::BTreeMap<os::fs::vfs::root::define::MountPath, alloc::sync::Arc<spin::mutex::Mutex<dyn os::fs::vfs::vfs::VfsFs>>> as core::ops::drop::Drop>::drop
+0000000080234f42 <alloc::collections::btree::map::BTreeMap<os::arch::riscv64::memory::address::VirNumber, os::memory::memset::MmapEntryInfo> as core::ops::drop::Drop>::drop
+0000000080234f90 <alloc::collections::btree::map::BTreeMap<u32, rsext4::bmalloc::AbsoluteBN> as core::ops::drop::Drop>::drop
+00000000802350f4 <alloc::collections::btree::map::BTreeMap<u32, os::fs::fs_backend::ramfs::ramfs::Node> as core::ops::drop::Drop>::drop
+00000000802352dc <os::fs::vfs::vfserror::VfsFsError as core::fmt::Display>::fmt
+0000000080235430 <os::fs::vfs::vfserror::VfsFsError as core::fmt::Debug>::fmt
+0000000080235468 <&os::task::_::InternalBitFlags as core::fmt::Debug>::fmt
+00000000802355da <alloc::collections::btree::map::IntoIter<os::arch::riscv64::memory::address::VirNumber, alloc::sync::Arc<os::memory::frame_allocator::FramTracker>> as core::iter::traits::iterator::Iterator>::next
+000000008023578a <alloc::collections::btree::map::IntoIter<os::arch::riscv64::memory::address::VirNumber, os::memory::memset::MmapEntryInfo> as core::iter::traits::iterator::Iterator>::next
+0000000080235982 <alloc::collections::btree::map::IntoIter<u32, rsext4::bmalloc::AbsoluteBN> as core::iter::traits::iterator::Iterator>::next
+0000000080235b4c <alloc::collections::btree::map::Values<rsext4::bmalloc::AbsoluteBN, rsext4::cache::data_block::CachedBlock> as core::iter::traits::iterator::Iterator>::next
+0000000080235c0c <alloc::collections::btree::map::Values<rsext4::bmalloc::InodeNumber, rsext4::cache::inode_table::CachedInode> as core::iter::traits::iterator::Iterator>::next
+0000000080235ce4 <alloc::sync::Weak<os::memory::frame_allocator::FramTracker> as core::ops::drop::Drop>::drop
+0000000080235d28 <os::driver::dtb::fdt::FdtError as core::fmt::Debug>::fmt
+0000000080235d66 <os::driver::dtb::devices::BusType as core::fmt::Debug>::fmt
+0000000080235e4c <alloc::collections::btree::map::Iter<rsext4::cache::bitmap::CacheKey, rsext4::cache::bitmap::CachedBitmap> as core::iter::traits::iterator::Iterator>::next
+0000000080235f24 <alloc::string::String as core::fmt::Display>::fmt
+0000000080235f46 <alloc::collections::btree::map::IntoIter<os::arch::riscv64::memory::address::VirNumber, alloc::sync::Arc<os::memory::frame_allocator::FramTracker>> as core::ops::drop::Drop>::drop
+000000008023612c <alloc::collections::btree::map::IntoIter<os::arch::riscv64::memory::address::VirNumber, os::memory::memset::MmapEntryInfo> as core::ops::drop::Drop>::drop
+000000008023635a <alloc::collections::btree::map::IntoIter<u32, rsext4::bmalloc::AbsoluteBN> as core::ops::drop::Drop>::drop
+0000000080236538 blue_main
+0000000080236816 core::slice::sort::shared::pivot::median3_rec::<alloc::string::String, <alloc::string::String as core::cmp::PartialOrd>::lt>
+00000000802369d2 core::slice::sort::shared::pivot::median3_rec::<rsext4::bmalloc::AbsoluteBN, <rsext4::bmalloc::AbsoluteBN as core::cmp::PartialOrd>::lt>
+0000000080236a88 core::slice::sort::shared::pivot::median3_rec::<rsext4::disknode::extent::Ext4Extent, <[rsext4::disknode::extent::Ext4Extent]>::sort_unstable_by_key<u32, <rsext4::extents_tree::root::ExtentTree>::remove_extend::leaf_step<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>::{closure#4}>::{closure#0}>
+0000000080236b44 core::slice::sort::shared::pivot::median3_rec::<rsext4::disknode::extent::Ext4ExtentIdx, <[rsext4::disknode::extent::Ext4ExtentIdx]>::sort_unstable_by_key<u32, <rsext4::extents_tree::root::ExtentTree>::remove_extend::step_recursive<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>::{closure#1}>::{closure#0}>
+0000000080236c00 core::slice::sort::shared::pivot::median3_rec::<os::fs::vfs::root::block_device::FilesystemProbeCandidate, <[os::fs::vfs::root::block_device::FilesystemProbeCandidate]>::sort_by_key<bool, <os::fs::vfs::root::define::RootFs>::mount_ext4_root::{closure#0}>::{closure#0}>
+0000000080236cce core::slice::sort::shared::pivot::median3_rec::<(rsext4::bmalloc::AbsoluteBN, alloc::vec::Vec<u8>), <[(rsext4::bmalloc::AbsoluteBN, alloc::vec::Vec<u8>)]>::sort_by_key<rsext4::bmalloc::AbsoluteBN, <rsext4::cache::data_block::DataBlockCache>::flush_all<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>::{closure#2}>::{closure#0}>
+0000000080236d78 core::slice::sort::shared::pivot::median3_rec::<(rsext4::bmalloc::AbsoluteBN, usize, alloc::vec::Vec<u8>), <[(rsext4::bmalloc::AbsoluteBN, usize, alloc::vec::Vec<u8>)]>::sort_by_key<(rsext4::bmalloc::AbsoluteBN, usize), <rsext4::cache::inode_table::InodeCache>::flush_all<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>::{closure#2}>::{closure#0}>
+0000000080236e60 core::slice::sort::shared::pivot::median3_rec::<(rsext4::cache::bitmap::CacheKey, rsext4::bmalloc::AbsoluteBN, alloc::vec::Vec<u8>), <[(rsext4::cache::bitmap::CacheKey, rsext4::bmalloc::AbsoluteBN, alloc::vec::Vec<u8>)]>::sort_by_key<rsext4::bmalloc::AbsoluteBN, <rsext4::cache::bitmap::BitmapCache>::flush_all<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>::{closure#2}>::{closure#0}>
+0000000080236f0e core::slice::sort::shared::pivot::median3_rec::<(u8, alloc::vec::Vec<u16>), <[(u8, alloc::vec::Vec<u16>)]>::sort_by_key<u8, os::fs::fs_backend::fat32::fat32::build_lfn_name::{closure#0}>::{closure#0}>
+0000000080236fba core::slice::sort::shared::pivot::median3_rec::<(u32, rsext4::bmalloc::AbsoluteBN), <[(u32, rsext4::bmalloc::AbsoluteBN)]>::sort_unstable_by_key<u32, rsext4::loopfile::resolve_inode_block_allextend<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>::{closure#0}>::{closure#0}>
+0000000080237072 core::slice::sort::shared::smallsort::sort4_stable::<alloc::string::String, <alloc::string::String as core::cmp::PartialOrd>::lt>
+00000000802372de core::slice::sort::shared::smallsort::sort8_stable::<rsext4::disknode::extent::Ext4Extent, <[rsext4::disknode::extent::Ext4Extent]>::sort_unstable_by_key<u32, <rsext4::extents_tree::root::ExtentTree>::remove_extend::leaf_step<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>::{closure#4}>::{closure#0}>
+00000000802376a0 core::slice::sort::shared::smallsort::sort8_stable::<rsext4::disknode::extent::Ext4ExtentIdx, <[rsext4::disknode::extent::Ext4ExtentIdx]>::sort_unstable_by_key<u32, <rsext4::extents_tree::root::ExtentTree>::remove_extend::step_recursive<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>::{closure#1}>::{closure#0}>
+0000000080237a62 core::slice::sort::shared::smallsort::sort8_stable::<(u32, rsext4::bmalloc::AbsoluteBN), <[(u32, rsext4::bmalloc::AbsoluteBN)]>::sort_unstable_by_key<u32, rsext4::loopfile::resolve_inode_block_allextend<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>::{closure#0}>::{closure#0}>
+0000000080237d4a core::slice::sort::shared::smallsort::small_sort_general::<rsext4::disknode::extent::Ext4Extent, <[rsext4::disknode::extent::Ext4Extent]>::sort_unstable_by_key<u32, <rsext4::extents_tree::root::ExtentTree>::remove_extend::leaf_step<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>::{closure#4}>::{closure#0}>
+000000008023827a core::slice::sort::shared::smallsort::small_sort_general::<rsext4::disknode::extent::Ext4ExtentIdx, <[rsext4::disknode::extent::Ext4ExtentIdx]>::sort_unstable_by_key<u32, <rsext4::extents_tree::root::ExtentTree>::remove_extend::step_recursive<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>::{closure#1}>::{closure#0}>
+00000000802387aa core::slice::sort::shared::smallsort::small_sort_general::<(u32, rsext4::bmalloc::AbsoluteBN), <[(u32, rsext4::bmalloc::AbsoluteBN)]>::sort_unstable_by_key<u32, rsext4::loopfile::resolve_inode_block_allextend<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>::{closure#0}>::{closure#0}>
+0000000080238be4 core::slice::sort::shared::smallsort::small_sort_network::<rsext4::bmalloc::AbsoluteBN, <rsext4::bmalloc::AbsoluteBN as core::cmp::PartialOrd>::lt>
+0000000080239532 core::slice::sort::shared::smallsort::insertion_sort_shift_left::<alloc::string::String, <alloc::string::String as core::cmp::PartialOrd>::lt>
+000000008023965e core::slice::sort::shared::smallsort::insertion_sort_shift_left::<rsext4::bmalloc::AbsoluteBN, <rsext4::bmalloc::AbsoluteBN as core::cmp::PartialOrd>::lt>
+00000000802396be core::slice::sort::shared::smallsort::insertion_sort_shift_left::<rsext4::disknode::extent::Ext4Extent, <[rsext4::disknode::extent::Ext4Extent]>::sort_unstable_by_key<u32, <rsext4::extents_tree::root::ExtentTree>::remove_extend::leaf_step<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>::{closure#4}>::{closure#0}>
+0000000080239756 core::slice::sort::shared::smallsort::insertion_sort_shift_left::<rsext4::disknode::extent::Ext4ExtentIdx, <[rsext4::disknode::extent::Ext4ExtentIdx]>::sort_unstable_by_key<u32, <rsext4::extents_tree::root::ExtentTree>::remove_extend::step_recursive<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>::{closure#1}>::{closure#0}>
+00000000802397ee core::slice::sort::shared::smallsort::insertion_sort_shift_left::<os::fs::vfs::root::block_device::FilesystemProbeCandidate, <[os::fs::vfs::root::block_device::FilesystemProbeCandidate]>::sort_by_key<bool, <os::fs::vfs::root::define::RootFs>::mount_ext4_root::{closure#0}>::{closure#0}>
+0000000080239958 core::slice::sort::shared::smallsort::insertion_sort_shift_left::<(rsext4::bmalloc::AbsoluteBN, alloc::vec::Vec<u8>), <[(rsext4::bmalloc::AbsoluteBN, alloc::vec::Vec<u8>)]>::sort_by_key<rsext4::bmalloc::AbsoluteBN, <rsext4::cache::data_block::DataBlockCache>::flush_all<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>::{closure#2}>::{closure#0}>
+0000000080239a04 core::slice::sort::shared::smallsort::insertion_sort_shift_left::<(rsext4::bmalloc::AbsoluteBN, usize, alloc::vec::Vec<u8>), <[(rsext4::bmalloc::AbsoluteBN, usize, alloc::vec::Vec<u8>)]>::sort_by_key<(rsext4::bmalloc::AbsoluteBN, usize), <rsext4::cache::inode_table::InodeCache>::flush_all<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>::{closure#2}>::{closure#0}>
+0000000080239b10 core::slice::sort::shared::smallsort::insertion_sort_shift_left::<(rsext4::cache::bitmap::CacheKey, rsext4::bmalloc::AbsoluteBN, alloc::vec::Vec<u8>), <[(rsext4::cache::bitmap::CacheKey, rsext4::bmalloc::AbsoluteBN, alloc::vec::Vec<u8>)]>::sort_by_key<rsext4::bmalloc::AbsoluteBN, <rsext4::cache::bitmap::BitmapCache>::flush_all<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>::{closure#2}>::{closure#0}>
+0000000080239be0 core::slice::sort::shared::smallsort::insertion_sort_shift_left::<(u8, alloc::vec::Vec<u16>), <[(u8, alloc::vec::Vec<u16>)]>::sort_by_key<u8, os::fs::fs_backend::fat32::fat32::build_lfn_name::{closure#0}>::{closure#0}>
+0000000080239dcc core::slice::sort::shared::smallsort::insertion_sort_shift_left::<(u32, rsext4::bmalloc::AbsoluteBN), <[(u32, rsext4::bmalloc::AbsoluteBN)]>::sort_unstable_by_key<u32, rsext4::loopfile::resolve_inode_block_allextend<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>::{closure#0}>::{closure#0}>
+0000000080239e40 core::slice::sort::stable::merge::merge::<(rsext4::bmalloc::AbsoluteBN, usize, alloc::vec::Vec<u8>), <[(rsext4::bmalloc::AbsoluteBN, usize, alloc::vec::Vec<u8>)]>::sort_by_key<(rsext4::bmalloc::AbsoluteBN, usize), <rsext4::cache::inode_table::InodeCache>::flush_all<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>::{closure#2}>::{closure#0}>
+0000000080239faa core::slice::sort::stable::quicksort::quicksort::<alloc::string::String, <alloc::string::String as core::cmp::PartialOrd>::lt>
+000000008023a90e core::slice::sort::stable::quicksort::quicksort::<os::fs::vfs::root::block_device::FilesystemProbeCandidate, <[os::fs::vfs::root::block_device::FilesystemProbeCandidate]>::sort_by_key<bool, <os::fs::vfs::root::define::RootFs>::mount_ext4_root::{closure#0}>::{closure#0}>
+000000008023b3d4 core::slice::sort::stable::quicksort::quicksort::<(rsext4::bmalloc::AbsoluteBN, alloc::vec::Vec<u8>), <[(rsext4::bmalloc::AbsoluteBN, alloc::vec::Vec<u8>)]>::sort_by_key<rsext4::bmalloc::AbsoluteBN, <rsext4::cache::data_block::DataBlockCache>::flush_all<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>::{closure#2}>::{closure#0}>
+000000008023bb94 core::slice::sort::stable::quicksort::quicksort::<(rsext4::bmalloc::AbsoluteBN, usize, alloc::vec::Vec<u8>), <[(rsext4::bmalloc::AbsoluteBN, usize, alloc::vec::Vec<u8>)]>::sort_by_key<(rsext4::bmalloc::AbsoluteBN, usize), <rsext4::cache::inode_table::InodeCache>::flush_all<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>::{closure#2}>::{closure#0}>
+000000008023c6bc core::slice::sort::stable::quicksort::quicksort::<(rsext4::cache::bitmap::CacheKey, rsext4::bmalloc::AbsoluteBN, alloc::vec::Vec<u8>), <[(rsext4::cache::bitmap::CacheKey, rsext4::bmalloc::AbsoluteBN, alloc::vec::Vec<u8>)]>::sort_by_key<rsext4::bmalloc::AbsoluteBN, <rsext4::cache::bitmap::BitmapCache>::flush_all<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>::{closure#2}>::{closure#0}>
+000000008023cff2 core::slice::sort::stable::quicksort::quicksort::<(u8, alloc::vec::Vec<u16>), <[(u8, alloc::vec::Vec<u16>)]>::sort_by_key<u8, os::fs::fs_backend::fat32::fat32::build_lfn_name::{closure#0}>::{closure#0}>
+000000008023da0a core::ptr::drop_in_place::<alloc::vec::Vec<u8>> (.llvm.3837184471882031698)
+000000008023da38 core::ptr::drop_in_place::<os::fs::fs_backend::ext4_backend::ext4::Ext4Fs>
+000000008023db46 core::ptr::drop_in_place::<os::fs::fs_backend::fat32::fat32::Fat32Fs>
+000000008023db76 core::ptr::drop_in_place::<os::fs::component::pipe::pipe::PipeHandle>
+000000008023dba6 alloc::boxed::box_new_uninit
+000000008023dbe6 os::syscall::syscall::sys_execve
+000000008023e51c os::syscall::syscall::sys_getcwd
+000000008023e726 os::syscall::syscall::sys_getpid
+000000008023e8e8 os::syscall::syscall::sys_munmap
+000000008023eb70 os::syscall::syscall::sys_unlink
+000000008023eda2 os::syscall::syscall::sys_writev
+000000008023f076 os::syscall::syscall::sys_getppid
+000000008023f37e os::syscall::syscall::sys_mkdirat
+000000008023f5b0 os::syscall::syscall::sys_umount2
+000000008023fbb6 os::syscall::syscall::sys_nanosleep
+000000008023fd72 os::syscall::syscall::sys_getdents64
+0000000080240212 os::syscall::syscall::sys_gettimeofday
+0000000080240396 os::syscall::syscall::read_c_string_from_user_with_satp (.llvm.3837184471882031698)
+0000000080240692 os::syscall::syscall::sys_brk
+0000000080240ac6 os::syscall::syscall::sys_dup
+0000000080240da6 os::syscall::syscall::sys_dup2
+000000008024111a os::syscall::syscall::sys_exit
+0000000080241698 os::syscall::syscall::sys_open
+0000000080241a82 os::syscall::syscall::sys_pipe
+0000000080241cc6 os::syscall::syscall::sys_read
+00000000802420ac os::syscall::syscall::sys_stat
+0000000080242590 os::syscall::syscall::sys_chdir
+000000008024285a os::syscall::syscall::sys_clone
+0000000080243b7a os::syscall::syscall::sys_fstat
+000000008024405a os::syscall::syscall::sys_lseek
+00000000802442be os::syscall::syscall::sys_mount
+00000000802457b6 os::syscall::syscall::sys_times
+000000008024590a os::syscall::syscall::sys_uname
+0000000080245c0c os::syscall::syscall::sys_wait4
+000000008024653a os::syscall::syscall::sys_write
+000000008024691e <os::fs::fs_backend::ext4_backend::ext4::Ext4Fs as core::any::Any>::type_id
+0000000080246942 <os::fs::fs_backend::fat32::fat32::Fat32Fs as core::any::Any>::type_id
+0000000080246966 <os::fs::component::pipe::pipe::PipeHandle as core::any::Any>::type_id
+000000008024698a <os::fs::vfs::vfserror::VfsFsError as core::fmt::Debug>::fmt
+00000000802469c2 <os::fs::vfs::api::PartitionFsHint as core::fmt::Debug>::fmt
+00000000802469fa <os::fs::fs_backend::ext4_backend::ext4::Ext4Fs as os::fs::vfs::vfs::VfsFs>::as_any_mut
+0000000080246a12 <os::fs::fs_backend::ext4_backend::ext4::Ext4Fs as os::fs::vfs::vfs::VfsFs>::as_any
+0000000080246a2a <os::fs::fs_backend::fat32::fat32::Fat32Fs as os::fs::vfs::vfs::VfsFs>::as_any_mut
+0000000080246a42 <os::fs::fs_backend::fat32::fat32::Fat32Fs as os::fs::vfs::vfs::VfsFs>::mount
+0000000080246a7c <os::fs::fs_backend::fat32::fat32::Fat32Fs as os::fs::vfs::vfs::VfsFs>::as_any
+0000000080246a94 <os::fs::fs_backend::fat32::fat32::Fat32Fs as os::fs::vfs::vfs::VfsFs>::umount
+0000000080246aba <alloc::string::String as core::fmt::Display>::fmt (.llvm.3837184471882031698)
+0000000080246adc <os::fs::fs_backend::fat32::fat32::Fat32Fs as os::fs::vfs::vfs::VfsFs>::mv
+0000000080246aee <os::fs::fs_backend::fat32::fat32::Fat32Fs as os::fs::vfs::vfs::VfsFs>::truncate
+0000000080246b00 <os::fs::component::pipe::pipe::PipeHandle as os::fs::vfs::vfs::File>::getdents64
+0000000080246b1c <os::fs::component::pipe::pipe::PipeHandle as os::fs::vfs::vfs::File>::stat
+0000000080246b36 <os::fs::component::pipe::pipe::PipeHandle as os::fs::vfs::vfs::File>::flush
+0000000080246b48 <os::fs::component::pipe::pipe::PipeHandle as os::fs::vfs::vfs::File>::lseek
+0000000080246b62 <os::fs::component::pipe::pipe::PipeHandle as os::fs::vfs::vfs::File>::read_at
+0000000080246b7c <os::fs::component::pipe::pipe::PipeHandle as os::fs::vfs::vfs::File>::write_at
+0000000080246b96 <str>::trim_end_matches::<<char>::is_whitespace>
+0000000080246cae <spin::once::Once<os::sync::up::UPSafeCell<alloc::vec::Vec<alloc::sync::Arc<spin::mutex::Mutex<dyn os::fs::vfs::vblock::BlockDevTrait>>>>>>::try_call_once_slow::<<spin::once::Once<os::sync::up::UPSafeCell<alloc::vec::Vec<alloc::sync::Arc<spin::mutex::Mutex<dyn os::fs::vfs::vblock::BlockDevTrait>>>>>>::call_once<<os::fs::vfs::GLOBAL_BLOCKS as core::ops::deref::Deref>::deref::__static_ref_initialize>::{closure#0}, core::convert::Infallible> (.llvm.13489511688911917494)
+0000000080246cae <spin::once::Once<os::sync::up::UPSafeCell<alloc::vec::Vec<os::memory::PreFlectMemory>>>>::try_call_once_slow::<<spin::once::Once<os::sync::up::UPSafeCell<alloc::vec::Vec<os::memory::PreFlectMemory>>>>::call_once<<os::memory::KERNEL_MEMORY_SPACE_LIST as core::ops::deref::Deref>::deref::__static_ref_initialize>::{closure#0}, core::convert::Infallible> (.llvm.13489511688911917494)
+0000000080246cae <spin::once::Once<os::sync::up::UPSafeCell<alloc::vec::Vec<os::arch::riscv64::driver::virtio_blk::block::VirtioMmioDevice>>>>::try_call_once_slow::<<spin::once::Once<os::sync::up::UPSafeCell<alloc::vec::Vec<os::arch::riscv64::driver::virtio_blk::block::VirtioMmioDevice>>>>::call_once<<os::arch::riscv64::driver::virtio_blk::block::VIRTIO_MMIO_DEVICES as core::ops::deref::Deref>::deref::__static_ref_initialize>::{closure#0}, core::convert::Infallible> (.llvm.13489511688911917494)
+0000000080246cae <spin::once::Once<os::sync::up::UPSafeCell<alloc::vec::Vec<(os::memory::memset::VirNumRange, core::option::Option<usize>)>>>>::try_call_once_slow::<<spin::once::Once<os::sync::up::UPSafeCell<alloc::vec::Vec<(os::memory::memset::VirNumRange, core::option::Option<usize>)>>>>::call_once<<os::trap::PENDING_KSTACK_FREE as core::ops::deref::Deref>::deref::__static_ref_initialize>::{closure#0}, core::convert::Infallible> (.llvm.13489511688911917494)
+0000000080246cae <spin::once::Once<os::sync::up::UPSafeCell<alloc::vec::Vec<(usize, alloc::vec::Vec<os::memory::frame_allocator::FramTracker>)>>>>::try_call_once_slow::<<spin::once::Once<os::sync::up::UPSafeCell<alloc::vec::Vec<(usize, alloc::vec::Vec<os::memory::frame_allocator::FramTracker>)>>>>::call_once<<os::arch::riscv64::driver::virtio_blk::block::QUEUE_FRAMES as core::ops::deref::Deref>::deref::__static_ref_initialize>::{closure#0}, core::convert::Infallible> (.llvm.13489511688911917494)
+0000000080246d76 <spin::once::Once<os::sync::up::UPSafeCell<core::option::Option<os::driver::dtb::node::DeviceTree>>>>::try_call_once_slow::<<spin::once::Once<os::sync::up::UPSafeCell<core::option::Option<os::driver::dtb::node::DeviceTree>>>>::call_once<<os::driver::dtb::PARSED_DEVICE_TREE as core::ops::deref::Deref>::deref::__static_ref_initialize>::{closure#0}, core::convert::Infallible> (.llvm.13489511688911917494)
+0000000080246e38 <spin::once::Once<os::sync::up::UPSafeCell<core::option::Option<os::fs::vfs::root::define::RootFs>>>>::try_call_once_slow::<<spin::once::Once<os::sync::up::UPSafeCell<core::option::Option<os::fs::vfs::root::define::RootFs>>>>::call_once<<os::fs::vfs::root::define::ROOTFS as core::ops::deref::Deref>::deref::__static_ref_initialize>::{closure#0}, core::convert::Infallible> (.llvm.13489511688911917494)
+0000000080246f12 <spin::once::Once<os::sync::up::UPSafeCell<alloc::collections::vec_deque::VecDeque<u8>>>>::try_call_once_slow::<<spin::once::Once<os::sync::up::UPSafeCell<alloc::collections::vec_deque::VecDeque<u8>>>>::call_once<<os::arch::riscv64::driver::keyboard::INPUT_BUF as core::ops::deref::Deref>::deref::__static_ref_initialize>::{closure#0}, core::convert::Infallible> (.llvm.13489511688911917494)
+0000000080247020 <spin::once::Once<os::sync::up::UPSafeCell<os::task::task::ProcessIdAlloctor>>>::try_call_once_slow::<<spin::once::Once<os::sync::up::UPSafeCell<os::task::task::ProcessIdAlloctor>>>::call_once<<os::task::task::ProcessId_ALLOCTOR as core::ops::deref::Deref>::deref::__static_ref_initialize>::{closure#0}, core::convert::Infallible> (.llvm.13489511688911917494)
+00000000802470f2 <spin::once::Once<os::sync::up::UPSafeCell<os::memory::memorymodel::MachineMemoryInfo>>>::try_call_once_slow::<<spin::once::Once<os::sync::up::UPSafeCell<os::memory::memorymodel::MachineMemoryInfo>>>::call_once<<os::memory::memorymodel::KERNEL_MAIN_MEMORY as core::ops::deref::Deref>::deref::__static_ref_initialize>::{closure#0}, core::convert::Infallible> (.llvm.13489511688911917494)
+00000000802471be <spin::once::Once<os::sync::up::UPSafeCell<os::memory::frame_allocator::FrameAlloctor>>>::try_call_once_slow::<<spin::once::Once<os::sync::up::UPSafeCell<os::memory::frame_allocator::FrameAlloctor>>>::call_once<<os::memory::frame_allocator::FRAME_ALLOCATOR as core::ops::deref::Deref>::deref::__static_ref_initialize>::{closure#0}, core::convert::Infallible> (.llvm.13489511688911917494)
+000000008024729c <spin::once::Once<os::sync::up::UPSafeCell<os::memory::memset::KernelStackAllocator>>>::try_call_once_slow::<<spin::once::Once<os::sync::up::UPSafeCell<os::memory::memset::KernelStackAllocator>>>::call_once<<os::memory::memset::KERNEL_STACK_ALLOCATOR as core::ops::deref::Deref>::deref::__static_ref_initialize>::{closure#0}, core::convert::Infallible> (.llvm.13489511688911917494)
+0000000080247368 <spin::once::Once<os::sync::up::UPSafeCell<os::memory::memset::MapSet>>>::try_call_once_slow::<<spin::once::Once<os::sync::up::UPSafeCell<os::memory::memset::MapSet>>>::call_once<<os::config::KERNEL_SPACE as core::ops::deref::Deref>::deref::__static_ref_initialize>::{closure#0}, core::convert::Infallible> (.llvm.13489511688911917494)
+000000008024744e <spin::once::Once<os::task::task::TaskManager>>::try_call_once_slow::<<spin::once::Once<os::task::task::TaskManager>>::call_once<<os::task::task::TASK_MANAER as core::ops::deref::Deref>::deref::__static_ref_initialize>::{closure#0}, core::convert::Infallible> (.llvm.13489511688911917494)
+0000000080248038 core::ptr::drop_in_place::<os::driver::dtb::node::DeviceNode>
+00000000802480d6 <u8 as alloc::vec::spec_from_elem::SpecFromElem>::from_elem::<alloc::alloc::Global>
+000000008024814a __rustc::__rust_alloc
+000000008024816e __rustc::__rust_dealloc
+0000000080248194 __rustc::__rust_realloc
+0000000080248202 __rustc::__rust_alloc_zeroed
+0000000080248240 <os::driver::dtb::parser::DtbParser>::parse
+0000000080248c56 <os::driver::dtb::parser::DtbParser>::read_u32
+0000000080248d0c os::memory::frame_allocator::alloc_frame
+0000000080248e6a os::memory::frame_allocator::alloc_contiguous_frames
+0000000080249088 os::memory::frame_allocator::init_frame_allocator_from_dtb
+00000000802494ae os::fs::vfs::api::vfs_unlink
+0000000080249674 os::fs::vfs::api::resolve_mount (.llvm.13489511688911917494)
+00000000802498ee os::fs::vfs::api::normalize_path
+0000000080249c6e os::fs::vfs::api::vfs_read_partition_type
+000000008024a044 os::fs::vfs::api::vfs_split_partition_device_path
+000000008024a1ae os::fs::vfs::api::vfs_open
+000000008024a40c os::fs::vfs::api::vfs_stat
+000000008024a594 os::fs::vfs::api::vfs_mkdir
+000000008024a75a os::arch::riscv64::sbi::shutdown
+000000008024a990 <os::fs::vfs::vfserror::VfsFsError as core::fmt::Debug>::fmt
+000000008024a9c8 <os::memory::frame_allocator::FramTracker as core::ops::drop::Drop>::drop
+000000008024ac56 <alloc::string::String as core::fmt::Display>::fmt
+000000008024ac78 <rsext4::hashtree::manager::HashTreeManager>::search_in_hash_tree::<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>
+000000008024af38 <rsext4::hashtree::manager::HashTreeManager>::fallback_to_linear_search::<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>
+000000008024b190 rsext4::loopfile::get_file_inode::<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>
+000000008024bd0a rsext4::loopfile::resolve_inode_block::<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>
+000000008024bf72 rsext4::loopfile::resolve_inode_block_allextend::<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>
+000000008024c26c core::ptr::drop_in_place::<rsext4::hashtree::types::HashTreeNode>
+000000008024c2ee core::ptr::drop_in_place::<os::fs::fs_backend::ramfs::ramfs::RamFile>
+000000008024c31e core::ptr::drop_in_place::<os::fs::fs_backend::ramfs::ramfs::NodeKind>
+000000008024c386 rsext4::dir::insert::insert_dir_entry::<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>
+000000008024c9a8 core::slice::sort::stable::driftsort_main::<alloc::string::String, <alloc::string::String as core::cmp::PartialOrd>::lt, alloc::vec::Vec<alloc::string::String>>
+000000008024cac6 core::slice::sort::stable::driftsort_main::<os::fs::vfs::root::block_device::FilesystemProbeCandidate, <[os::fs::vfs::root::block_device::FilesystemProbeCandidate]>::sort_by_key<bool, <os::fs::vfs::root::define::RootFs>::mount_ext4_root::{closure#0}>::{closure#0}, alloc::vec::Vec<os::fs::vfs::root::block_device::FilesystemProbeCandidate>>
+000000008024cbe4 core::slice::sort::stable::driftsort_main::<(rsext4::bmalloc::AbsoluteBN, alloc::vec::Vec<u8>), <[(rsext4::bmalloc::AbsoluteBN, alloc::vec::Vec<u8>)]>::sort_by_key<rsext4::bmalloc::AbsoluteBN, <rsext4::cache::data_block::DataBlockCache>::flush_all<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>::{closure#2}>::{closure#0}, alloc::vec::Vec<(rsext4::bmalloc::AbsoluteBN, alloc::vec::Vec<u8>)>>
+000000008024ccf6 core::slice::sort::stable::driftsort_main::<(rsext4::bmalloc::AbsoluteBN, usize, alloc::vec::Vec<u8>), <[(rsext4::bmalloc::AbsoluteBN, usize, alloc::vec::Vec<u8>)]>::sort_by_key<(rsext4::bmalloc::AbsoluteBN, usize), <rsext4::cache::inode_table::InodeCache>::flush_all<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>::{closure#2}>::{closure#0}, alloc::vec::Vec<(rsext4::bmalloc::AbsoluteBN, usize, alloc::vec::Vec<u8>)>>
+000000008024ce14 core::slice::sort::stable::driftsort_main::<(rsext4::cache::bitmap::CacheKey, rsext4::bmalloc::AbsoluteBN, alloc::vec::Vec<u8>), <[(rsext4::cache::bitmap::CacheKey, rsext4::bmalloc::AbsoluteBN, alloc::vec::Vec<u8>)]>::sort_by_key<rsext4::bmalloc::AbsoluteBN, <rsext4::cache::bitmap::BitmapCache>::flush_all<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>::{closure#2}>::{closure#0}, alloc::vec::Vec<(rsext4::cache::bitmap::CacheKey, rsext4::bmalloc::AbsoluteBN, alloc::vec::Vec<u8>)>>
+000000008024cf32 core::slice::sort::stable::driftsort_main::<(u8, alloc::vec::Vec<u16>), <[(u8, alloc::vec::Vec<u16>)]>::sort_by_key<u8, os::fs::fs_backend::fat32::fat32::build_lfn_name::{closure#0}>::{closure#0}, alloc::vec::Vec<(u8, alloc::vec::Vec<u16>)>>
+000000008024d044 rsext4::loopfile::resolve_inode_block_allextend::walk_node::<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>
+000000008024d232 <alloc::collections::vec_deque::iter::Iter<alloc::sync::Arc<os::sync::up::UPSafeCell<os::task::task::TaskControlBlock>>> as core::iter::traits::iterator::Iterator>::try_fold::<(), core::iter::traits::iterator::Iterator::any::check<&alloc::sync::Arc<os::sync::up::UPSafeCell<os::task::task::TaskControlBlock>>, os::syscall::syscall::sys_umount2::{closure#0}>::{closure#0}, core::ops::control_flow::ControlFlow<()>>
+000000008024d42a <alloc::collections::vec_deque::iter::Iter<alloc::sync::Arc<os::sync::up::UPSafeCell<os::task::task::TaskControlBlock>>> as core::iter::traits::iterator::Iterator>::try_fold::<(), core::iter::traits::iterator::Iterator::find::check<&alloc::sync::Arc<os::sync::up::UPSafeCell<os::task::task::TaskControlBlock>>, <os::task::task::TaskManager>::reparent_current_children_to_init::{closure#0}>::{closure#0}, core::ops::control_flow::ControlFlow<&alloc::sync::Arc<os::sync::up::UPSafeCell<os::task::task::TaskControlBlock>>>>
+000000008024d58e <alloc::collections::vec_deque::iter::Iter<alloc::sync::Arc<os::sync::up::UPSafeCell<os::task::task::TaskControlBlock>>> as core::iter::traits::iterator::Iterator>::try_fold::<(), core::iter::traits::iterator::Iterator::position::check<&alloc::sync::Arc<os::sync::up::UPSafeCell<os::task::task::TaskControlBlock>>, <os::task::task::TaskManager>::wake_task_from_blocking::{closure#0}>::{closure#0}, core::ops::control_flow::ControlFlow<usize>>
+000000008024d72c <os::driver::dtb::node::Property>::as_u32_list
+000000008024d8be <os::driver::dtb::node::Property>::as_reg
+000000008024dde0 <os::fs::fs_backend::ramfs::ramfs::RamFs>::create_node (.llvm.10160749552978864766)
+000000008024e13a <os::fs::fs_backend::ramfs::ramfs::RamFs>::lookup_path
+000000008024e364 <os::fs::fs_backend::ramfs::ramfs::RamFs>::split_parent (.llvm.10160749552978864766)
+000000008024e66c <os::fs::fs_backend::ramfs::ramfs::RamFs>::file_write_at
+000000008024e83a <os::fs::fs_backend::ramfs::ramfs::RamFs>::normalize_components
+000000008024e9da <os::fs::fs_backend::ramfs::ramfs::RamFs>::mkdev
+000000008024eaac <os::driver::dtb::node::DeviceTree>::find_compatible_recursive (.llvm.10160749552978864766)
+000000008024ec32 <os::driver::dtb::node::DeviceNode>::compatible
+000000008024eed8 <os::driver::dtb::node::DeviceNode>::get_string
+000000008024f046 <os::driver::dtb::node::DeviceNode>::new
+000000008024f268 os::logger::kernel_info_debug
+000000008024f886 os::logger::init
+000000008024f9c2 os::symbols::lookup
+000000008024fd22 <os::fs::fs_backend::ramfs::ramfs::RamFile as core::any::Any>::type_id
+000000008024fd46 <os::logger::SimpleLogger as log::Log>::log (.llvm.10160749552978864766)
+000000008024fea2 <os::logger::SimpleLogger as log::Log>::flush (.llvm.10160749552978864766)
+000000008024feb2 <os::logger::SimpleLogger as log::Log>::enabled (.llvm.10160749552978864766)
+000000008024fec4 <os::fs::fs_backend::ramfs::ramfs::RamFile as os::fs::vfs::vfs::File>::getdents64
+00000000802504b6 <os::fs::fs_backend::ramfs::ramfs::RamFile as os::fs::vfs::vfs::File>::read
+00000000802506d2 <os::fs::fs_backend::ramfs::ramfs::RamFile as os::fs::vfs::vfs::File>::stat
+0000000080250884 <os::fs::fs_backend::ramfs::ramfs::RamFile as os::fs::vfs::vfs::File>::flush
+0000000080250896 <os::fs::fs_backend::ramfs::ramfs::RamFile as os::fs::vfs::vfs::File>::lseek
+0000000080250ace <os::fs::fs_backend::ramfs::ramfs::RamFile as os::fs::vfs::vfs::File>::write
+0000000080250db8 <os::fs::fs_backend::ramfs::ramfs::RamFile as os::fs::vfs::vfs::File>::read_at
+0000000080250f62 <os::fs::fs_backend::ramfs::ramfs::RamFile as os::fs::vfs::vfs::File>::write_at
+0000000080251062 <os::fs::fs_backend::ramfs::ramfs::RamFs as os::fs::vfs::vfs::VfsFs>::name
+00000000802510da <os::fs::fs_backend::ramfs::ramfs::RamFs as os::fs::vfs::vfs::VfsFs>::open
+000000008025138c <os::fs::fs_backend::ramfs::ramfs::RamFs as os::fs::vfs::vfs::VfsFs>::stat
+00000000802514b6 <os::fs::fs_backend::ramfs::ramfs::RamFs as os::fs::vfs::vfs::VfsFs>::mkdir
+0000000080251568 <os::fs::fs_backend::ramfs::ramfs::RamFs as os::fs::vfs::vfs::VfsFs>::mkfile
+0000000080251620 <os::fs::fs_backend::ramfs::ramfs::RamFs as os::fs::vfs::vfs::VfsFs>::unlink
+0000000080251824 <os::fs::fs_backend::ramfs::ramfs::RamFs as os::fs::vfs::vfs::VfsFs>::truncate
+000000008025198c <core::str::pattern::CharSearcher as core::str::pattern::Searcher>::next_match
+0000000080251b0e <os::fs::fs_backend::ext4_backend::Ext4BlockDevice as rsext4::blockdev::traits::BlockDevice>::write
+0000000080251bd4 <rsext4::extents_tree::root::ExtentTree>::write_node_to_block::<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>
+0000000080251d2e <rsext4::extents_tree::root::ExtentTree>::find_in_node::<os::fs::fs_backend::ext4_backend::Ext4BlockDevice> (.llvm.2332015513347242300)
+0000000080251f6a <rsext4::extents_tree::root::ExtentTree>::insert_extent::<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>
+00000000802526be <rsext4::extents_tree::root::ExtentTree>::insert_recursive::<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>
+0000000080253a8e <rsext4::extents_tree::root::ExtentTree>::remove_extend::<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>
+0000000080253fd4 alloc::str::join_generic_copy::<str, u8, alloc::string::String>
+0000000080254444 alloc::str::join_generic_copy::<str, u8, &str>
+0000000080254882 core::ptr::drop_in_place::<rsext4::extents_tree::node::ExtentNode>
+00000000802548b8 core::ptr::drop_in_place::<os::arch::riscv64::driver::virtio_blk::block::VirtBlk>
+000000008025490a rsext4::ext4::mount::mount::<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>
+0000000080254a40 <rsext4::extents_tree::root::ExtentTree>::remove_extend::step_recursive::<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>
+00000000802553ae <rsext4::extents_tree::root::ExtentTree>::remove_extend::pre_step::<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>
+0000000080255766 <riscv::register::scause::Scause>::cause
+00000000802557cc <os::arch::riscv64::driver::virtio_blk::block::VirtBlk>::new_from_base
+000000008025592a <os::arch::riscv64::memory::address::PageTableEntry>::is_valid
+0000000080255942 <os::arch::riscv64::memory::address::PageTable>::find_pte_vpn
+00000000802559ac <os::arch::riscv64::memory::address::PageTable>::get_mut_byte
+0000000080255a20 <os::arch::riscv64::memory::address::PageTable>::translate_byvpn
+0000000080255a8a <os::arch::riscv64::memory::address::PageTable>::get_mut_slice_from_satp
+0000000080255bf0 <os::arch::riscv64::memory::address::PageTable>::read_bytes_from_userspace
+0000000080255d10 <os::arch::riscv64::memory::address::PageTable>::map
+0000000080255e5e <os::arch::riscv64::memory::address::PageTable>::unmap
+0000000080255f76 <os::arch::riscv64::memory::address::PageTable>::is_maped
+0000000080255fe8 <os::arch::riscv64::memory::address::PageTable>::translate
+0000000080256058 <alloc::vec::Vec<rsext4::disknode::extent::Ext4Extent>>::insert_mut
+00000000802560f4 alloc::boxed::box_new_uninit
+0000000080256132 os::trap::pagefaultHandler::PageFaultHandler
+0000000080256daa os::driver::pcie::pci_probe_callback
+0000000080258386 os::arch::riscv64::driver::virtio_blk::block::virtio_mmio_probe
+000000008025879c <os::arch::riscv64::driver::virtio_blk::block::VirtBlk as os::fs::vfs::vblock::BlockDevTrait>::read_block
+0000000080258868 <os::arch::riscv64::driver::virtio_blk::block::VirtBlk as os::fs::vfs::vblock::BlockDevTrait>::write_block
+0000000080258934 <os::arch::riscv64::driver::virtio_blk::block::VirtBlk as os::fs::vfs::vblock::BlockDevTrait>::capacity_in_sectors
+0000000080258946 <&os::arch::riscv64::memory::address::VirNumber as core::fmt::Debug>::fmt
+000000008025897e <&os::arch::riscv64::memory::address::_::InternalBitFlags as core::fmt::Debug>::fmt
+00000000802589dc <os::arch::riscv64::driver::virtio_blk::block::VirtioHal as virtio_drivers::hal::Hal>::dma_dealloc
+0000000080258b7e <os::arch::riscv64::driver::virtio_blk::block::VirtioHal as virtio_drivers::hal::Hal>::virt_to_phys
+0000000080258be6 <os::arch::riscv64::driver::virtio_blk::block::VirtioHal as virtio_drivers::hal::Hal>::dma_alloc
+0000000080258d5c <riscv::register::scause::Trap as core::fmt::Debug>::fmt
+0000000080258db2 <os::arch::riscv64::memory::address::PTEFlags as core::fmt::Debug>::fmt
+0000000080258de8 <core::option::Option<rsext4::bmalloc::AbsoluteBN> as core::fmt::Debug>::fmt
+0000000080258e36 kernel_mode_trap_handler
+0000000080258f1c <rsext4::cache::inode_table::InodeCache>::get_or_load::<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>
+00000000802592ce <rsext4::cache::inode_table::InodeCache>::get_or_load_mut::<os::fs::fs_backend::ext4_backend::Ext4BlockDevice> (.llvm.17460313394272982443)
+0000000080259620 <rsext4::cache::inode_table::InodeCache>::modify::<os::fs::fs_backend::ext4_backend::Ext4BlockDevice, <rsext4::ext4::fs::Ext4FileSystem>::modify_inode<os::fs::fs_backend::ext4_backend::Ext4BlockDevice, <rsext4::ext4::fs::Ext4FileSystem>::alloc_inode<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>::{closure#0}>::{closure#0}>
+00000000802596e6 <rsext4::cache::inode_table::InodeCache>::evict_lru::<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>
+00000000802599d2 <rsext4::cache::inode_table::InodeCache>::flush_all::<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>
+0000000080259cc6 core::ptr::drop_in_place::<os::fs::vfs::vblock::BLOCKDEVFILE>
+0000000080259cf6 core::ptr::drop_in_place::<os::fs::partition::gpt::GptPartitionName>
+0000000080259d2c core::ptr::drop_in_place::<os::fs::fs_backend::ext4_backend::ext4::Ext4Fs>
+0000000080259e46 core::ptr::drop_in_place::<os::fs::fs_backend::fat32::fat32::Fat32Fs>
+0000000080259e76 core::ptr::drop_in_place::<os::fs::fs_backend::ramfs::ramfs::RamFs>
+0000000080259e8e __rustc::rust_begin_unwind
+0000000080259f38 <os::fs::vfs::root::define::RootFs>::init_rootfs
+000000008025d27e <os::fs::vfs::root::define::RootFs>::normalize_abs_path
+000000008025d4dc <os::fs::vfs::root::define::RootFs>::resolve_mount_point
+000000008025d98c os::trap::enqueue_kstack_free
+000000008025daac os::trap::recycle_pending_kstacks
+000000008025e2aa os::console::kprint
+000000008025e2c0 os::syscall::syscall_handler
+000000008025ecca os::fs::vfs::global_block_devices
+000000008025ee2e os::fs::vfs::clear_global_block_devices
+000000008025ef4e os::fs::vfs::register_global_block_device
+000000008025f058 os::fs::partition::mbr::parsing_mbr_partition
+000000008025f588 os::arch::riscv64::panic::backtrace
+000000008025f6f6 os::driver::dtb::probe::run_probes
+000000008025fd52 os::fs::component::pipe::pipe::make_pipe
+00000000802600ca <os::fs::vfs::vblock::BLOCKDEVFILE as core::any::Any>::type_id
+00000000802600ee <os::fs::fs_backend::ext4_backend::ext4::Ext4Fs as core::any::Any>::type_id
+0000000080260112 <os::fs::fs_backend::fat32::fat32::Fat32Fs as core::any::Any>::type_id
+0000000080260136 <os::fs::fs_backend::ramfs::ramfs::RamFs as core::any::Any>::type_id
+000000008026015a <os::fs::vfs::root::define::MountPath as core::cmp::Ord>::cmp
+00000000802602cc <os::fs::vfs::vfserror::VfsFsError as core::fmt::Debug>::fmt
+0000000080260304 <os::fs::partition::gpt::Guid as core::fmt::Debug>::fmt
+000000008026033a <os::fs::fs_backend::ext4_backend::ext4::Ext4Fs as os::fs::vfs::vfs::VfsFs>::as_any_mut
+0000000080260352 <os::fs::fs_backend::ext4_backend::ext4::Ext4Fs as os::fs::vfs::vfs::VfsFs>::as_any
+000000008026036a <os::fs::fs_backend::ramfs::ramfs::RamFs as os::fs::vfs::vfs::VfsFs>::as_any_mut
+0000000080260382 <os::fs::fs_backend::ramfs::ramfs::RamFs as os::fs::vfs::vfs::VfsFs>::mount
+00000000802603aa <os::fs::fs_backend::ramfs::ramfs::RamFs as os::fs::vfs::vfs::VfsFs>::as_any
+00000000802603c2 <os::fs::fs_backend::ramfs::ramfs::RamFs as os::fs::vfs::vfs::VfsFs>::umount
+00000000802603e8 <os::fs::component::pipe::pipe::PipeHandle as os::fs::vfs::vfs::File>::read
+0000000080260762 <os::fs::component::pipe::pipe::PipeHandle as os::fs::vfs::vfs::File>::write
+0000000080260a16 <&[u8; 16] as core::fmt::Debug>::fmt
+0000000080260a2e <&rsext4::error::context::ErrorContext as core::fmt::Debug>::fmt
+0000000080260b8e <&os::fs::partition::mbr::MbrPartitionType as core::fmt::Debug>::fmt
+0000000080260c34 <&&str as core::fmt::Debug>::fmt
+0000000080260c56 <&(u32, u16, u64) as core::fmt::Debug>::fmt
+0000000080260ce2 <&(u32, u64) as core::fmt::Debug>::fmt
+0000000080260d4e <&str as core::fmt::Debug>::fmt
+0000000080260d70 <&u8 as core::fmt::Debug>::fmt
+0000000080260db4 <&usize as core::fmt::Debug>::fmt
+0000000080260df8 <&i32 as core::fmt::Debug>::fmt
+0000000080260e3c <&u32 as core::fmt::Debug>::fmt
+0000000080260e80 <&u16 as core::fmt::Debug>::fmt
+0000000080260ec4 <&u64 as core::fmt::Debug>::fmt
+0000000080260f08 <&str as core::fmt::Display>::fmt
+0000000080260f2a <&usize as core::fmt::Display>::fmt
+0000000080260f42 <&usize as core::fmt::LowerHex>::fmt
+0000000080260f5a <core::panic::panic_info::PanicMessage as core::fmt::Debug>::fmt
+0000000080260f7a <os::fs::partition::gpt::GptPartitionName as core::fmt::Debug>::fmt
+0000000080260fce <os::fs::fs_backend::fat32::fat32::Fat32Fs as os::fs::vfs::vfs::VfsFs>::as_any_mut
+0000000080260fe6 <os::fs::fs_backend::fat32::fat32::Fat32Fs as os::fs::vfs::vfs::VfsFs>::mount
+0000000080261020 <os::fs::fs_backend::fat32::fat32::Fat32Fs as os::fs::vfs::vfs::VfsFs>::as_any
+0000000080261038 <os::fs::fs_backend::fat32::fat32::Fat32Fs as os::fs::vfs::vfs::VfsFs>::umount
+000000008026105e <os::fs::partition::mbr::MbrPartitionMetadata as core::fmt::Debug>::fmt
+00000000802610fa <u8 as core::fmt::Debug>::fmt
+000000008026113c <u32 as core::fmt::Debug>::fmt
+000000008026117e <u64 as core::fmt::Debug>::fmt
+00000000802611c0 <usize as core::fmt::Debug>::fmt
+0000000080261202 <os::fs::vfs::vblock::BLOCKDEVFILE as os::fs::vfs::vfs::File>::getdents64
+000000008026121e <os::fs::vfs::vblock::BLOCKDEVFILE as os::fs::vfs::vfs::File>::stat
+000000008026124c <os::fs::partition::gpt::GptPartitionMetadata as core::fmt::Debug>::fmt
+00000000802612e8 <bool as core::fmt::Debug>::fmt
+00000000802612fe <alloc::string::String as core::fmt::Display>::fmt
+0000000080261320 <os::fs::vfs::vblock::BLOCKDEVFILE as os::fs::vfs::vfs::File>::flush
+0000000080261332 <os::fs::fs_backend::fat32::fat32::Fat32Fs as os::fs::vfs::vfs::VfsFs>::mv
+0000000080261344 <os::fs::fs_backend::fat32::fat32::Fat32Fs as os::fs::vfs::vfs::VfsFs>::truncate
+0000000080261356 <alloc::vec::Vec<alloc::sync::Arc<os::sync::up::UPSafeCell<os::task::task::TaskControlBlock>>>>::retain_mut::<<alloc::vec::Vec<alloc::sync::Arc<os::sync::up::UPSafeCell<os::task::task::TaskControlBlock>>>>::retain<<os::task::task::TaskManager>::reap_zombie_child::{closure#1}>::{closure#0}>
+0000000080261550 core::ptr::drop_in_place::<alloc::vec::Vec<os::driver::dtb::node::DeviceNode>> (.llvm.18050884056737569080)
+000000008026162e <os::driver::dtb::fdt::FdtHeader>::from_bytes
+000000008026195a <os::driver::dtb::parser::DtbParser>::read_u64 (.llvm.18050884056737569080)
+0000000080261ad6 <alloc::vec::Vec<u8>>::resize
+0000000080261b74 <alloc::collections::vec_deque::VecDeque<alloc::sync::Arc<os::sync::up::UPSafeCell<os::task::task::TaskControlBlock>>>>::wrap_copy (.llvm.18050884056737569080)
+0000000080261d46 <alloc::collections::vec_deque::VecDeque<os::task::signal::OsSignal>>::wrap_copy
+0000000080261f1e <alloc::collections::vec_deque::VecDeque<alloc::sync::Arc<os::sync::up::UPSafeCell<os::task::task::TaskControlBlock>>>>::grow (.llvm.18050884056737569080)
+0000000080261fa4 <alloc::collections::vec_deque::VecDeque<os::task::signal::OsSignal>>::insert_mut
+000000008026206c <alloc::collections::vec_deque::VecDeque<os::task::signal::OsSignal>>::grow (.llvm.18050884056737569080)
+00000000802620f2 <alloc::collections::vec_deque::VecDeque<u8>>::grow (.llvm.18050884056737569080)
+000000008026216a <alloc::vec::Vec<rsext4::disknode::extent::Ext4Extent>>::remove
+00000000802621d6 <alloc::vec::Vec<rsext4::disknode::extent::Ext4ExtentIdx>>::remove
+0000000080262242 os::arch::riscv64::driver::qemu_uart::uart_16550_probe
+00000000802623d0 <alloc::collections::vec_deque::VecDeque<os::task::signal::OsSignal> as core::clone::Clone>::clone
+0000000080262708 <alloc::vec::Vec<&str> as alloc::vec::spec_from_iter::SpecFromIter<&str, core::iter::adapters::filter::Filter<core::str::iter::Split<char>, rsext4::dir::mkdir::mkdir_internal<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>::{closure#0}>>>::from_iter
+0000000080262810 <alloc::vec::Vec<(rsext4::bmalloc::AbsoluteBN, alloc::vec::Vec<u8>)> as alloc::vec::spec_from_iter::SpecFromIter<(rsext4::bmalloc::AbsoluteBN, alloc::vec::Vec<u8>), core::iter::adapters::map::Map<core::iter::adapters::filter::Filter<alloc::collections::btree::map::Values<rsext4::bmalloc::AbsoluteBN, rsext4::cache::data_block::CachedBlock>, <rsext4::cache::data_block::DataBlockCache>::flush_all<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>::{closure#0}>, <rsext4::cache::data_block::DataBlockCache>::flush_all<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>::{closure#1}>>>::from_iter
+0000000080262b14 <alloc::vec::Vec<(rsext4::bmalloc::AbsoluteBN, usize, alloc::vec::Vec<u8>)> as alloc::vec::spec_from_iter::SpecFromIter<(rsext4::bmalloc::AbsoluteBN, usize, alloc::vec::Vec<u8>), core::iter::adapters::map::Map<core::iter::adapters::filter::Filter<alloc::collections::btree::map::Values<rsext4::bmalloc::InodeNumber, rsext4::cache::inode_table::CachedInode>, <rsext4::cache::inode_table::InodeCache>::flush_all<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>::{closure#0}>, <rsext4::cache::inode_table::InodeCache>::flush_all<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>::{closure#1}>>>::from_iter
+0000000080262e64 <alloc::vec::Vec<(rsext4::cache::bitmap::CacheKey, rsext4::bmalloc::AbsoluteBN, alloc::vec::Vec<u8>)> as alloc::vec::spec_from_iter::SpecFromIter<(rsext4::cache::bitmap::CacheKey, rsext4::bmalloc::AbsoluteBN, alloc::vec::Vec<u8>), core::iter::adapters::map::Map<core::iter::adapters::filter::Filter<alloc::collections::btree::map::Iter<rsext4::cache::bitmap::CacheKey, rsext4::cache::bitmap::CachedBitmap>, <rsext4::cache::bitmap::BitmapCache>::flush_all<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>::{closure#0}>, <rsext4::cache::bitmap::BitmapCache>::flush_all<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>::{closure#1}>>>::from_iter
+00000000802631b0 <alloc::vec::Vec<(u32, u16, u64)> as alloc::vec::spec_from_iter::SpecFromIter<(u32, u16, u64), core::iter::adapters::map::Map<core::iter::adapters::take::Take<core::slice::iter::Iter<rsext4::disknode::extent::Ext4Extent>>, <rsext4::extents_tree::root::ExtentTree>::insert_extent<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>::{closure#0}>>>::from_iter
+00000000802631b0 <alloc::vec::Vec<(u32, u16, u64)> as alloc::vec::spec_from_iter::SpecFromIter<(u32, u16, u64), core::iter::adapters::map::Map<core::iter::adapters::take::Take<core::slice::iter::Iter<rsext4::disknode::extent::Ext4Extent>>, <rsext4::extents_tree::root::ExtentTree>::insert_recursive<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>::{closure#5}>>>::from_iter
+0000000080263322 <alloc::vec::Vec<(u32, u64)> as alloc::vec::spec_from_iter::SpecFromIter<(u32, u64), core::iter::adapters::map::Map<core::iter::adapters::take::Take<core::slice::iter::Iter<rsext4::disknode::extent::Ext4ExtentIdx>>, <rsext4::extents_tree::root::ExtentTree>::insert_extent<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>::{closure#1}>>>::from_iter
+0000000080263486 <alloc::vec::Vec<os::driver::dtb::fdt::MemReservation> as alloc::vec::spec_from_iter_nested::SpecFromIterNested<os::driver::dtb::fdt::MemReservation, core::iter::sources::from_fn::FromFn<<os::driver::dtb::parser::DtbParser>::mem_reservations::{closure#0}>>>::from_iter
+00000000802635ee <alloc::vec::Vec<&str> as alloc::vec::spec_from_iter_nested::SpecFromIterNested<&str, core::iter::adapters::filter::Filter<core::str::iter::Split<char>, <os::fs::fs_backend::fat32::fat32::Fat32Fs>::open_path_with_loc::{closure#0}>>>::from_iter
+00000000802635ee <alloc::vec::Vec<&str> as alloc::vec::spec_from_iter_nested::SpecFromIterNested<&str, core::iter::adapters::filter::Filter<core::str::iter::Split<char>, <os::fs::fs_backend::fat32::fat32::Fat32Fs>::open_path::{closure#0}>>>::from_iter
+00000000802636f6 <alloc::vec::Vec<u16> as alloc::vec::spec_from_iter_nested::SpecFromIterNested<u16, core::str::iter::EncodeUtf16>>::from_iter
+00000000802639b0 <alloc::collections::vec_deque::VecDeque<os::task::signal::OsSignal> as alloc::collections::vec_deque::spec_from_iter::SpecFromIter<os::task::signal::OsSignal, alloc::collections::vec_deque::drain::Drain<os::task::signal::OsSignal>>>::spec_from_iter
+0000000080263bc6 <&core::option::Option<rsext4::error::context::ErrorContext> as core::fmt::Debug>::fmt
+0000000080263c16 <core::str::iter::Split<char> as core::iter::traits::iterator::Iterator>::next (.llvm.18050884056737569080)
+0000000080263db4 <alloc::vec::Vec<rsext4::bmalloc::AbsoluteBN> as alloc::vec::spec_from_iter_nested::SpecFromIterNested<rsext4::bmalloc::AbsoluteBN, alloc::collections::btree::map::IntoValues<u32, rsext4::bmalloc::AbsoluteBN>>>::from_iter
+0000000080263ebc <alloc::vec::Vec<rsext4::disknode::extent::Ext4Extent> as core::clone::Clone>::clone
+0000000080263ebc <alloc::vec::Vec<rsext4::disknode::extent::Ext4ExtentIdx> as core::clone::Clone>::clone
+0000000080263f60 <alloc::vec::Vec<os::memory::memset::MapArea> as core::clone::Clone>::clone
+0000000080264102 <alloc::vec::Vec<u8> as core::clone::Clone>::clone
+0000000080264186 <alloc::vec::into_iter::IntoIter<alloc::sync::Arc<spin::mutex::Mutex<dyn os::fs::vfs::vblock::BlockDevTrait>>> as core::ops::drop::Drop>::drop
+0000000080264212 <alloc::vec::into_iter::IntoIter<os::memory::memset::MapArea> as core::ops::drop::Drop>::drop
+0000000080264300 <alloc::vec::into_iter::IntoIter<os::fs::partition::gpt::GptPartitionEntry> as core::ops::drop::Drop>::drop
+00000000802643b0 <alloc::vec::Vec<alloc::sync::Arc<spin::mutex::Mutex<dyn os::fs::vfs::vblock::BlockDevTrait>>> as core::ops::drop::Drop>::drop
+0000000080264402 <alloc::vec::Vec<alloc::string::String> as core::ops::drop::Drop>::drop
+0000000080264458 <alloc::vec::Vec<os::fs::partition::gpt::GptPartitionEntry> as core::ops::drop::Drop>::drop
+00000000802644bc <alloc::vec::Vec<os::driver::dtb::node::DeviceNode> as core::ops::drop::Drop>::drop
+0000000080264560 <alloc::vec::Vec<os::driver::dtb::devices::MmioDevice> as core::ops::drop::Drop>::drop
+000000008026466e <alloc::vec::Vec<os::driver::dtb::devices::GpioController> as core::ops::drop::Drop>::drop
+000000008026474a <alloc::vec::Vec<os::driver::dtb::devices::InterruptController> as core::ops::drop::Drop>::drop
+0000000080264826 <alloc::vec::Vec<os::driver::dtb::devices::CpuInfo> as core::ops::drop::Drop>::drop
+0000000080264922 <alloc::vec::Vec<os::driver::dtb::devices::BusBridge> as core::ops::drop::Drop>::drop
+0000000080264a24 <alloc::vec::Vec<rsext4::file::delete::delete_dir::DirFrame> as core::ops::drop::Drop>::drop
+0000000080264ab6 <alloc::vec::Vec<(u32, u16, u64)> as core::fmt::Debug>::fmt
+0000000080264b20 <alloc::vec::Vec<(u32, u64)> as core::fmt::Debug>::fmt
+0000000080264b8a <alloc::vec::Vec<u8> as core::fmt::Debug>::fmt
+0000000080264bf2 core::ptr::drop_in_place::<os::fs::fs_backend::fat32::fat32::Fat32File>
+0000000080264c24 <<alloc::collections::vec_deque::drain::Drain<_, _> as core::ops::drop::Drop>::drop::DropGuard<_, _> as core::ops::drop::Drop>::drop::join_head_and_tail_wrapping::<os::task::signal::OsSignal, alloc::alloc::Global> (.llvm.1289548612331259254)
+0000000080264c84 <u8 as alloc::vec::spec_from_elem::SpecFromElem>::from_elem::<alloc::alloc::Global>
+0000000080264cee <os::fs::fs_backend::fat32::fat32::Fat32SfnEntry>::from_raw
+0000000080264d6e <os::fs::fs_backend::fat32::fat32::Fat32Fs>::new
+0000000080264f78 <os::fs::fs_backend::fat32::fat32::Fat32Fs>::read_cluster
+0000000080265046 <os::fs::fs_backend::fat32::fat32::Fat32Fs>::walk_dir_find
+0000000080265caa <os::fs::fs_backend::fat32::fat32::Fat32Fs>::write_cluster
+0000000080265d78 <os::fs::fs_backend::fat32::fat32::Fat32Fs>::read_fat_entry
+0000000080265ea8 <os::fs::fs_backend::fat32::fat32::Fat32Fs>::write_fat_entry
+00000000802660b8 <os::fs::fs_backend::fat32::fat32::Fat32Fs>::write_sfn_dirent
+0000000080266314 <os::fs::fs_backend::fat32::fat32::Fat32Fs>::alloc_free_cluster
+00000000802664b8 <os::fs::fs_backend::fat32::fat32::Fat32Fs>::ensure_nth_cluster
+00000000802665f2 <os::fs::fs_backend::fat32::fat32::Fat32Fs>::free_cluster_chain
+000000008026667c <os::fs::fs_backend::fat32::fat32::Fat32Fs>::open_path_with_loc
+0000000080266972 <os::fs::fs_backend::fat32::fat32::Fat32Fs>::write_name_dirents
+0000000080267c0e <os::fs::fs_backend::fat32::fat32::Fat32Fs>::open_path
+0000000080267d5e <alloc::collections::btree::map::entry::VacantEntry<alloc::string::String, os::driver::dtb::node::Property>>::insert
+0000000080267e68 <alloc::collections::btree::map::entry::VacantEntry<alloc::string::String, u32>>::insert
+0000000080267f46 <alloc::collections::btree::map::entry::VacantEntry<rsext4::bmalloc::AbsoluteBN, rsext4::cache::data_block::CachedBlock>>::insert
+000000008026802a <alloc::collections::btree::map::entry::VacantEntry<rsext4::bmalloc::InodeNumber, rsext4::cache::inode_table::CachedInode>>::insert
+0000000080268108 <alloc::collections::btree::map::entry::VacantEntry<rsext4::cache::bitmap::CacheKey, rsext4::cache::bitmap::CachedBitmap>>::insert
+00000000802681fc <alloc::collections::btree::map::entry::VacantEntry<os::fs::vfs::root::define::MountPath, alloc::sync::Arc<spin::mutex::Mutex<dyn os::fs::vfs::vfs::VfsFs>>>>::insert
+00000000802682e0 <alloc::collections::btree::map::entry::VacantEntry<os::arch::riscv64::memory::address::VirNumber, alloc::sync::Arc<os::memory::frame_allocator::FramTracker>>>::insert
+000000008026839e <alloc::collections::btree::map::entry::VacantEntry<os::arch::riscv64::memory::address::VirNumber, os::memory::memset::MmapEntryInfo>>::insert
+0000000080268482 <alloc::collections::btree::map::entry::VacantEntry<u32, rsext4::bmalloc::AbsoluteBN>>::insert
+000000008026853e <alloc::collections::btree::map::entry::VacantEntry<u32, os::fs::fs_backend::ramfs::ramfs::Node>>::insert
+000000008026861c <alloc::collections::btree::map::entry::OccupiedEntry<os::arch::riscv64::memory::address::VirNumber, alloc::sync::Arc<os::memory::frame_allocator::FramTracker>>>::remove_kv
+00000000802686bc <os::fs::fs_backend::fat32::fat32::Fat32LfnEntry>::from_raw
+000000008026881e <core::str::iter::SplitInternal<char>>::next_back
+000000008026899a os::fs::fs_backend::fat32::fat32::lfn_checksum
+0000000080268a4c os::fs::fs_backend::fat32::fat32::split_parent
+0000000080268c2e os::fs::fs_backend::fat32::fat32::sfn_to_string
+0000000080268e7a os::fs::fs_backend::fat32::fat32::build_lfn_name
+0000000080269206 <os::fs::fs_backend::fat32::fat32::Fat32File as core::any::Any>::type_id
+000000008026922a <os::fs::fs_backend::fat32::fat32::Fat32File as os::fs::vfs::vfs::File>::getdents64
+0000000080269e44 <os::fs::fs_backend::fat32::fat32::Fat32File as os::fs::vfs::vfs::File>::read
+0000000080269ed4 <os::fs::fs_backend::fat32::fat32::Fat32File as os::fs::vfs::vfs::File>::stat
+0000000080269f66 <os::fs::fs_backend::fat32::fat32::Fat32File as os::fs::vfs::vfs::File>::lseek
+000000008026a03a <os::fs::fs_backend::fat32::fat32::Fat32File as os::fs::vfs::vfs::File>::write
+000000008026a0ca <os::fs::fs_backend::fat32::fat32::Fat32File as os::fs::vfs::vfs::File>::read_at
+000000008026a4b4 <os::fs::fs_backend::fat32::fat32::Fat32File as os::fs::vfs::vfs::File>::write_at
+000000008026aa12 <os::fs::fs_backend::fat32::fat32::Fat32Fs as os::fs::vfs::vfs::VfsFs>::name
+000000008026aa8a <os::fs::fs_backend::fat32::fat32::Fat32Fs as os::fs::vfs::vfs::VfsFs>::open
+000000008026ad9a <os::fs::fs_backend::fat32::fat32::Fat32Fs as os::fs::vfs::vfs::VfsFs>::stat
+000000008026ae1e <os::fs::fs_backend::fat32::fat32::Fat32Fs as os::fs::vfs::vfs::VfsFs>::mkdir
+000000008026b062 <os::fs::fs_backend::fat32::fat32::Fat32Fs as os::fs::vfs::vfs::VfsFs>::mkfile
+000000008026b208 <os::fs::fs_backend::fat32::fat32::Fat32Fs as os::fs::vfs::vfs::VfsFs>::unlink
+000000008026b5a6 <[u8; 16] as core::fmt::Debug>::fmt
+000000008026b77a <[u32; 15] as core::fmt::Debug>::fmt
+000000008026b936 <os::fs::fs_backend::fat32::fat32::Fat32File as os::fs::vfs::vfs::File>::flush
+000000008026b948 core::ptr::drop_in_place::<os::fs::fs_backend::ext4_backend::ext4::Ext4File>
+000000008026b99a log::__private_api::log_impl::<log::__private_api::GlobalLogger>
+000000008026ba26 rsext4::file::io::write_file::<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>
+000000008026c188 rsext4::file::io::truncate::<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>
+000000008026cbf4 rsext4::file::rename::mv::<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>
+000000008026dca0 <os::sync::up::UPSafeCell<alloc::vec::Vec<alloc::sync::Arc<spin::mutex::Mutex<dyn os::fs::vfs::vblock::BlockDevTrait>>>>>::lock
+000000008026dca0 <os::sync::up::UPSafeCell<alloc::vec::Vec<os::memory::PreFlectMemory>>>::lock
+000000008026dca0 <os::sync::up::UPSafeCell<alloc::vec::Vec<os::arch::riscv64::driver::virtio_blk::block::VirtioMmioDevice>>>::lock
+000000008026dca0 <os::sync::up::UPSafeCell<alloc::vec::Vec<(os::memory::memset::VirNumRange, core::option::Option<usize>)>>>::lock
+000000008026dca0 <os::sync::up::UPSafeCell<alloc::vec::Vec<(usize, alloc::vec::Vec<os::memory::frame_allocator::FramTracker>)>>>::lock
+000000008026dca0 <os::sync::up::UPSafeCell<virtio_drivers::blk::VirtIOBlk<os::arch::riscv64::driver::virtio_blk::block::VirtioHal>>>::lock
+000000008026dca0 <os::sync::up::UPSafeCell<core::option::Option<os::driver::dtb::node::DeviceTree>>>::lock
+000000008026dca0 <os::sync::up::UPSafeCell<core::option::Option<os::fs::vfs::root::define::RootFs>>>::lock
+000000008026dca0 <os::sync::up::UPSafeCell<os::task::task::TaskControlBlock>>::lock
+000000008026dca0 <os::sync::up::UPSafeCell<os::task::task::TaskManagerInner>>::lock
+000000008026dca0 <os::sync::up::UPSafeCell<os::task::task::ProcessIdAlloctor>>::lock
+000000008026dca0 <os::sync::up::UPSafeCell<os::memory::memorymodel::MachineMemoryInfo>>::lock
+000000008026dca0 <os::sync::up::UPSafeCell<os::memory::frame_allocator::FrameAlloctor>>::lock
+000000008026dca0 <os::sync::up::UPSafeCell<os::memory::memset::KernelStackAllocator>>::lock
+000000008026dca0 <os::sync::up::UPSafeCell<os::memory::memset::MapSet>>::lock
+000000008026dca0 <os::sync::up::UPSafeCell<os::fs::component::pipe::pipe::PipeRingBuffer>>::lock
+000000008026dca0 <os::sync::up::UPSafeCell<os::fs::component::pipe::pipe::Pipe>>::lock
+000000008026dd32 <os::sync::up::UPSafeCell<core::option::Option<os::fs::vfs::root::define::RootFs>>>::try_lock
+000000008026dd32 <os::sync::up::UPSafeCell<alloc::collections::vec_deque::VecDeque<u8>>>::try_lock
+000000008026dd32 <os::sync::up::UPSafeCell<os::task::task::TaskControlBlock>>::try_lock
+000000008026dd32 <os::sync::up::UPSafeCell<os::task::task::TaskManagerInner>>::try_lock
+000000008026de1e <os::fs::fs_backend::ext4_backend::ext4::Ext4File as core::any::Any>::type_id
+000000008026de42 <rsext4::error::errno::Errno as core::fmt::Debug>::fmt
+000000008026de7e <core::str::pattern::CharSearcher as core::str::pattern::ReverseSearcher>::next_match_back
+000000008026dfbc <rsext4::error::Ext4Error as core::fmt::Debug>::fmt
+000000008026e018 <os::fs::fs_backend::ext4_backend::ext4::Ext4Fs as os::fs::vfs::vfs::VfsFs>::mv
+000000008026e05e <os::fs::fs_backend::ext4_backend::ext4::Ext4Fs as os::fs::vfs::vfs::VfsFs>::name
+000000008026e0ce <os::fs::fs_backend::ext4_backend::ext4::Ext4Fs as os::fs::vfs::vfs::VfsFs>::open
+000000008026e362 <os::fs::fs_backend::ext4_backend::ext4::Ext4Fs as os::fs::vfs::vfs::VfsFs>::stat
+000000008026e41a <os::fs::fs_backend::ext4_backend::ext4::Ext4Fs as os::fs::vfs::vfs::VfsFs>::mkdir
+000000008026e45a <os::fs::fs_backend::ext4_backend::ext4::Ext4Fs as os::fs::vfs::vfs::VfsFs>::mount
+000000008026e542 <os::fs::fs_backend::ext4_backend::ext4::Ext4Fs as os::fs::vfs::vfs::VfsFs>::mkfile
+000000008026e584 <os::fs::fs_backend::ext4_backend::ext4::Ext4Fs as os::fs::vfs::vfs::VfsFs>::rename
+000000008026e87a <os::fs::fs_backend::ext4_backend::ext4::Ext4Fs as os::fs::vfs::vfs::VfsFs>::umount
+000000008026e8f0 <os::fs::fs_backend::ext4_backend::ext4::Ext4Fs as os::fs::vfs::vfs::VfsFs>::unlink
+000000008026e980 <os::fs::fs_backend::ext4_backend::ext4::Ext4Fs as os::fs::vfs::vfs::VfsFs>::truncate
+000000008026e9c6 <os::fs::vfs::vblock::BLOCKDEVFILE as os::fs::vfs::vfs::File>::read
+000000008026ea96 <os::fs::vfs::vblock::BLOCKDEVFILE as os::fs::vfs::vfs::File>::lseek
+000000008026eb62 <os::fs::vfs::vblock::BLOCKDEVFILE as os::fs::vfs::vfs::File>::write
+000000008026ec32 <os::fs::vfs::vblock::BLOCKDEVFILE as os::fs::vfs::vfs::File>::read_at
+000000008026ee26 <os::fs::vfs::vblock::BLOCKDEVFILE as os::fs::vfs::vfs::File>::write_at
+000000008026f072 <os::fs::fs_backend::ext4_backend::ext4::Ext4File as os::fs::vfs::vfs::File>::getdents64
+000000008026f9a4 <os::fs::fs_backend::ext4_backend::ext4::Ext4File as os::fs::vfs::vfs::File>::read
+000000008026fb8c <os::fs::fs_backend::ext4_backend::ext4::Ext4File as os::fs::vfs::vfs::File>::stat
+000000008026fbfe <os::fs::fs_backend::ext4_backend::ext4::Ext4File as os::fs::vfs::vfs::File>::lseek
+000000008026fc94 <os::fs::fs_backend::ext4_backend::ext4::Ext4File as os::fs::vfs::vfs::File>::write
+000000008026fe08 <os::fs::fs_backend::ext4_backend::ext4::Ext4File as os::fs::vfs::vfs::File>::read_at
+000000008026fffa <os::fs::fs_backend::ext4_backend::ext4::Ext4File as os::fs::vfs::vfs::File>::write_at
+000000008027016a <alloc::string::String as core::fmt::Display>::fmt
+000000008027018c <os::fs::fs_backend::ext4_backend::ext4::Ext4File as os::fs::vfs::vfs::File>::flush
+000000008027019e __switch
+0000000080270208 core::panicking::assert_failed::<i32, i32>
+0000000080270238 rsext4::api::io::refresh_open_file_inode::<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>
+0000000080270360 rsext4::api::io::open::<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>
+00000000802705ee rsext4::api::io::read_at::<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>
+0000000080270f36 rsext4::api::io::write_at::<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>
+0000000080271126 rsext4::dir::mkdir::mkdir_internal::<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>
+0000000080271e06 rsext4::dir::bootstrap::create_lost_found_directory::<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>
+0000000080272762 rsext4::dir::bootstrap::create_root_directory_entry::<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>
+0000000080272cce rsext4::file::create::mkfile::<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>
+0000000080273858 rsext4::file::delete::delete_dir::<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>
+0000000080274fb6 rsext4::file::delete::delete_file::<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>
+000000008027547c rsext4::file::delete::free_inode_with_dtime::<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>
+0000000080275660 rsext4::file::delete::remove_inodeentry_from_parentdir::<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>
+00000000802758a4 rsext4::file::delete::unlink::<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>
+000000008027600e rsext4::hashtree::lookup::lookup::<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>
+00000000802762b2 core::slice::sort::unstable::heapsort::heapsort::<rsext4::bmalloc::AbsoluteBN, <rsext4::bmalloc::AbsoluteBN as core::cmp::PartialOrd>::lt>
+000000008027634c core::slice::sort::unstable::heapsort::heapsort::<rsext4::disknode::extent::Ext4Extent, <[rsext4::disknode::extent::Ext4Extent]>::sort_unstable_by_key<u32, <rsext4::extents_tree::root::ExtentTree>::remove_extend::leaf_step<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>::{closure#4}>::{closure#0}>
+000000008027645e core::slice::sort::unstable::heapsort::heapsort::<rsext4::disknode::extent::Ext4ExtentIdx, <[rsext4::disknode::extent::Ext4ExtentIdx]>::sort_unstable_by_key<u32, <rsext4::extents_tree::root::ExtentTree>::remove_extend::step_recursive<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>::{closure#1}>::{closure#0}>
+0000000080276570 core::slice::sort::unstable::heapsort::heapsort::<(u32, rsext4::bmalloc::AbsoluteBN), <[(u32, rsext4::bmalloc::AbsoluteBN)]>::sort_unstable_by_key<u32, rsext4::loopfile::resolve_inode_block_allextend<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>::{closure#0}>::{closure#0}>
+0000000080276638 <os::arch::riscv64::trap::TrapContext>::init_app_trap_context
+0000000080276754 alloc::fmt::format
+00000000802767dc os::fs::partition::gpt::parsing_gpt_entries
+0000000080276d14 os::arch::riscv64::trap::no_return_start
+0000000080276d38 os::driver::pcie::bar::bar_size32
+0000000080276fde os::driver::pcie::bar::assign_bar0
+00000000802774d6 os::arch::riscv64::driver::plic::plic_fn
+0000000080277802 <rsext4::error::errno::Errno as core::fmt::Debug>::fmt
+000000008027783e <core::str::pattern::CharSearcher as core::str::pattern::ReverseSearcher>::next_match_back
+000000008027797c <rsext4::error::Ext4Error as core::fmt::Debug>::fmt
+00000000802779d8 <&alloc::string::String as core::fmt::Debug>::fmt
+00000000802779fa <&rsext4::bmalloc::AbsoluteBN as core::fmt::Debug>::fmt
+0000000080277a32 <&riscv::register::scause::Exception as core::fmt::Debug>::fmt
+0000000080277a6c <&riscv::register::scause::Interrupt as core::fmt::Debug>::fmt
+0000000080277aa6 <&alloc::string::String as core::fmt::Display>::fmt
+0000000080277ac8 <&rsext4::bmalloc::AbsoluteBN as core::fmt::Display>::fmt
+0000000080277ae0 <rsext4::bmalloc::AbsoluteBN as core::fmt::Debug>::fmt
+0000000080277b16 <alloc::string::String as core::fmt::Display>::fmt
+0000000080277b38 __rustc::__rust_alloc_error_handler
+0000000080277b4e __rustc::__rust_no_alloc_shim_is_unstable_v2
+0000000080277b5e <xmas_elf::ElfFile>::program_header
+0000000080277b7e <xmas_elf::ElfFile>::new
+0000000080277be0 xmas_elf::header::parse_header
+0000000080277cf8 <xmas_elf::program::ProgramHeader>::get_type
+0000000080277e48 xmas_elf::program::parse_program_header
+0000000080277ffc <buddy_system_allocator::Heap>::init
+0000000080278164 <buddy_system_allocator::Heap>::alloc
+0000000080278308 <buddy_system_allocator::Heap>::dealloc
+00000000802784a4 <buddy_system_allocator::LockedHeap as core::alloc::global::GlobalAlloc>::alloc
+00000000802784f2 <buddy_system_allocator::LockedHeap as core::alloc::global::GlobalAlloc>::dealloc
+0000000080278540 <rsext4::superblock::types::Ext4Superblock>::update_checksum
+00000000802785ce <rsext4::superblock::types::Ext4Superblock>::verify_superblock
+000000008027869c rsext4::endian::read_u64_le
+00000000802787b6 <rsext4::superblock::types::Ext4Superblock as rsext4::endian::DiskFormat>::to_disk_bytes
+000000008027a532 <rsext4::superblock::types::Ext4Superblock as rsext4::endian::DiskFormat>::from_disk_bytes
+000000008027d44c <&&rsext4::superblock::types::Ext4Superblock as core::fmt::Debug>::fmt
+000000008027d9dc <u8 as core::fmt::Debug>::fmt
+000000008027da1e <u16 as core::fmt::Debug>::fmt
+000000008027da60 <u32 as core::fmt::Debug>::fmt
+000000008027daa2 <u64 as core::fmt::Debug>::fmt
+000000008027dae4 <rsext4::jbd2::jbdstruct::JournalSuperBllockS as rsext4::endian::DiskFormat>::to_disk_bytes
+000000008027e030 <rsext4::jbd2::jbdstruct::JournalSuperBllockS as rsext4::endian::DiskFormat>::from_disk_bytes
+000000008027e9a8 <rsext4::jbd2::jbdstruct::JournalBlockTagS as rsext4::endian::DiskFormat>::to_disk_bytes
+000000008027ea44 <rsext4::jbd2::jbdstruct::JournalBlockTagS as rsext4::endian::DiskFormat>::from_disk_bytes
+000000008027eb0a <rsext4::jbd2::jbdstruct::CommitHeader as rsext4::endian::DiskFormat>::to_disk_bytes
+000000008027ee0c <rsext4::jbd2::jbdstruct::JournalHeaderS as rsext4::endian::DiskFormat>::to_disk_bytes
+000000008027eec4 <rsext4::jbd2::jbdstruct::JournalHeaderS as rsext4::endian::DiskFormat>::from_disk_bytes
+000000008027efb0 <rsext4::disknode::inode::Ext4Inode>::set_atime_ts
+000000008027f06c <rsext4::disknode::inode::Ext4Inode>::set_ctime_ts
+000000008027f128 <rsext4::disknode::inode::Ext4Inode>::set_mtime_ts
+000000008027f1e4 <rsext4::disknode::inode::Ext4Inode>::set_crtime_ts
+000000008027f2e6 <rsext4::disknode::inode::Ext4Inode>::empty_for_reuse
+000000008027f324 <rsext4::disknode::inode::Ext4Inode>::write_extend_header
+000000008027f352 <rsext4::disknode::inode::Ext4Inode>::have_extend_header_and_use_extend
+000000008027f46a <rsext4::disknode::inode::Ext4Inode as rsext4::endian::DiskFormat>::to_disk_bytes
+000000008027fd02 <rsext4::disknode::inode::Ext4Inode as rsext4::endian::DiskFormat>::from_disk_bytes
+0000000080280726 <rsext4::bmalloc::block::BlockAllocator>::free_block
+0000000080280818 <rsext4::bmalloc::block::BlockAllocator>::global_to_group
+0000000080280872 <rsext4::bmalloc::block::BlockAllocator>::alloc_contiguous_blocks
+00000000802809c4 <rsext4::ext4::fs::Ext4FileSystem>::ensure_extra_isize_for_field
+0000000080280a62 rsext4::checksum::dirblock::update_ext4_dirblock_csum32
+0000000080280bf8 rsext4::checksum::dirblock::verify_ext4_dirblock_checksum
+0000000080280d5a <rsext4::extents_tree::root::ExtentTree>::store_root_to_inode
+0000000080281554 <rsext4::extents_tree::root::ExtentTree>::load_root_from_inode
+0000000080281798 <rsext4::extents_tree::root::ExtentTree>::parse_node
+00000000802817b0 <rsext4::extents_tree::root::ExtentTree>::parse_node_from_bytes
+0000000080281e84 <rsext4::bmalloc::inode::InodeAllocator>::free_inode
+0000000080281f78 <rsext4::bmalloc::inode::InodeAllocator>::alloc_inode_in_group
+0000000080282078 rsext4::entries::classic_dir::find_entry
+000000008028216c <[u8; 16] as core::fmt::Debug>::fmt
+0000000080282340 <[u8; 32] as core::fmt::Debug>::fmt
+00000000802826b4 <[u8; 64] as core::fmt::Debug>::fmt
+0000000080282712 <[u8; 4] as core::fmt::Debug>::fmt
+00000000802827ae <[u32; 17] as core::fmt::Debug>::fmt
+000000008028299e <[u32; 2] as core::fmt::Debug>::fmt
+0000000080282a06 <[u32; 4] as core::fmt::Debug>::fmt
+0000000080282aa2 <[u32; 94] as core::fmt::Debug>::fmt
+0000000080282b00 core::slice::sort::shared::smallsort::sort8_stable::<rsext4::disknode::extent::Ext4Extent, <[rsext4::disknode::extent::Ext4Extent]>::sort_unstable_by_key<u32, <rsext4::extents_tree::root::ExtentTree>::parse_node_from_bytes::{closure#0}>::{closure#0}>
+0000000080282ec2 core::slice::sort::shared::smallsort::sort8_stable::<rsext4::disknode::extent::Ext4ExtentIdx, <[rsext4::disknode::extent::Ext4ExtentIdx]>::sort_unstable_by_key<u32, <rsext4::extents_tree::root::ExtentTree>::parse_node_from_bytes::{closure#1}>::{closure#0}>
+0000000080283284 core::slice::sort::shared::smallsort::small_sort_general::<rsext4::disknode::extent::Ext4Extent, <[rsext4::disknode::extent::Ext4Extent]>::sort_unstable_by_key<u32, <rsext4::extents_tree::root::ExtentTree>::parse_node_from_bytes::{closure#0}>::{closure#0}>
+00000000802837b4 core::slice::sort::shared::smallsort::small_sort_general::<rsext4::disknode::extent::Ext4ExtentIdx, <[rsext4::disknode::extent::Ext4ExtentIdx]>::sort_unstable_by_key<u32, <rsext4::extents_tree::root::ExtentTree>::parse_node_from_bytes::{closure#1}>::{closure#0}>
+0000000080283ce4 core::slice::sort::shared::smallsort::insertion_sort_shift_left::<rsext4::disknode::extent::Ext4Extent, <[rsext4::disknode::extent::Ext4Extent]>::sort_unstable_by_key<u32, <rsext4::extents_tree::root::ExtentTree>::parse_node_from_bytes::{closure#0}>::{closure#0}>
+0000000080283d7c core::slice::sort::shared::smallsort::insertion_sort_shift_left::<rsext4::disknode::extent::Ext4ExtentIdx, <[rsext4::disknode::extent::Ext4ExtentIdx]>::sort_unstable_by_key<u32, <rsext4::extents_tree::root::ExtentTree>::parse_node_from_bytes::{closure#1}>::{closure#0}>
+0000000080283e14 core::slice::sort::unstable::quicksort::quicksort::<rsext4::disknode::extent::Ext4Extent, <[rsext4::disknode::extent::Ext4Extent]>::sort_unstable_by_key<u32, <rsext4::extents_tree::root::ExtentTree>::parse_node_from_bytes::{closure#0}>::{closure#0}>
+00000000802842e0 core::slice::sort::unstable::quicksort::quicksort::<rsext4::disknode::extent::Ext4ExtentIdx, <[rsext4::disknode::extent::Ext4ExtentIdx]>::sort_unstable_by_key<u32, <rsext4::extents_tree::root::ExtentTree>::parse_node_from_bytes::{closure#1}>::{closure#0}>
+00000000802847ac <rsext4::cache::bitmap::BitmapCache>::get
+0000000080284840 rsext4::loopfile::resolve_inode_block_allextend::push_extent_blocks
+00000000802848f8 <rsext4::hashtree::manager::HashTreeManager>::parse_root_node
+0000000080284a50 <rsext4::hashtree::manager::HashTreeManager>::parse_dx_entries
+0000000080284b70 <rsext4::hashtree::manager::HashTreeManager>::parse_internal_node
+0000000080284bf6 <rsext4::hashtree::manager::HashTreeManager>::search_in_leaf_data
+0000000080284d02 <alloc::collections::btree::map::BTreeMap<rsext4::bmalloc::AbsoluteBN, rsext4::cache::data_block::CachedBlock>>::insert
+0000000080284e8a <rsext4::bmalloc::AbsoluteBN as core::fmt::Display>::fmt
+0000000080284ea0 <rsext4::bmalloc::RelativeBN as core::fmt::Display>::fmt
+0000000080284ea0 <rsext4::bmalloc::InodeNumber as core::fmt::Display>::fmt
+0000000080284ea0 <rsext4::bmalloc::RelativeInodeIndex as core::fmt::Display>::fmt
+0000000080284ea0 <rsext4::bmalloc::BGIndex as core::fmt::Display>::fmt
+0000000080284eb6 <alloc::collections::btree::node::Handle<alloc::collections::btree::node::NodeRef<alloc::collections::btree::node::marker::Mut, rsext4::bmalloc::AbsoluteBN, rsext4::cache::data_block::CachedBlock, alloc::collections::btree::node::marker::Leaf>, alloc::collections::btree::node::marker::Edge>>::insert_recursing::<alloc::alloc::Global, <alloc::collections::btree::map::entry::VacantEntry<rsext4::bmalloc::AbsoluteBN, rsext4::cache::data_block::CachedBlock>>::insert_entry::{closure#0}>
+00000000802858da <rsext4::cache::data_block::DataBlockCache>::create_new
+00000000802859f0 rsext4::checksum::inode::ext4_inode_csum32
+0000000080285b82 rsext4::checksum::inode::ext4_update_inode_checksum
+0000000080285bac <rsext4::error::Ext4Error as core::fmt::Display>::fmt
+0000000080285cae <rsext4::blockgroup_description::desc::Ext4GroupDesc>::update_checksum
+0000000080285f6a <rsext4::blockgroup_description::desc::Ext4GroupDesc>::verify_checksum
+0000000080286294 <rsext4::blockgroup_description::desc::Ext4GroupDesc as rsext4::endian::DiskFormat>::to_disk_bytes
+0000000080286602 <rsext4::blockgroup_description::desc::Ext4GroupDesc as rsext4::endian::DiskFormat>::from_disk_bytes
+0000000080286cba <&rsext4::blockgroup_description::desc::Ext4GroupDesc as core::fmt::Debug>::fmt
+0000000080286e4e <&u8 as core::fmt::Debug>::fmt
+0000000080286e92 <&u32 as core::fmt::Debug>::fmt
+0000000080286ed6 <&&str as core::fmt::Display>::fmt
+0000000080286ef8 <&str as core::fmt::Display>::fmt
+0000000080286f1a <&usize as core::fmt::Display>::fmt
+0000000080286f32 <&u32 as core::fmt::Display>::fmt
+0000000080286f4a <&u64 as core::fmt::Display>::fmt
+0000000080286f62 <u16 as core::fmt::Debug>::fmt
+0000000080286fa4 <u32 as core::fmt::Debug>::fmt
+0000000080286fe6 <alloc::raw_vec::RawVecInner<_>>::reserve::do_reserve_and_handle::<alloc::alloc::Global>
+0000000080287072 <rsext4::blockdev::buffer::BlockBuffer>::new
+0000000080287072 <rsext4::blockdev::buffer::BlockBuffer as core::default::Default>::default
+00000000802870a4 <alloc::raw_vec::RawVec<rsext4::entries::htree_dir::Ext4DxEntry>>::grow_one
+0000000080287100 <alloc::raw_vec::RawVec<rsext4::disknode::extent::Ext4Extent>>::grow_one
+0000000080287100 <alloc::raw_vec::RawVec<rsext4::disknode::extent::Ext4ExtentIdx>>::grow_one
+000000008028715c <alloc::raw_vec::RawVec<(u32, rsext4::bmalloc::AbsoluteBN)>>::grow_one
+00000000802871b8 <alloc::raw_vec::RawVecInner>::finish_grow (.llvm.11409946849277854672)
+0000000080287242 rsext4::tool::debug_super_and_desc
+0000000080287444 rsext4::entries::htree_dir::calculate_hash
+0000000080287504 rsext4::checksum::bitmap::ext4_block_bitmap_csum32
+0000000080287560 rsext4::checksum::bitmap::ext4_inode_bitmap_csum32
+00000000802875bc core::slice::sort::unstable::ipnsort::<rsext4::disknode::extent::Ext4Extent, <[rsext4::disknode::extent::Ext4Extent]>::sort_unstable_by_key<u32, <rsext4::extents_tree::root::ExtentTree>::parse_node_from_bytes::{closure#0}>::{closure#0}>
+000000008028771c core::slice::sort::unstable::ipnsort::<rsext4::disknode::extent::Ext4ExtentIdx, <[rsext4::disknode::extent::Ext4ExtentIdx]>::sort_unstable_by_key<u32, <rsext4::extents_tree::root::ExtentTree>::parse_node_from_bytes::{closure#1}>::{closure#0}>
+000000008028787c core::slice::sort::shared::pivot::median3_rec::<rsext4::disknode::extent::Ext4Extent, <[rsext4::disknode::extent::Ext4Extent]>::sort_unstable_by_key<u32, <rsext4::extents_tree::root::ExtentTree>::parse_node_from_bytes::{closure#0}>::{closure#0}>
+0000000080287938 core::slice::sort::shared::pivot::median3_rec::<rsext4::disknode::extent::Ext4ExtentIdx, <[rsext4::disknode::extent::Ext4ExtentIdx]>::sort_unstable_by_key<u32, <rsext4::extents_tree::root::ExtentTree>::parse_node_from_bytes::{closure#1}>::{closure#0}>
+00000000802879f4 rsext4::crc32c::crc32c::ext4_crc32c_seed_from_superblock
+0000000080287b8e log::__private_api::log_impl::<log::__private_api::GlobalLogger>
+0000000080287c1a rsext4::dir::path::split_paren_child_and_tranlatevalid
+0000000080287e04 core::slice::sort::unstable::heapsort::heapsort::<rsext4::disknode::extent::Ext4Extent, <[rsext4::disknode::extent::Ext4Extent]>::sort_unstable_by_key<u32, <rsext4::extents_tree::root::ExtentTree>::parse_node_from_bytes::{closure#0}>::{closure#0}>
+0000000080287f16 core::slice::sort::unstable::heapsort::heapsort::<rsext4::disknode::extent::Ext4ExtentIdx, <[rsext4::disknode::extent::Ext4ExtentIdx]>::sort_unstable_by_key<u32, <rsext4::extents_tree::root::ExtentTree>::parse_node_from_bytes::{closure#1}>::{closure#0}>
+0000000080288028 <rsext4::entries::dir_entry::Ext4DirEntry2>::new
+00000000802880b2 <rsext4::entries::dir_entry::Ext4DirEntry2 as rsext4::endian::DiskFormat>::to_disk_bytes
+0000000080288168 <rsext4::disknode::extent::Ext4ExtentHeader as rsext4::endian::DiskFormat>::to_disk_bytes
+0000000080288258 <rsext4::entries::iterator::DirEntryIterator as core::iter::traits::iterator::Iterator>::next
+00000000802882fc <rsext4::disknode::extent::Ext4Extent as rsext4::endian::DiskFormat>::to_disk_bytes
+00000000802883d0 <rsext4::entries::dir_entry::Ext4DirEntryTail as rsext4::endian::DiskFormat>::to_disk_bytes
+00000000802884be <rsext4::disknode::extent::Ext4ExtentIdx as rsext4::endian::DiskFormat>::to_disk_bytes
+0000000080288592 <rsext4::error::errno::Errno>::description
+00000000802885c4 <rsext4::error::errno::Errno>::name
+00000000802885f6 <rsext4::error::context::ErrorContext as core::fmt::Display>::fmt
+0000000080288792 <rsext4::hashtree::error::HashTreeError as core::fmt::Display>::fmt
+0000000080288820 <virtio_drivers::queue::VirtQueueLayout>::new
+0000000080288882 <virtio_drivers::blk::BlkFeature as core::fmt::Debug>::fmt
+0000000080288ede log::set_logger
+0000000080288f44 <log::__private_api::GlobalLogger as log::Log>::log
+0000000080288f90 <log::Level as core::fmt::Display>::fmt
+0000000080288fbc <log::NopLogger as log::Log>::log
+0000000080288fcc <log::NopLogger as log::Log>::flush
+0000000080288fdc <log::NopLogger as log::Log>::enabled
+0000000080288fee <log::SetLoggerError as core::fmt::Display>::fmt
+0000000080289014 core::ptr::drop_in_place::<alloc::string::String>
+0000000080289026 <alloc::raw_vec::RawVecInner<_>>::reserve::do_reserve_and_handle::<alloc::alloc::Global>
+00000000802890b8 __rustc::__rdl_alloc_error_handler
+00000000802890f6 <alloc::string::String>::from_utf16
+00000000802892fa <alloc::raw_vec::RawVec<u8>>::grow_one
+0000000080289352 <alloc::raw_vec::RawVecInner>::finish_grow
+00000000802893c2 alloc::alloc::handle_alloc_error
+00000000802893d8 alloc::raw_vec::handle_error
+00000000802893f2 alloc::raw_vec::capacity_overflow
+0000000080289416 <alloc::vec::Vec<_, _>>::insert_mut::assert_failed
+0000000080289452 <alloc::vec::Vec<_, _>>::remove::assert_failed
+000000008028948e <alloc::vec::Vec<_, _>>::split_off::assert_failed
+00000000802894ca alloc::fmt::format::format_inner
+0000000080289614 <alloc::string::String as core::clone::Clone>::clone
+000000008028967e <core::fmt::Error as core::fmt::Debug>::fmt
+0000000080289694 <alloc::string::String as core::fmt::Write>::write_char
+0000000080289786 <alloc::string::String as core::fmt::Write>::write_str
+00000000802897ea <alloc::string::String as core::fmt::Write>::write_fmt
+00000000802897fe core::panicking::assert_failed::<usize, usize>
+0000000080289828 <char>::escape_debug_ext
+0000000080289b38 <core::fmt::builders::DebugStruct>::field
+0000000080289cae <core::fmt::builders::DebugTuple>::field
+0000000080289db0 <core::fmt::builders::DebugTuple>::finish
+0000000080289e3c <core::fmt::builders::DebugSet>::entry
+0000000080289e3c <core::fmt::builders::DebugList>::entry
+0000000080289f48 <core::fmt::builders::DebugList>::finish
+0000000080289f8c <core::fmt::Formatter>::debug_list
+0000000080289fca <core::fmt::Formatter>::debug_tuple
+000000008028a00e <core::fmt::Formatter>::pad_integral
+000000008028a25a <core::fmt::Formatter>::debug_tuple_field1_finish
+000000008028a37c <core::fmt::Formatter>::debug_tuple_field2_finish
+000000008028a514 <core::fmt::Formatter>::debug_struct_field1_finish
+000000008028a5b0 <core::fmt::Formatter>::debug_struct_field2_finish
+000000008028a67e <core::fmt::Formatter>::debug_struct_field4_finish
+000000008028a784 <core::fmt::Formatter>::debug_struct_fields_finish
+000000008028a862 <core::fmt::Formatter>::pad
+000000008028aa22 <core::fmt::Formatter>::write_str
+000000008028aa22 <core::fmt::Formatter as core::fmt::Write>::write_str
+000000008028aa2a <core::str::pattern::StrSearcher>::new
+000000008028adc6 core::fmt::write
+000000008028af98 core::str::slice_error_fail
+000000008028afa8 core::str::slice_error_fail_rt
+000000008028b41c core::option::expect_failed
+000000008028b454 core::option::unwrap_failed
+000000008028b472 core::result::unwrap_failed
+000000008028b4c8 core::panicking::panic_bounds_check
+000000008028b504 core::panicking::panic_nounwind_fmt
+000000008028b534 core::panicking::assert_failed_inner
+000000008028b602 core::panicking::panic
+000000008028b616 core::panicking::panic_fmt
+000000008028b644 core::str::count::do_count_chars
+000000008028b7d4 core::str::converts::from_utf8
+000000008028b9de core::slice::index::slice_index_fail
+000000008028baea core::slice::memchr::memchr_aligned
+000000008028bbac core::slice::memchr::memrchr
+000000008028bcac core::unicode::printable::is_printable
+000000008028bf60 core::panicking::panic_const::panic_const_div_by_zero
+000000008028bf7e core::unicode::unicode_data::grapheme_extend::lookup_slow
+000000008028c088 core::slice::sort::shared::smallsort::panic_on_ord_violation
+000000008028c0ac core::slice::sort::stable::drift::sqrt_approx
+000000008028c152 <core::fmt::Formatter>::pad_integral::write_prefix
+000000008028c1b2 core::slice::copy_from_slice_impl::len_mismatch_fail
+000000008028c1f6 <u8 as core::fmt::Display>::fmt
+000000008028c284 <core::fmt::builders::PadAdapter as core::fmt::Write>::write_char
+000000008028c2f2 <core::fmt::builders::PadAdapter as core::fmt::Write>::write_str
+000000008028c504 <&dyn core::fmt::Debug as core::fmt::Debug>::fmt
+000000008028c50c <&usize as core::fmt::Debug>::fmt
+000000008028c5c2 <&str as core::fmt::Display>::fmt
+000000008028c5d2 <u16 as core::fmt::Display>::fmt
+000000008028c6ec <usize as core::fmt::LowerHex>::fmt
+000000008028c6ec <u64 as core::fmt::LowerHex>::fmt
+000000008028c744 <core::fmt::Arguments as core::fmt::Display>::fmt
+000000008028c756 <usize as core::fmt::UpperHex>::fmt
+000000008028c756 <u64 as core::fmt::UpperHex>::fmt
+000000008028c7ae <u32 as core::fmt::Display>::fmt
+000000008028c920 <i32 as core::fmt::Display>::fmt
+000000008028caa8 <core::ops::range::Range<usize> as core::fmt::Debug>::fmt
+000000008028cc46 <u64 as core::fmt::Display>::fmt
+000000008028cc46 <usize as core::fmt::Display>::fmt
+000000008028cd82 <u8 as core::fmt::LowerHex>::fmt
+000000008028cde0 <i64 as core::fmt::Display>::fmt
+000000008028cde0 <isize as core::fmt::Display>::fmt
+000000008028cf28 <bool as core::fmt::Display>::fmt
+000000008028cf54 <u8 as core::fmt::UpperHex>::fmt
+000000008028cfb2 <str as core::fmt::Debug>::fmt
+000000008028d2e6 <str as core::fmt::Display>::fmt
+000000008028d2f6 <char as core::fmt::Debug>::fmt
+000000008028d37c <char as core::fmt::Display>::fmt
+000000008028d42a <u16 as core::fmt::LowerHex>::fmt
+000000008028d488 <u16 as core::fmt::UpperHex>::fmt
+000000008028d4e6 <u32 as core::fmt::LowerHex>::fmt
+000000008028d542 <i32 as core::fmt::LowerHex>::fmt
+000000008028d59e <u32 as core::fmt::UpperHex>::fmt
+000000008028d5fa <i32 as core::fmt::UpperHex>::fmt
+000000008028d656 <core::fmt::builders::PadAdapter as core::fmt::Write>::write_fmt
+000000008028d66a OUTLINED_FUNCTION_0
+000000008028d67a memcmp
+000000008028d69a __udivti3
+000000008028d6c6 compiler_builtins::int::specialized_div_rem::u128_div_rem
+000000008028dca2 memmove
+000000008028dcaa compiler_builtins::mem::memcpy
+000000008028de54 compiler_builtins::mem::memmove
+000000008028e1e6 memset
+000000008028e25c memcpy
+000000008028f000 etext
+000000008028f000 srodata

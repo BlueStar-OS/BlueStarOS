@@ -8,3 +8,7 @@ testsuits-for-oskernel/
 tmp
 .claude
 other/
+.gitnexus
+
+AGENTS.md
+CLAUDE.md

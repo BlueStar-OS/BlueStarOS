@@ -4,7 +4,23 @@
 extern crate user_lib;
 use user_lib::print;
 use user_lib::{args, println};
+use user_lib::error::*;
 use user_lib::syscall::sys_mount;
+
+/// 将 errno 负数值翻译为常量名
+fn errname(ret: isize) -> &'static str {
+    let v = (-ret) as isize;
+    match v {
+        EINVAL => "EINVAL",
+        ENOENT => "ENOENT",
+        ENODEV => "ENODEV",
+        ENOTDIR => "ENOTDIR",
+        EBUSY => "EBUSY",
+        EIO => "EIO",
+        EFAULT => "EFAULT",
+        _ => "UNKNOWN",
+    }
+}
 
 #[no_mangle]
 pub fn main() -> usize {
@@ -22,7 +38,14 @@ pub fn main() -> usize {
 
     let ret = sys_mount(source, target, fstype, 0, "");
     if ret < 0 {
-        println!("mount failed ret={} source={} target={} fstype={}", ret, source, target, fstype);
+        println!(
+            "mount failed ret={} ({}) source={} target={} fstype={}",
+            ret,
+            errname(ret),
+            source,
+            target,
+            fstype
+        );
         return 1;
     }
     0

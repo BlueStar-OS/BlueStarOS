@@ -307,3 +307,11 @@ impl core::fmt::Display for BlueErr {
         write!(f, "{}", self.message())
     }
 }
+
+impl core::ops::Neg for BlueErr {
+    type Output = isize;
+
+    fn neg(self) -> Self::Output {
+        -(self as isize)
+    }
+}

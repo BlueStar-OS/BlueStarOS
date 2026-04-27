@@ -1,8 +1,7 @@
 // 模拟内核elf解析没有处理权限合并，导致紧凑段权限错误挂断
 
 
-#include <stdio.h>
-
+#include<stdio.h>
 
 
 

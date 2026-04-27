@@ -1,14 +1,15 @@
+use super::traplog::{
+    current_trap_detail, log_exception_detail, log_unhandled_page_fault, ExceptionClass,
+};
+use crate::arch::driver::uart_irq_intid;
 use crate::arch::memory::VirAddr;
+use crate::arch::trap::traplog::log_user_opcode_window;
 use crate::arch::TrapContext;
 use crate::syscall::syscall_handler;
 use crate::task::TASK_MANAER;
 use crate::time::set_next_timeInterupt;
 use core::arch::asm;
 use log::{debug, error, warn};
-use crate::arch::trap::traplog::log_user_opcode_window;
-use super::traplog::{
-    current_trap_detail, log_exception_detail, log_unhandled_page_fault, ExceptionClass,
-};
 
 pub(crate) fn handle_page_fault_aarch64(fault_addr: VirAddr, esr: u64) {
     use crate::arch::memory::{PTEFlags, PageTable, VirNumber};
@@ -77,8 +78,6 @@ pub(crate) fn handle_page_fault_aarch64(fault_addr: VirAddr, esr: u64) {
 
     drop(inner);
 }
-
-
 
 pub(crate) fn dispatch_user_sync() {
     let trap = current_trap_detail();
@@ -199,11 +198,17 @@ pub(crate) fn dispatch_kernel_sync() {
             }
         }
         ExceptionClass::InstructionAbortLower | ExceptionClass::InstructionAbortSame => {
-            error!("Kernel {:?}: ESR={:#x} ELR={:#x} FAR={:#x}", ec, esr, elr, far);
+            error!(
+                "Kernel {:?}: ESR={:#x} ELR={:#x} FAR={:#x}",
+                ec, esr, elr, far
+            );
             handle_page_fault_aarch64(VirAddr(elr as usize), esr);
         }
         ExceptionClass::DataAbortLower | ExceptionClass::DataAbortSame => {
-            error!("Kernel {:?}: ESR={:#x} ELR={:#x} FAR={:#x}", ec, esr, elr, far);
+            error!(
+                "Kernel {:?}: ESR={:#x} ELR={:#x} FAR={:#x}",
+                ec, esr, elr, far
+            );
             handle_page_fault_aarch64(VirAddr(far as usize), esr);
         }
         ExceptionClass::PCAlignment => {
@@ -229,7 +234,6 @@ pub(crate) fn dispatch_kernel_sync() {
 
 fn gic_dispatch_irq(schedule_on_timer: bool) {
     use crate::arch::driver::gicd::{gic_read_iar, gic_write_eoir, TIMER_PPI_INTID};
-    use crate::arch::driver::uart_irq_intid;
     let mut need_schedule = false;
     loop {
         let irqnr = gic_read_iar();

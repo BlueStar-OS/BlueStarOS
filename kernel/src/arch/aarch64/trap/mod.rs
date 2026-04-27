@@ -5,8 +5,8 @@ use core::panicking::panic;
 global_asm!(include_str!("./trap.asm"));
 
 pub mod kernel_trap;
-pub mod traplog;
 pub mod traphandler;
+pub mod traplog;
 pub mod user_trap;
 
 extern "C" {
@@ -18,13 +18,13 @@ pub use user_trap::app_entry_point;
 
 #[repr(C)]
 pub struct TrapContext {
-    pub x: [usize; 31], //用户寄存器
-    pub sp_el0: usize, //用户栈
-    pub elr_el1: usize,  //异常返回地址
-    pub spsr_el1: usize, //被打断现场的状态
-    pub ttbr_el1: usize, //内核页表（返回 EL1 后用于内核可见地址空间）
-    pub kernel_sp: usize, //用户内核栈
-    pub trap_handler: usize,// traphandler地址
+    pub x: [usize; 31],      //用户寄存器
+    pub sp_el0: usize,       //用户栈
+    pub elr_el1: usize,      //异常返回地址
+    pub spsr_el1: usize,     //被打断现场的状态
+    pub ttbr_el1: usize,     //内核页表（返回 EL1 后用于内核可见地址空间）
+    pub kernel_sp: usize,    //用户内核栈
+    pub trap_handler: usize, // traphandler地址
 }
 
 #[no_mangle]

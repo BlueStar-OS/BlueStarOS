@@ -5,7 +5,7 @@
 //#![deny(warnings)]
 #![no_std]
 #![no_main]
-#![feature(panic_internals, panic_info_message, const_trait_impl, error_in_core,)]
+#![feature(panic_internals, panic_info_message, const_trait_impl, error_in_core)]
 
 extern crate alloc;
 
@@ -22,11 +22,13 @@ mod fs;
 mod logger;
 mod memory;
 mod panic;
+mod symbols;
 mod sync;
 mod syscall;
 mod task;
 mod time;
 mod trap;
+mod tool;
 use crate::arch::set_kernel_trap_handler;
 use crate::arch::*;
 use crate::config::*;
@@ -59,7 +61,6 @@ pub fn clear_bss() {
 #[no_mangle]
 pub fn blue_main() -> ! {
     //永远不会返回
-
     kprintln!("Clean BSS");
     clear_bss();
 

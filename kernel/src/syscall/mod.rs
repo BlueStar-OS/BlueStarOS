@@ -1,5 +1,6 @@
 pub mod syscall;
-use crate::arch::memory::*;
+use crate::{arch::memory::*, task::TASK_MANAER};
+use crate::error::BlueErr;
 use crate::syscall::syscall::*;
 use log::{error, warn};
 // Linux riscv64 syscall numbers (subset used by the oscomp test suite)
@@ -40,11 +41,63 @@ pub const SYS_WAIT4: usize = 260;
 pub const SYS_SCHED_YIELD: usize = 124;
 pub const SYS_DUP: usize = 23;
 pub const SYS_DUP3: usize = 24;
+pub const SYS_MPROTECT: usize = 226;
+
+mod sys_mprotect;
+mod sys_mmap;
+use crate::syscall::sys_mprotect::sys_mprotect;
+use crate::syscall::sys_mmap::sys_mmap;
+#[inline]
+/// log x0-x31
+fn log_x_regs(stage: &str, id: usize, trap_cx: &[usize; 32]) {
+    warn!(
+        "[syscall:{}] id={} x0={:#x} x1={:#x} x2={:#x} x3={:#x} x4={:#x} x5={:#x} x6={:#x} x7={:#x} x8={:#x} x9={:#x} x10={:#x} x11={:#x} x12={:#x} x13={:#x} x14={:#x} x15={:#x} x16={:#x} x17={:#x} x18={:#x} x19={:#x} x20={:#x} x21={:#x} x22={:#x} x23={:#x} x24={:#x} x25={:#x} x26={:#x} x27={:#x} x28={:#x} x29={:#x} x30={:#x} x31={:#x}",
+        stage,
+        id,
+        trap_cx[0],
+        trap_cx[1],
+        trap_cx[2],
+        trap_cx[3],
+        trap_cx[4],
+        trap_cx[5],
+        trap_cx[6],
+        trap_cx[7],
+        trap_cx[8],
+        trap_cx[9],
+        trap_cx[10],
+        trap_cx[11],
+        trap_cx[12],
+        trap_cx[13],
+        trap_cx[14],
+        trap_cx[15],
+        trap_cx[16],
+        trap_cx[17],
+        trap_cx[18],
+        trap_cx[19],
+        trap_cx[20],
+        trap_cx[21],
+        trap_cx[22],
+        trap_cx[23],
+        trap_cx[24],
+        trap_cx[25],
+        trap_cx[26],
+        trap_cx[27],
+        trap_cx[28],
+        trap_cx[29],
+        trap_cx[30],
+        trap_cx[31],
+    );
+}
 ///id: 系统调用号
 ///args:接受1个usize参数
 ///返回值：通过 x10 (a0) 寄存器返回给用户态
 pub fn syscall_handler(id: usize, arg: [usize; 6]) -> isize {
-    match id {
+    if id == SYS_MMAP {
+        let current_task = TASK_MANAER.get_current_trapcx();
+        log_x_regs("before", id, &current_task.x);
+    }
+
+    let ret = match id {
         SYS_SET_TID_ADDRESS => sys_set_tid_address(arg[0]),
         SYS_EXIT_GROUP => sys_exit_group(arg[0]),
         SYS_WRITEV => sys_writev(arg[0] as i32, arg[1], arg[2] as i32),
@@ -62,7 +115,7 @@ pub fn syscall_handler(id: usize, arg: [usize; 6]) -> isize {
         // Linux riscv64 userspace often implements dup2 via dup3(old, new, flags=0)
         SYS_DUP3 => {
             if arg[2] != 0 {
-                -1
+                BlueErr::EINVAL.as_isize()
             } else {
                 sys_dup2(arg[0] as i32, arg[1] as i32)
             }
@@ -106,16 +159,17 @@ pub fn syscall_handler(id: usize, arg: [usize; 6]) -> isize {
 
         SYS_MOUNT => sys_mount(arg[0], arg[1], arg[2], arg[3], arg[4]),
         SYS_UMOUNT2 => sys_umount2(arg[0], arg[1]),
-
+        SYS_MPROTECT => sys_mprotect(arg[0], arg[1], arg[2]),
         // Not implemented yet in this kernel:
         SYS_SETPRIORITY | SYS_LINKAT => {
             error!("Unimplemented syscall id={}", id);
-            -1
+            BlueErr::ENOSYS.as_isize()
         }
 
         _ => {
             error!("Unknown syscall id={}", id);
-            -1
+            BlueErr::ENOSYS.as_isize()
         }
-    }
+    };
+    ret
 }

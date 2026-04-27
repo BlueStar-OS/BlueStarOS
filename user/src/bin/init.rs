@@ -3,7 +3,7 @@
 
 use core::usize;
 extern crate alloc;
-use user_lib::{String, getchar, print, println,sys_waitpid};
+use user_lib::{ECHILD, String, getchar, print, println, sys_waitpid};
 use crate::alloc::string::ToString;
 use user_lib::sys_wait;
 extern crate user_lib;
@@ -365,7 +365,7 @@ pub fn main() -> usize {
         // 回收fork后的遗孤 不要再现4小时修复僵尸错位的时序Bug了😭
         loop {
             let re = sys_wait(&mut exit_code);
-            if re == -1{ // 如果程序返回-1，但是还是存在zombie就是自作自受了
+            if re == -ECHILD{ // 如果程序返回-1，但是还是存在zombie就是自作自受了
                 break;
             }
         }

@@ -4,7 +4,7 @@
 extern crate alloc;
 extern crate user_lib;
 
-use user_lib::{println,print, sys_wait, sys_yield};
+use user_lib::{ECHILD, println, print, sys_wait, sys_yield};
 use user_lib::syscall::sys_clone;
 use user_lib::syscall::sys_exit;
 
@@ -80,11 +80,11 @@ pub fn main() -> usize {
         reaped += 1;
     }
 
-    // After all children are reaped, wait should return -1 (ECHILD in Linux).
+    // After all children are reaped, wait should return -ECHILD.
     let mut st: isize = 0;
     let waited = sys_wait(&mut st as *mut isize);
-    if waited != -1 {
-        println!("pc_rel: expected wait=-1 after reaping all children, got waited={} status={}", waited, st);
+    if waited != -ECHILD {
+        println!("pc_rel: expected wait=-ECHILD after reaping all children, got waited={} status={}", waited, st);
         return 1;
     }
 
