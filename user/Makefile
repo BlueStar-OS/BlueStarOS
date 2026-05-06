@@ -103,9 +103,9 @@ img: $(IMG_BUILD_TARGET)
 	LOOPDEV=$$($(LOSETUP) -Pf --show $(KERNEL_IMG))
 	echo "Using loop device: $$LOOPDEV"
 	# 5) 对每个分区单独 mkfs（mkfs 作用在分区范围上，而不是整盘）
-	$(MKFS_EXT4) -O ^flex_bg,metadata_csum -F $${LOOPDEV}p1
+	$(MKFS_EXT4) -b 4096 -O ^flex_bg,metadata_csum -F $${LOOPDEV}p1
 	$(MKFS_VFAT) -F 32 $${LOOPDEV}p2
-	$(MKFS_EXT4) -O ^flex_bg,metadata_csum -F $${LOOPDEV}p3
+	$(MKFS_EXT4) -b 4096 -O ^flex_bg,metadata_csum -F $${LOOPDEV}p3
 	$(MKFS_VFAT) -F 32 $${LOOPDEV}p4
 	# 6) 只挂载第一个分区，把编译好的用户程序拷贝进去
 	TMPDIR=$$(mktemp -d)
