@@ -1,7 +1,7 @@
 pub mod syscall;
-use crate::{arch::memory::*, task::TASK_MANAER};
 use crate::error::BlueErr;
 use crate::syscall::syscall::*;
+use crate::{arch::memory::*, task::TASK_MANAER};
 use log::{error, warn};
 // Linux riscv64 syscall numbers (subset used by the oscomp test suite)
 pub const SYS_GETCWD: usize = 17;
@@ -43,10 +43,10 @@ pub const SYS_DUP: usize = 23;
 pub const SYS_DUP3: usize = 24;
 pub const SYS_MPROTECT: usize = 226;
 
-mod sys_mprotect;
 mod sys_mmap;
-use crate::syscall::sys_mprotect::sys_mprotect;
+mod sys_mprotect;
 use crate::syscall::sys_mmap::sys_mmap;
+use crate::syscall::sys_mprotect::sys_mprotect;
 #[inline]
 /// log x0-x31
 fn log_x_regs(stage: &str, id: usize, trap_cx: &[usize; 32]) {

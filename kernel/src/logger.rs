@@ -16,7 +16,7 @@ impl Log for SimpleLogger {
         }
         let color = match record.level() {
             Level::Error => 31, // Red
-            Level::Warn => 93,  // BrightYellow
+            Level::Warn => 35,  // BrightYellow
             Level::Info => 34,  // Blue
             Level::Debug => 32, // Green
             Level::Trace => 90, // BrightBlack
@@ -28,7 +28,11 @@ impl Log for SimpleLogger {
         let module = record.module_path().unwrap_or("");
         crate::console::kprint(format_args!(
             "\u{1B}[{}m[{:>5}.{:06}] {:>5} {}: ",
-            color, sec, usec, record.level(), module,
+            color,
+            sec,
+            usec,
+            record.level(),
+            module,
         ));
         crate::console::kprint(*record.args());
         crate::console::kprint(format_args!("\u{1B}[0m\n"));

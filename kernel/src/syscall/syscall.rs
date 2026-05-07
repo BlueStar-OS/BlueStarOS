@@ -43,7 +43,6 @@ use core::usize;
 use log::{debug, error, warn};
 use spin::Mutex;
 
-
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default)]
 struct Timespec {
@@ -65,8 +64,6 @@ struct utsname {
     machine: [u8; utname_field_len],    //当前硬件结构
     domainname: [u8; utname_field_len], //NIS DOMAIN name
 }
-
-
 
 /// sys_ioctl
 pub fn sys_ioctl() -> isize {
@@ -1427,7 +1424,6 @@ fn read_c_string_from_user_with_satp(
     Err(VfsFsError::Invalid)
 }
 
-
 ///unmap系统调用
 /// startaddr:usize size:长度
 pub fn sys_munmap(start: usize, size: usize) -> isize {
@@ -1553,7 +1549,6 @@ pub fn sys_read(fd_target: usize, source_buffer: usize, buffer_len: usize) -> is
         let first = pt
             .translate(VirAddr(source_buffer))
             .map(|pa| unsafe { *(pa.0 as *const u8) });
- 
     }
 
     read_len as isize

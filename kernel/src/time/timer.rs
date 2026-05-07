@@ -10,7 +10,7 @@
 
 // 毫秒常量，用于时间单位转换
 const MSEC: usize = 1000;
-const MNS:  usize = 1_000_000_000;
+const MNS: usize = 1_000_000_000;
 use crate::arch::time::*;
 use crate::config::{CPU_CIRCLE, TIME_FREQUENT};
 use crate::set_next_timetriger;
@@ -42,7 +42,7 @@ pub fn get_time_us() -> usize {
 }
 
 /// tick → 纳秒转换。
-pub fn get_time_ns()->usize{
+pub fn get_time_ns() -> usize {
     let current = (read_time() * MNS) / CPU_CIRCLE;
     current
 }

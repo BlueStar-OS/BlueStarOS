@@ -1,8 +1,16 @@
 use crate::arch::memory::*;
+use crate::error::BlueErr;
+use crate::error::BlueErr::*;
 use crate::fs::vfs::File;
+use crate::sync::UPSafeCell;
 use crate::task::getapp_kernel_sapce;
 use crate::task::TaskManagerInner;
 use crate::task::{file_loader, TASK_MANAER};
+use crate::IRPG_OFFSET;
+use crate::{
+    config::*,
+    memory::{alloc_frame, frame_allocator::FramTracker},
+};
 use alloc::collections::btree_map::BTreeMap;
 use alloc::sync::Arc;
 use alloc::sync::Weak;
@@ -11,17 +19,9 @@ use bitflags::bitflags;
 use core::arch::asm;
 use core::cell::RefMut;
 use core::hint;
+use lazy_static::lazy_static;
 use log::warn;
 use log::{debug, error, trace};
-use crate::error::BlueErr::*;
-use crate::error::BlueErr;
-use crate::IRPG_OFFSET;
-use crate::sync::UPSafeCell;
-use crate::{
-    config::*,
-    memory::{alloc_frame, frame_allocator::FramTracker},
-};
-use lazy_static::lazy_static;
 
 ///开始和结束，一个范围,自动[start,end] start地址自动向下取整，end也向下取整，因为virnumrange用于代码映射，防止代码缺失, startva/PAGE =num+offset ,从num开始，endva/pagesize=endva+offset由于闭区间所以向下取整,防止多映射
 #[derive(Debug, Clone, Copy)]
@@ -499,7 +499,6 @@ impl MapArea {
         // 解构出：页内偏移量(如0x40) 和 源数据切片
         let (mut page_offset, src_data) = data.unwrap();
 
-
         // 先把range全部清0 bss等
         self.range.clone().into_iter().for_each(|vpn| {
             table.get_mut_byte(vpn).expect("Cant get mut slice").fill(0);
@@ -796,7 +795,7 @@ impl MapSet {
         fd_backing: Option<Arc<dyn File>>,
     ) -> isize {
         if len == 0 {
-            warn!("memset::mmap: FAIL , addr: {:#x} len:{:#x} ",addr.0,len);
+            warn!("memset::mmap: FAIL , addr: {:#x} len:{:#x} ", addr.0, len);
             return BlueErr::EINVAL.as_isize();
         }
 
@@ -1034,12 +1033,11 @@ impl MapSet {
         if size == 0 {
             debug!(
                 "memset::unmap_range: FAIL start_va=0x{:x}, size=0x{:x}, reason=size_is_zero",
-                startVAR.0,
-                size
+                startVAR.0, size
             );
             return BlueErr::EINVAL.as_isize();
         }
-        
+
         let start_vpn: VirNumber = startVAR.floor_down();
         let end_vpn: VirNumber =
             VirAddr(startVAR.0.saturating_add(size).saturating_sub(1)).floor_down();
@@ -1055,9 +1053,10 @@ impl MapSet {
             return BlueErr::EINVAL.as_isize();
         }
 
-        let none_touches = self.areas.iter().all(|area| {
-            area.range.is_contain_thisvpnRange(range).is_empty()
-        });
+        let none_touches = self
+            .areas
+            .iter()
+            .all(|area| area.range.is_contain_thisvpnRange(range).is_empty());
         if none_touches {
             debug!(
                 "memset::unmap_range: FAIL start_va=0x{:x}, size=0x{:x}, range={:?}, reason=none_touches_area",
@@ -1167,7 +1166,10 @@ impl MapSet {
         let prot = match MmapProt::from_bits(prot) {
             Some(p) => p,
             None => {
-                debug!("memset::mprotect_range: FAIL invalid prot bits 0x{:x}", prot);
+                debug!(
+                    "memset::mprotect_range: FAIL invalid prot bits 0x{:x}",
+                    prot
+                );
                 return BlueErr::EINVAL.as_isize();
             }
         };
@@ -1243,9 +1245,21 @@ impl MapSet {
             "memset::mprotect_range: OK range(0x{:x}-0x{:x}) -> {}{}{}",
             start_va.0,
             start_va.0.saturating_add(len),
-            if prot.contains(MmapProt::READ) { 'r' } else { '-' },
-            if prot.contains(MmapProt::WRITE) { 'w' } else { '-' },
-            if prot.contains(MmapProt::EXEC) { 'x' } else { '-' },
+            if prot.contains(MmapProt::READ) {
+                'r'
+            } else {
+                '-'
+            },
+            if prot.contains(MmapProt::WRITE) {
+                'w'
+            } else {
+                '-'
+            },
+            if prot.contains(MmapProt::EXEC) {
+                'x'
+            } else {
+                '-'
+            },
         );
         0
     }
@@ -1337,7 +1351,7 @@ impl MapSet {
         let ph_count = elf_header.pt2.ph_count();
         let mut max_end_vpn = VirNumber(0); //为elf结尾所在段+1
         let entry_point = elf.header.pt2.entry_point();
-       
+
         for i in 0..ph_count {
             let ph = elf.program_header(i).unwrap();
             if ph.get_type().unwrap() == xmas_elf::program::Type::Load {
@@ -1354,8 +1368,6 @@ impl MapSet {
                 if ph_flags.is_execute() {
                     map_perm |= MapAreaFlags::X;
                 }
-
-              
 
                 max_end_vpn = end_va.floor_up();
 
@@ -1381,7 +1393,7 @@ impl MapSet {
         let userstack_start_vpn = VirNumber(max_end_vpn.0 + 1); //留guradpage
         let userstack_end_vpn = VirNumber(userstack_start_vpn.0 + 1);
         let user_sp: VirAddr = VirAddr(userstack_end_vpn.0 * PAGE_SIZE + PAGE_SIZE); //因为结尾不包含，属于下一个页面
-       
+
         memory_set.add_area(
             VirNumRange(userstack_start_vpn, userstack_end_vpn),
             MapType::Maped,

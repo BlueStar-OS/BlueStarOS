@@ -26,8 +26,9 @@ QEMU_DEVICE_ARGS = \
 	-net none \
 	-device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0 \
 	-device virtio-blk-device,drive=x1,bus=virtio-mmio-bus.2 \
-	-device virtio-gpu-device,bus=virtio-mmio-bus.1
-
+	-device virtio-gpu-device,bus=virtio-mmio-bus.1 \
+	-device pcie-root-port,id=my_port \
+	-device edu,dma_mask=0x0ffffff,bus=my_port
 
 else ifeq ($(ARCH), aarch64)
 TARGET := aarch64-unknown-none-softfloat
@@ -48,6 +49,8 @@ QEMU_DEVICE_ARGS = \
 	-net none \
 	-device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0 \
 	-device virtio-gpu-device,bus=virtio-mmio-bus.1 \
+	#pcie 总线设备
+	-device edu,dma_mask=mask,bus=pci.0
 
 
 else

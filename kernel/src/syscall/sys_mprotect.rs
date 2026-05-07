@@ -1,11 +1,11 @@
 use log::error;
 
 use crate::arch::memory::VirAddr;
+use crate::debug;
 use crate::error::BlueErr::EINVAL;
 use crate::memory::MmapProt;
 use crate::task::TASK_MANAER;
 use crate::PAGE_SIZE;
-use crate::debug;
 /// mprotect 系统调用：修改 [addr, addr+len) 地址范围的访问权限
 ///
 /// ## 参数

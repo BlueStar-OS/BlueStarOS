@@ -3,9 +3,9 @@
 
 use crate::config::MB;
 use crate::sync::UPSafeCell;
+use crate::PAGE_SIZE;
 use alloc::vec::Vec;
 use lazy_static::lazy_static;
-use crate::PAGE_SIZE;
 /// 一段物理内存区域（物理地址）
 #[derive(Debug, Clone, Copy)]
 pub struct PhysMemoryRange {
@@ -17,7 +17,7 @@ pub struct PhysMemoryRange {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct IRPG_OFFSET(usize);
 impl IRPG_OFFSET {
-    pub fn new(off:usize)->Self{
+    pub fn new(off: usize) -> Self {
         if off < 0 || off >= PAGE_SIZE {
             panic!("Invalid page offset: {:#x}", off);
         }
@@ -27,9 +27,7 @@ impl IRPG_OFFSET {
     pub fn raw(&self) -> usize {
         self.0
     }
-
 }
-
 
 impl PhysMemoryRange {
     pub fn size(&self) -> usize {

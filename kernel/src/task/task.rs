@@ -41,30 +41,30 @@ pub static mut TASK_MANAGER_INIT: bool = false;
 // 参考：linux/include/uapi/linux/auxvec.h
 const AUX_ENTRY_SIZE: usize = size_of::<usize>() * 2;
 
-const AT_NULL: usize = 0;   // auxv 终止符                         [✅ 已实现]
+const AT_NULL: usize = 0; // auxv 终止符                         [✅ 已实现]
 const AT_IGNORE: usize = 1; // 忽略的条目                          [占位 0]
 const AT_EXECFD: usize = 2; // 废弃（原 exec 的 fd）               [占位 0]
-const AT_PHDR: usize = 3;   // 程序头表虚拟地址                    [✅ 已实现]
-const AT_PHENT: usize = 4;  // 程序头表单项大小                    [✅ 已实现]
-const AT_PHNUM: usize = 5;  // 程序头表项数                        [✅ 已实现]
+const AT_PHDR: usize = 3; // 程序头表虚拟地址                    [✅ 已实现]
+const AT_PHENT: usize = 4; // 程序头表单项大小                    [✅ 已实现]
+const AT_PHNUM: usize = 5; // 程序头表项数                        [✅ 已实现]
 const AT_PAGESZ: usize = 6; // 系统页大小                          [✅ 已实现]
-const AT_BASE: usize = 7;   // 动态链接器基址（静态链接则为 0）    [✅ PIE 前 = 0]
-const AT_FLAGS: usize = 8;  // 平台标志                            [占位 0]
-const AT_ENTRY: usize = 9;  // 程序入口                            [✅ 已实现]
-const AT_NOTELF: usize = 10;// 内核标记：非 ELF 格式               [占位 0]
-const AT_UID: usize = 11;   // 真实 UID                            [TODO 无多用户]
-const AT_EUID: usize = 12;  // 有效 UID                            [TODO 无多用户]
-const AT_GID: usize = 13;   // 真实 GID                            [TODO 无多用户]
-const AT_EGID: usize = 14;  // 有效 GID                            [TODO 无多用户]
-const AT_PLATFORM: usize = 15;   // CPU 型号字符串指针             [TODO 无多用户]
-const AT_HWCAP: usize = 16;      // RISC-V ISA 扩展位掩码          [TODO 无多用户]
-const AT_CLKTCK: usize = 17;     // times() 用 ticks/sec            [✅ 已实现 = 100]
-const AT_SECURE: usize = 23;     // setuid 安全模式标志             [✅ 已实现 = 0]
-const AT_BASE_PLATFORM: usize = 24;  // 平台字符串                 [占位 0]
-const AT_RANDOM: usize = 25;     // 16 字节随机数地址（栈 canary） [TODO 无多用户]
-const AT_HWCAP2: usize = 26;     // RISC-V 不使用                  [占位 0]
-const AT_EXECFN: usize = 31;     // 可执行文件名字符串指针          [TODO 无多用户]
-const AT_SYSINFO_EHDR: usize = 33;   // vDSO ELF 头地址            [✅ 已实现 = 0，无 vDSO]
+const AT_BASE: usize = 7; // 动态链接器基址（静态链接则为 0）    [✅ PIE 前 = 0]
+const AT_FLAGS: usize = 8; // 平台标志                            [占位 0]
+const AT_ENTRY: usize = 9; // 程序入口                            [✅ 已实现]
+const AT_NOTELF: usize = 10; // 内核标记：非 ELF 格式               [占位 0]
+const AT_UID: usize = 11; // 真实 UID                            [TODO 无多用户]
+const AT_EUID: usize = 12; // 有效 UID                            [TODO 无多用户]
+const AT_GID: usize = 13; // 真实 GID                            [TODO 无多用户]
+const AT_EGID: usize = 14; // 有效 GID                            [TODO 无多用户]
+const AT_PLATFORM: usize = 15; // CPU 型号字符串指针             [TODO 无多用户]
+const AT_HWCAP: usize = 16; // RISC-V ISA 扩展位掩码          [TODO 无多用户]
+const AT_CLKTCK: usize = 17; // times() 用 ticks/sec            [✅ 已实现 = 100]
+const AT_SECURE: usize = 23; // setuid 安全模式标志             [✅ 已实现 = 0]
+const AT_BASE_PLATFORM: usize = 24; // 平台字符串                 [占位 0]
+const AT_RANDOM: usize = 25; // 16 字节随机数地址（栈 canary） [TODO 无多用户]
+const AT_HWCAP2: usize = 26; // RISC-V 不使用                  [占位 0]
+const AT_EXECFN: usize = 31; // 可执行文件名字符串指针          [TODO 无多用户]
+const AT_SYSINFO_EHDR: usize = 33; // vDSO ELF 头地址            [✅ 已实现 = 0，无 vDSO]
 
 #[repr(C)]
 struct AuxKey(usize);
@@ -94,7 +94,6 @@ fn build_auxv(elf_data: &[u8], elf_entry: usize) -> Vec<AuxEntry> {
     let ph_offset = ehdr.pt2.ph_offset() as usize;
     let phdr_end = ph_offset + ph_count * ph_entry_size;
 
-
     // AT_PHDR = base + ph_offset，base = 第一个覆盖 PHDR 的 LOAD 段虚拟基址
     // 如果没有 LOAD 段覆盖 PHDR 表，at_phdr 保持 0（musl/glibc 会跳过 PHDR 逻辑）
     let mut at_phdr = 0;
@@ -110,36 +109,37 @@ fn build_auxv(elf_data: &[u8], elf_entry: usize) -> Vec<AuxEntry> {
             at_phdr = base.wrapping_add(ph_offset);
             break;
         }
-
     }
     if at_phdr == 0 {
-        warn!("auxv: PHDR table (off=0x{:x}, end=0x{:x}) not covered by any LOAD segment, AT_PHDR=0",
-            ph_offset, phdr_end);
+        warn!(
+            "auxv: PHDR table (off=0x{:x}, end=0x{:x}) not covered by any LOAD segment, AT_PHDR=0",
+            ph_offset, phdr_end
+        );
     }
 
     vec![
         // ── 进程基础信息 ──
-        AuxEntry::new(AuxKey(AT_PAGESZ), AuxValue(PAGE_SIZE)),        // ✅ 系统页大小
-        AuxEntry::new(AuxKey(AT_PHDR),   AuxValue(at_phdr)),          // ✅ 程序头表地址
-        AuxEntry::new(AuxKey(AT_PHENT),  AuxValue(ph_entry_size)),   // ✅ 程序头表项大小
-        AuxEntry::new(AuxKey(AT_PHNUM),  AuxValue(ph_count)),         // ✅ 程序头表项数
-        AuxEntry::new(AuxKey(AT_ENTRY),  AuxValue(elf_entry)),        // ✅ 入口地址
-        AuxEntry::new(AuxKey(AT_BASE),   AuxValue(0)),                // 动态链接器基址（静态链接 = 0）
+        AuxEntry::new(AuxKey(AT_PAGESZ), AuxValue(PAGE_SIZE)), // ✅ 系统页大小
+        AuxEntry::new(AuxKey(AT_PHDR), AuxValue(at_phdr)),     // ✅ 程序头表地址
+        AuxEntry::new(AuxKey(AT_PHENT), AuxValue(ph_entry_size)), // ✅ 程序头表项大小
+        AuxEntry::new(AuxKey(AT_PHNUM), AuxValue(ph_count)),   // ✅ 程序头表项数
+        AuxEntry::new(AuxKey(AT_ENTRY), AuxValue(elf_entry)),  // ✅ 入口地址
+        AuxEntry::new(AuxKey(AT_BASE), AuxValue(0)),           // 动态链接器基址（静态链接 = 0）
         // ── 时钟与安全 ──
-        AuxEntry::new(AuxKey(AT_CLKTCK), AuxValue(TIME_FREQUENT)),    // ✅ times() ticks/sec (=100)
-        AuxEntry::new(AuxKey(AT_SECURE), AuxValue(0)),                // setuid 安全模式（无多用户 = 0）
+        AuxEntry::new(AuxKey(AT_CLKTCK), AuxValue(TIME_FREQUENT)), // ✅ times() ticks/sec (=100)
+        AuxEntry::new(AuxKey(AT_SECURE), AuxValue(0)), // setuid 安全模式（无多用户 = 0）
         // ── RISC-V 硬件能力 ──
-        AuxEntry::new(AuxKey(AT_HWCAP),  AuxValue(0)),                // TODO: RISC-V ISA 扩展位掩码
+        AuxEntry::new(AuxKey(AT_HWCAP), AuxValue(0)), // TODO: RISC-V ISA 扩展位掩码
         // ── 随机性与 vDSO ──
-        AuxEntry::new(AuxKey(AT_RANDOM), AuxValue(0)),                // TODO: 16 字节随机数（栈 canary），musl 回退用 sp
-        AuxEntry::new(AuxKey(AT_SYSINFO_EHDR), AuxValue(0)),          // vDSO ELF 头地址（暂无 vDSO）
+        AuxEntry::new(AuxKey(AT_RANDOM), AuxValue(0)), // TODO: 16 字节随机数（栈 canary），musl 回退用 sp
+        AuxEntry::new(AuxKey(AT_SYSINFO_EHDR), AuxValue(0)), // vDSO ELF 头地址（暂无 vDSO）
         // ── UID/GID（无多用户 = 全 root） ──
-        AuxEntry::new(AuxKey(AT_UID),  AuxValue(0)),                  // TODO: 真实 UID
-        AuxEntry::new(AuxKey(AT_EUID), AuxValue(0)),                  // TODO: 有效 UID
-        AuxEntry::new(AuxKey(AT_GID),  AuxValue(0)),                  // TODO: 真实 GID
-        AuxEntry::new(AuxKey(AT_EGID), AuxValue(0)),                  // TODO: 有效 GID
+        AuxEntry::new(AuxKey(AT_UID), AuxValue(0)), // TODO: 真实 UID
+        AuxEntry::new(AuxKey(AT_EUID), AuxValue(0)), // TODO: 有效 UID
+        AuxEntry::new(AuxKey(AT_GID), AuxValue(0)), // TODO: 真实 GID
+        AuxEntry::new(AuxKey(AT_EGID), AuxValue(0)), // TODO: 有效 GID
         // ── 终止符（musl 解析到此停止） ──
-        AuxEntry::new(AuxKey(AT_NULL),  AuxValue(0)),
+        AuxEntry::new(AuxKey(AT_NULL), AuxValue(0)),
     ]
 }
 
@@ -237,7 +237,7 @@ impl TaskControlBlock {
         (x + align - 1) & !(align - 1)
     }
 
-    /// 
+    ///
     fn align_slice(sli: &mut Vec<u8>, aligns: usize, sp: &mut usize) {
         while *sp % aligns != 0 {
             sli[*sp] = 0;
@@ -291,7 +291,6 @@ impl TaskControlBlock {
         base_blob[0..base_offset].copy_from_slice(&argv.len().to_le_bytes());
         Self::align_slice(&mut base_blob, usize_size, &mut base_offset);
 
-
         // write str pointer
         for arg in argv.iter() {
             let mut real_arg = arg.clone();
@@ -312,10 +311,7 @@ impl TaskControlBlock {
         base_offset += usize_size * 2;
         // write auxv：通过指针转换将 &[AuxEntry] 视为 &[u8]
         let auxv_raw: &[u8] = unsafe {
-            core::slice::from_raw_parts(
-                auxv.as_ptr() as *const u8,
-                auxv.len() * AUX_ENTRY_SIZE,
-            )
+            core::slice::from_raw_parts(auxv.as_ptr() as *const u8, auxv.len() * AUX_ENTRY_SIZE)
         };
         base_blob[base_offset..base_offset + auxv_raw.len()].copy_from_slice(auxv_raw);
         base_offset += auxv_raw.len();
@@ -438,15 +434,10 @@ impl TaskControlBlock {
         let auxv = build_auxv(elf_data, elf_entry as usize);
         let new_user_sp = Self::push_args_to_user_stack(user_satp, user_sp.0, &argv, &auxv);
 
-
         self.memory_set = memset; //释放旧的全复制地址空间
 
         self.task_context = task_cx;
         self.trap_context_ppn = trap_cx_ppn.0;
-
-
-
-
 
         let trap_cx_point: *mut TrapContext = (trap_cx_ppn.0 * PAGE_SIZE) as *mut TrapContext;
         unsafe {
@@ -1000,7 +991,6 @@ impl TaskManager {
                 }
             }
         }
-
 
         //如果切换到同一个任务，直接返回 _switch耗费上下文资源
         //这可以防止在持有用户态锁时发生任务切换导致的死锁问题（全局锁）

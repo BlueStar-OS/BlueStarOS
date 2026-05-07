@@ -69,10 +69,7 @@ impl BLOCKDEVFILE {
     /// `lineer_info.start_lba` 为 0 时表示从设备起始地址开始
     ///（整盘设备节点如 `/dev/vda`）；非零时表示一个分区或
     /// dm-linear 卷（如 `/dev/vda1`、`/dev/my_vg/my_lv`）。
-    pub fn new(
-        blockdevice: Arc<Mutex<dyn BlockDevTrait>>,
-        lineer_info: DmlinerEntry,
-    ) -> Self {
+    pub fn new(blockdevice: Arc<Mutex<dyn BlockDevTrait>>, lineer_info: DmlinerEntry) -> Self {
         Self {
             blockdevice,
             lineer_info,
@@ -138,8 +135,7 @@ impl File for BLOCKDEVFILE {
             let mut sector: [u8; SECTOR_SIZE] = [0; SECTOR_SIZE];
             self.blockdevice.lock().read_block(lba, &mut sector)?;
 
-            buf[written..written + to_copy]
-                .copy_from_slice(&sector[in_off..in_off + to_copy]);
+            buf[written..written + to_copy].copy_from_slice(&sector[in_off..in_off + to_copy]);
             written += to_copy;
             remaining -= to_copy;
         }
@@ -195,8 +191,7 @@ impl File for BLOCKDEVFILE {
                 self.blockdevice.lock().read_block(lba, &mut sector)?;
             }
 
-            sector[in_off..in_off + to_copy]
-                .copy_from_slice(&buf[read_pos..read_pos + to_copy]);
+            sector[in_off..in_off + to_copy].copy_from_slice(&buf[read_pos..read_pos + to_copy]);
             self.blockdevice.lock().write_block(lba, &sector)?;
 
             read_pos += to_copy;
