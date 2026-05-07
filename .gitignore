@@ -9,6 +9,6 @@ tmp
 .claude
 other/
 .gitnexus
-
+*.bin
 AGENTS.md
 CLAUDE.md
