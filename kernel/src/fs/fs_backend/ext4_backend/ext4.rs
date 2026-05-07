@@ -60,7 +60,7 @@ impl File for Ext4File {
         let data = self.with_ext4_mut(|ext4| {
             let fs_inner = ext4.fs.as_mut().ok_or(VfsFsError::IO)?;
             let mut of = self.of.lock();
-            ext4_read_at(&mut ext4.dev, fs_inner, &mut *of, buf.len()).map_err(|_| VfsFsError::IO)
+            ext4_read_at(&mut ext4.dev, fs_inner, &mut of, buf.len()).map_err(|_| VfsFsError::IO)
         })?;
         let n = core::cmp::min(buf.len(), data.len());
         buf[..n].copy_from_slice(&data[..n]);
@@ -75,10 +75,10 @@ impl File for Ext4File {
             let fs_inner = ext4.fs.as_mut().ok_or(VfsFsError::IO)?;
             let mut of = self.of.lock();
             if self.flags.contains(OpenFlags::APPEND) {
-                let end = of.inode.size() as u64;
-                ext4_lseek(&mut *of, end).map_err(|_| VfsFsError::IO)?;
+                let end = of.inode.size();
+                ext4_lseek(&mut of, end).map_err(|_| VfsFsError::IO)?;
             }
-            ext4_write_at(&mut ext4.dev, fs_inner, &mut *of, buf).map_err(|_| VfsFsError::IO)?;
+            ext4_write_at(&mut ext4.dev, fs_inner, &mut of, buf).map_err(|_| VfsFsError::IO)?;
             Ok(buf.len())
         })
     }
@@ -90,8 +90,8 @@ impl File for Ext4File {
         let data = self.with_ext4_mut(|ext4| {
             let fs_inner = ext4.fs.as_mut().ok_or(VfsFsError::IO)?;
             let mut of = self.of.lock();
-            ext4_lseek(&mut *of, offset as u64).map_err(|_| VfsFsError::IO)?;
-            ext4_read_at(&mut ext4.dev, fs_inner, &mut *of, buf.len()).map_err(|_| VfsFsError::IO)
+            ext4_lseek(&mut of, offset as u64).map_err(|_| VfsFsError::IO)?;
+            ext4_read_at(&mut ext4.dev, fs_inner, &mut of, buf.len()).map_err(|_| VfsFsError::IO)
         })?;
         let n = core::cmp::min(buf.len(), data.len());
         buf[..n].copy_from_slice(&data[..n]);
@@ -105,8 +105,8 @@ impl File for Ext4File {
         self.with_ext4_mut(|ext4| {
             let fs_inner = ext4.fs.as_mut().ok_or(VfsFsError::IO)?;
             let mut of = self.of.lock();
-            ext4_lseek(&mut *of, offset as u64).map_err(|_| VfsFsError::IO)?;
-            ext4_write_at(&mut ext4.dev, fs_inner, &mut *of, buf).map_err(|_| VfsFsError::IO)?;
+            ext4_lseek(&mut of, offset as u64).map_err(|_| VfsFsError::IO)?;
+            ext4_write_at(&mut ext4.dev, fs_inner, &mut of, buf).map_err(|_| VfsFsError::IO)?;
             Ok(buf.len())
         })
     }
@@ -127,7 +127,7 @@ impl File for Ext4File {
         if new_off < 0 {
             return Err(VfsFsError::NotSupported);
         }
-        ext4_lseek(&mut *of, new_off as u64).map_err(|_| VfsFsError::IO)?;
+        ext4_lseek(&mut of, new_off as u64).map_err(|_| VfsFsError::IO)?;
         Ok(of.offset as usize)
     }
 

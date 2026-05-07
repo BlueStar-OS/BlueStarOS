@@ -3,11 +3,9 @@ use crate::arch::{disable_irq, enable_irq, wait_for_interrupt};
 use crate::disable_timer_interrupt;
 use crate::enable_timer_interrupt;
 use crate::fs::vfs::{File, OpenFlags, VfsFsError};
-use crate::info;
 use crate::task::TASK_MANAER;
 use alloc::sync::Arc;
 use core::fmt::{self, Write};
-use log::{error, warn};
 pub const FD_TYPE_STDIN: usize = 0;
 pub const FD_TYPE_STDOUT: usize = 1;
 pub const FD_TYPE_STDERR: usize = 2;
@@ -85,7 +83,7 @@ impl File for Stdin {
                 TASK_MANAER.suspend_and_run_task();
                 cha = Self::get_char();
             }
-            *slot = cha as u8;
+            *slot = cha;
             read_count += 1;
             if *slot == 13 {
                 break;
@@ -106,10 +104,10 @@ impl File for Stderr {
 
     fn write(&self, buf: &[u8]) -> Result<usize, VfsFsError> {
         for &b in b"<3>" {
-            uart::putc(b as u8);
+            uart::putc(b);
         }
         for &byte in buf {
-            uart::putc(byte as u8);
+            uart::putc(byte);
         }
         Ok(buf.len())
     }

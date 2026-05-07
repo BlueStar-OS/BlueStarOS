@@ -23,10 +23,7 @@ use riscv::register::sstatus;
 use riscv::register::stvec;
 use riscv::register::utvec::TrapMode;
 
-pub use sbi::*;
-pub use task::TaskContext;
-pub use task::__switch;
-pub use trap::{app_entry_point, kernel_mode_trap_handler, kernel_trap_handler, TrapContext};
+pub use trap::{kernel_trap_handler, TrapContext};
 
 extern "C" {
     fn __kernel_mode_trap();
@@ -48,7 +45,7 @@ pub fn arch_init() {
     logger::init();
     kprintln!("Logger inited");
     kprintln!("Inital Physical Memory Alloctor");
-    init_frame_allocator_from_dtb(ekernel as usize);
+    init_frame_allocator_from_dtb(ekernel as *const () as usize);
     dtb::run_device_probes();
     kernel_info_debug();
 
@@ -69,14 +66,14 @@ pub fn arch_init() {
 
 pub fn set_kernel_trap_handler() {
     unsafe {
-        let trap_entry = TRAP_BOTTOM_ADDR as usize;
+        let trap_entry = TRAP_BOTTOM_ADDR;
         stvec::write(trap_entry, TrapMode::Direct);
     }
 }
 
 pub fn set_kernel_trap() {
     unsafe {
-        stvec::write(__kernel_mode_trap as usize, TrapMode::Direct);
+        stvec::write(__kernel_mode_trap as *const () as usize, TrapMode::Direct);
     }
 }
 

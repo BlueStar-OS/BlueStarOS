@@ -22,8 +22,8 @@ impl TaskContext {
             fn app_entry_point();
         }
         TaskContext {
-            ra: app_entry_point as usize,
-            kernel_sp: kernel_sp,
+            ra: app_entry_point as *const () as usize,
+            kernel_sp,
             calleed_register: [0; 12],
         }
     }

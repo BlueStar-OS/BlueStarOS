@@ -38,8 +38,8 @@ pub const BAR_MEM_ADDR_MASK: u32 = 0xFFFF_FFF0;
 pub const BAR_ATTR_MASK: u32 = 0xF;
 
 // 用于判断 64 位 BAR 的组合条件：(mem_type == 0b10) << 1
-const BAR_64BIT_CHECK_MASK: u32 = (BAR_MEM_TYPE_MASK << BAR_MEM_TYPE_SHIFT);
-const BAR_64BIT_CHECK_VALUE: u32 = (BAR_MEM_TYPE_64BIT << BAR_MEM_TYPE_SHIFT);
+const BAR_64BIT_CHECK_MASK: u32 = BAR_MEM_TYPE_MASK << BAR_MEM_TYPE_SHIFT ;
+const BAR_64BIT_CHECK_VALUE: u32 = BAR_MEM_TYPE_64BIT << BAR_MEM_TYPE_SHIFT ;
 
 // ─── BAR 尺寸探测常量 ───────────────────────────────────────────────
 

@@ -18,7 +18,7 @@ static mut SYMBOL_SLICE: Option<&'static [Sym]> = None;
 /// 解析符号文本，返回静态符号数组。只在首次 backtrace 时调用一次。
 fn parse_symbols() -> &'static [Sym] {
     unsafe {
-        if let Some(ref syms) = SYMBOL_SLICE {
+        if let Some(syms) = SYMBOL_SLICE {
             return syms;
         }
     }

@@ -11,7 +11,7 @@ use crate::time::set_next_timeInterupt;
 use crate::trap::pagefaultHandler::PageFaultHandler;
 use crate::trap::recycle_pending_kstacks;
 use core::arch::asm;
-use log::{debug, error, warn};
+use log::{error, warn};
 use riscv::register::satp;
 use riscv::register::scause::Interrupt;
 use riscv::register::{
@@ -41,7 +41,7 @@ fn log_user_fault_detail(tag: &str) {
 pub extern "C" fn app_entry_point() {
     set_kernel_trap_handler();
     let user_satp = TASK_MANAER.get_current_stap();
-    let restore_va = __kernel_refume as usize - __kernel_trap as usize + TRAP_BOTTOM_ADDR;
+    let restore_va = __kernel_refume as *const () as usize - __kernel_trap as *const () as usize + TRAP_BOTTOM_ADDR;
     unsafe {
         asm!(
             "fence.i",

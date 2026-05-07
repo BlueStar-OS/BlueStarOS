@@ -66,8 +66,8 @@ impl RootFs {
         }
 
         let parts = parsing_mbr_partition(mbr);
-        let mbr_ok = parts.as_ref().map_or(false, |v| !v.is_empty());
-        let is_protective_mbr = parts.as_ref().map_or(false, |entries| {
+        let mbr_ok = parts.as_ref().is_ok_and(|v| !v.is_empty());
+        let is_protective_mbr = parts.as_ref().is_ok_and(|entries| {
             !entries.is_empty()
                 && entries.iter().all(|entry| {
                     matches!(
@@ -120,7 +120,7 @@ impl RootFs {
         );
 
         let entries_bytes = num_entries as usize * entry_size as usize;
-        let entry_sectors = (entries_bytes + SECTOR_SIZE - 1) / SECTOR_SIZE;
+        let entry_sectors = entries_bytes.div_ceil(SECTOR_SIZE);
         let mut entry_buf = alloc::vec![0u8; entry_sectors * SECTOR_SIZE];
         for s in 0..entry_sectors {
             if let Err(err) = blk.lock().read_block(

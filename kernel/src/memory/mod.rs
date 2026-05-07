@@ -1,5 +1,4 @@
 use alloc::vec::Vec;
-use log::trace;
 
 mod frame_allocator;
 pub mod memorymodel;

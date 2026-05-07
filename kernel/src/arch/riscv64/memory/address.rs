@@ -77,7 +77,7 @@ impl VirNumber {
     ///自身vpn+1
     pub fn step(&mut self) -> Self {
         self.0 += 1;
-        self.clone()
+        *self
     }
 }
 
@@ -85,7 +85,7 @@ impl VirAddr {
     ///向上对齐到页面
     pub fn floor_up(&self) -> VirNumber {
         let addr = self.0;
-        VirNumber((addr + PAGE_SIZE - 1) / PAGE_SIZE) //绝对正确对齐
+        VirNumber(addr.div_ceil(PAGE_SIZE)) //绝对正确对齐
     }
     ///向下对齐到页面
     pub fn floor_down(&self) -> VirNumber {
@@ -97,7 +97,7 @@ impl VirAddr {
     }
     ///不裁剪对齐转化 要求地址必须对齐
     pub fn strict_into_virnum(&self) -> VirNumber {
-        if self.0 % PAGE_SIZE != 0 {
+        if !self.0.is_multiple_of(PAGE_SIZE) {
             panic!("strict_into_virnum Filed!!");
         }
         VirNumber(self.0 / PAGE_SIZE)
@@ -108,7 +108,7 @@ impl PhysiAddr {
     ///向上对齐到页面
     pub fn floor_up(&self) -> PhysiNumber {
         let addr = self.0;
-        PhysiNumber((addr + PAGE_SIZE - 1) / PAGE_SIZE) //绝对正确对齐
+        PhysiNumber(addr.div_ceil(PAGE_SIZE)) //绝对正确对齐
     }
     ///向下对齐页面
     pub fn floor_down(&self) -> PhysiNumber {
@@ -151,7 +151,7 @@ impl PageTableEntry {
         unsafe {
             riscv::asm::sfence_vma_all();
         }
-        return re;
+        re
     }
     ///设置页表项不合法
     pub fn set_inValid(&mut self) {
@@ -175,7 +175,7 @@ impl PageTableEntry {
 
 impl PageTable {
     pub fn new() -> Self {
-        let mut root_frame = alloc_frame().expect("failed to alloc frame for page table");
+        let root_frame = alloc_frame().expect("failed to alloc frame for page table");
         PageTable {
             root_ppn: PhysiNumber(root_frame.ppn.0),
             entries: vec![root_frame], //把根页面挂下面 正确，获取所有权
@@ -185,11 +185,11 @@ impl PageTable {
     ///获取内核地址空间的页表视图 只能由内核调用
     pub fn get_kernel_table_layer() -> PageTable {
         let satp = satp::read().bits();
-        let table = PageTable {
+        
+        PageTable {
             root_ppn: PhysiNumber(satp & ((1usize << 44) - 1)),
             entries: Vec::new(),
-        };
-        table
+        }
     }
 
     ///根据起始虚拟地址，从satp和vpn和len获取可变的u8数组
@@ -209,10 +209,10 @@ impl PageTable {
             // 获取当前地址所在的页
             let start_vpn = start_addr.floor_down();
             let source_slice = table
-                .get_mut_byte(start_vpn.into())
+                .get_mut_byte(start_vpn)
                 .expect("Get VPN to RealAddr failed");
             // 计算当前页的结束地址
-            let mut page_end_addr: VirAddr = VirNumber(start_vpn.0 + 1).into();
+            let page_end_addr: VirAddr = VirNumber(start_vpn.0 + 1).into();
             // 取当前页结束地址和总结束地址的最小值
             let real_end_addr = page_end_addr.min(end_addr);
 
@@ -251,11 +251,11 @@ impl PageTable {
 
     ///从给定的satp中创建临时新页表 临时使用物理ppn为粗略提取
     pub fn crate_table_from_satp(satp: usize) -> Self {
-        let table = PageTable {
+        
+        PageTable {
             root_ppn: PhysiNumber(satp & ((1usize << 44) - 1)),
             entries: Vec::new(),
-        };
-        table
+        }
     }
 
     ///根据vpn获取该页的可变数组切片,获取从物理页开头的地址切片
@@ -290,7 +290,7 @@ impl PageTable {
     pub fn translate_byvpn(&mut self, vpn: VirNumber) -> Option<PhysiNumber> {
         //使用编译器屏障，防止优化内存访问重新排序
         compiler_fence(Ordering::SeqCst);
-        match self.find_pte_vpn(vpn.into()) {
+        match self.find_pte_vpn(vpn) {
             Some(pte) => {
                 let ppn = pte.ppn();
 

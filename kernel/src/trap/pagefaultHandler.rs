@@ -1,16 +1,9 @@
 use log::{debug, error, warn};
 
 use crate::arch::memory::*;
-use crate::{memory::VirNumRange, task::TASK_MANAER};
+use crate::task::TASK_MANAER;
 use riscv::register::scause::Scause;
-use riscv::register::{
-    scause::{self, Exception, Trap},
-    sie::Sie,
-    sscratch,
-    sstatus::{self, Sstatus, SPP},
-    stval, stvec,
-    utvec::TrapMode,
-};
+use riscv::register::scause::{Exception, Trap};
 
 ///专门处理非虚拟化环境下的PAGEFAULT exception
 ///faultVAddr发生fault时被操作的addr
@@ -25,7 +18,7 @@ pub fn PageFaultHandler(faultVAddr: VirAddr, cause: Scause) {
     match &mut map_layer.find_pte_vpn(contain_vpn) {
         Some(pte) => {
             // 仅仅是路通
-            if pte.is_valid() {}
+            pte.is_valid();
 
             // 非法pagefault排除 补AD位 合理非法缺页（mmap并不会设置valid），其它非法
 

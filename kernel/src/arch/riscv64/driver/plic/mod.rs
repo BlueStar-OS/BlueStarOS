@@ -4,7 +4,6 @@
 use crate::arch::memory::*;
 use crate::dtb::DeviceNode;
 use crate::dtb_probe;
-use crate::info;
 use crate::kprintln;
 use crate::register_kernel_mmio;
 use crate::MapAreaFlags;

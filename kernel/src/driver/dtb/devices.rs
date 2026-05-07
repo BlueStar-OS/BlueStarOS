@@ -4,7 +4,7 @@
 use alloc::string::String;
 use alloc::vec::Vec;
 
-use super::node::{DeviceNode, Property, RegBlock};
+use super::node::{DeviceNode, RegBlock};
 
 /// CPU Information
 #[derive(Debug, Clone)]
@@ -126,9 +126,7 @@ impl InterruptController {
     /// Parse from device node
     pub fn from_node(node: &DeviceNode, addr_cells: u32, size_cells: u32) -> Option<Self> {
         // Must have interrupt-controller property
-        if node.get_property("interrupt-controller").is_none() {
-            return None;
-        }
+        node.get_property("interrupt-controller")?;
 
         let compatible = node.compatible();
         if compatible.is_empty() {
@@ -168,9 +166,7 @@ impl GpioController {
     /// Parse from device node
     pub fn from_node(node: &DeviceNode, addr_cells: u32, size_cells: u32) -> Option<Self> {
         // Must have gpio-controller property
-        if node.get_property("gpio-controller").is_none() {
-            return None;
-        }
+        node.get_property("gpio-controller")?;
 
         let compatible = node.compatible();
         if compatible.is_empty() {

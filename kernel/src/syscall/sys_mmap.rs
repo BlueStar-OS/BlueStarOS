@@ -32,10 +32,7 @@ pub fn sys_mmap(
     let inner = TASK_MANAER.task_que_inner.lock();
     let current = inner.current;
     drop(inner);
-    let fd_backing = match TASK_MANAER.get_current_fd(fd as usize) {
-        Some(v) => v,
-        _ => None,
-    };
+    let fd_backing = TASK_MANAER.get_current_fd(fd as usize).unwrap_or_default();
     let inner = TASK_MANAER.task_que_inner.lock();
     let mut tcb = inner.task_queen[current].lock();
 

@@ -15,7 +15,6 @@ use crate::shutdown;
 use crate::task::file_loader;
 use crate::task::signal::OsSignal;
 use crate::task::Signal;
-use alloc::boxed::Box;
 use alloc::collections::vec_deque::VecDeque;
 use alloc::string::String;
 use alloc::string::ToString;
@@ -28,8 +27,6 @@ use log::debug;
 use log::error;
 use log::trace;
 use log::warn;
-use riscv::register::sstatus;
-use riscv::register::sstatus::SPP;
 
 ///init进程PID
 pub const INIT_PID: i32 = 1;
@@ -204,7 +201,7 @@ impl ProcessIdAlloctor {
         ProcessIdAlloctor {
             current: start,
             end,
-            id_pool: id_pool,
+            id_pool,
         }
     }
 
@@ -239,7 +236,7 @@ impl TaskControlBlock {
 
     ///
     fn align_slice(sli: &mut Vec<u8>, aligns: usize, sp: &mut usize) {
-        while *sp % aligns != 0 {
+        while !(*sp).is_multiple_of(aligns) {
             sli[*sp] = 0;
             *sp += 1;
         }
@@ -275,7 +272,7 @@ impl TaskControlBlock {
 
         for arg in argv.iter() {
             //string size
-            let align_size = Self::align_up(arg.as_bytes().len() + 1, usize_size);
+            let align_size = Self::align_up(arg.len() + 1, usize_size);
             base_line_size = base_line_size.saturating_add(align_size);
         }
 
@@ -373,7 +370,7 @@ impl TaskControlBlock {
 
     ///设置父亲进程引用
     pub fn set_father(&mut self, father: &Arc<UPSafeCell<TaskControlBlock>>) {
-        self.parent = Some(Arc::downgrade(&father));
+        self.parent = Some(Arc::downgrade(father));
     }
 
     ///添加子进程引用
@@ -409,7 +406,7 @@ impl TaskControlBlock {
 
     pub fn new_exec_task_with_elf(
         &mut self,
-        path: &str,
+        _path: &str,
         argv: Vec<String>,
         argc: usize,
         elf_data: &[u8],
@@ -431,7 +428,7 @@ impl TaskControlBlock {
 
         // 运行时构造 auxv 并推入用户栈
         let _ = argc;
-        let auxv = build_auxv(elf_data, elf_entry as usize);
+        let auxv = build_auxv(elf_data, elf_entry);
         let new_user_sp = Self::push_args_to_user_stack(user_satp, user_sp.0, &argv, &auxv);
 
         self.memory_set = memset; //释放旧的全复制地址空间
@@ -444,7 +441,7 @@ impl TaskControlBlock {
             *trap_cx_point = TrapContext::init_app_trap_context(
                 elf_entry,
                 kernel_satp,
-                kernel_trap_handler as usize,
+                kernel_trap_handler as *const () as usize,
                 kernel_sp, //此时被换血进程的内核栈指针还是用的旧的，只要不立马扫清旧内核栈就没事的
                 new_user_sp,
             );
@@ -481,7 +478,7 @@ impl TaskControlBlock {
         let argv = alloc::vec![alloc::string::String::from(app_path)];
 
         // 构造最小 auxv 并推入用户栈
-        let auxv = build_auxv(&elf_data, elf_entry as usize);
+        let auxv = build_auxv(&elf_data, elf_entry);
         let new_user_sp = Self::push_args_to_user_stack(user_satp, user_sp.0, &argv, &auxv);
 
         // 初始化文件描述符表：0=stdin, 1=stdout, 2=stderr
@@ -516,7 +513,7 @@ impl TaskControlBlock {
             *trap_cx_point = TrapContext::init_app_trap_context(
                 elf_entry,
                 kernel_satp,
-                kernel_trap_handler as usize,
+                kernel_trap_handler as *const () as usize,
                 kernel_sp,
                 new_user_sp,
             );
@@ -555,22 +552,17 @@ impl TaskManager {
             .iter()
             .position(|task| task.lock().pid.0 == pid);
 
-        match target_index {
-            Some(idx) => {
-                let weak_task = inner.task_blocking.remove(idx);
-                if weak_task.is_none() {
-                    return;
-                }
-                let weak_task = weak_task.expect("Kernel Error");
-                if weak_task.lock().task_statut != TaskStatus::Blocking {
-                    return;
-                }
-                weak_task.lock().task_statut = TaskStatus::Ready;
-                inner.task_queen.push_back(weak_task);
-            }
-            None => {
+        if let Some(idx) = target_index {
+            let weak_task = inner.task_blocking.remove(idx);
+            if weak_task.is_none() {
                 return;
             }
+            let weak_task = weak_task.expect("Kernel Error");
+            if weak_task.lock().task_statut != TaskStatus::Blocking {
+                return;
+            }
+            weak_task.lock().task_statut = TaskStatus::Ready;
+            inner.task_queen.push_back(weak_task);
         }
     }
 
@@ -786,7 +778,7 @@ impl TaskManager {
     }
 
     ///TODO:根据传入路径加载并且new新的taskblock然后add_task进队列
-    pub fn load_newtask_to_taskmanager(path: &str) {}
+    pub fn load_newtask_to_taskmanager(_path: &str) {}
 
     ///添加任务队列或者归队
     pub fn add_task(self, task: Arc<UPSafeCell<TaskControlBlock>>) {
@@ -821,11 +813,10 @@ impl TaskManager {
                     Some((best_idx, best_pass)) => {
                         if pass < best_pass {
                             selected = Some((idx, pass));
-                        } else if pass == best_pass {
-                            if best_idx == current && idx != current {
+                        } else if pass == best_pass
+                            && best_idx == current && idx != current {
                                 selected = Some((idx, pass));
                             }
-                        }
                     }
                     None => selected = Some((idx, pass)),
                 }
@@ -1195,10 +1186,10 @@ impl TaskManager {
         }
         task.file_descriptor[fd].take();
         if task.file_descriptor[fd].is_none() {
-            return 0;
+            0
         } else {
             error!("Close fd :{} failed!", fd);
-            return -1;
+            -1
         }
     }
 

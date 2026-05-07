@@ -1,5 +1,4 @@
 use core::panic::PanicInfo;
-use log::error;
 
 use crate::shutdown;
 #[panic_handler]

@@ -1,4 +1,3 @@
-use crate::arch::task::TaskContext;
 extern "C" {
     pub fn kernel_stack_lower_bound();
     pub fn kernel_stack_top();

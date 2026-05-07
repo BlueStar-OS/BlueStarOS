@@ -35,8 +35,6 @@ use spin::Mutex;
 use crate::sync::UPSafeCell;
 
 pub use self::api::*;
-pub use self::device::*;
-pub use self::dm_liner::*;
 pub use self::vblock::*;
 pub use self::vfs::*;
 pub use self::vfserror::*;

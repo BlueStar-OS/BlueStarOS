@@ -14,7 +14,6 @@ const MNS: usize = 1_000_000_000;
 use crate::arch::time::*;
 use crate::config::{CPU_CIRCLE, TIME_FREQUENT};
 use crate::set_next_timetriger;
-use log::debug;
 
 /// POSIX 风格的时间值结构体：秒 + 微秒
 #[repr(C)]
@@ -32,8 +31,8 @@ pub fn get_time_tick() -> usize {
 /// tick → 毫秒转换。
 /// 先乘再除防止整数截断导致精度丢失。
 pub fn get_time_ms() -> usize {
-    let current = (read_time() * MSEC) / CPU_CIRCLE;
-    current
+    
+    (read_time() * MSEC) / CPU_CIRCLE
 }
 
 /// tick → 微秒转换。
@@ -43,8 +42,8 @@ pub fn get_time_us() -> usize {
 
 /// tick → 纳秒转换。
 pub fn get_time_ns() -> usize {
-    let current = (read_time() * MNS) / CPU_CIRCLE;
-    current
+    
+    (read_time() * MNS) / CPU_CIRCLE
 }
 
 /// 设置下一次时钟中断。

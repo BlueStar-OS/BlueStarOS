@@ -27,17 +27,13 @@ mod node;
 mod parser;
 mod probe;
 
-pub use devices::{
-    BusBridge, BusType, ClockController, CpuInfo, DeviceScanner, GpioController,
-    InterruptController, MemoryInfo, MmioDevice,
-};
-pub use fdt::{FdtError, FdtHeader, MemReservation, FDT_MAGIC};
-pub use node::{AddressRange, DeviceNode, DeviceTree, Property, RegBlock};
+pub use devices::DeviceScanner;
+pub use node::{DeviceNode, DeviceTree};
 pub use parser::DtbParser;
-pub use probe::{ProbeCallback, ProbeEntry, ProbePriority};
+pub use probe::{ProbeEntry, ProbePriority};
 
 use lazy_static::lazy_static;
-use log::{debug, info, trace, warn};
+use log::{debug, warn};
 
 use crate::kprintln;
 use crate::sync::UPSafeCell;

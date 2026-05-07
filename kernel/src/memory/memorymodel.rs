@@ -18,7 +18,7 @@ pub struct PhysMemoryRange {
 pub struct IRPG_OFFSET(usize);
 impl IRPG_OFFSET {
     pub fn new(off: usize) -> Self {
-        if off < 0 || off >= PAGE_SIZE {
+        if !(0..PAGE_SIZE).contains(&off) {
             panic!("Invalid page offset: {:#x}", off);
         }
         Self(off)

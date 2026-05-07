@@ -1,29 +1,10 @@
-use crate::arch::memory::*;
 use crate::memory::VirNumRange;
 use crate::sync::UPSafeCell;
-use crate::syscall::*; //系统调用
+ //系统调用
 use crate::MapSet;
-use crate::{
-    config::*, shutdown, task::TASK_MANAER, time::set_next_timeInterupt,
-    trap::pagefaultHandler::PageFaultHandler,
-};
+use crate::config::*;
 use alloc::vec::Vec;
-use core::arch::asm;
-use core::{arch::global_asm, panic};
 use lazy_static::lazy_static;
-use log::warn;
-use log::{debug, error};
-use riscv::register::satp;
-use riscv::register::scause::Interrupt;
-use riscv::register::sie;
-use riscv::register::{
-    scause::{self, Exception, Trap},
-    sie::Sie,
-    sscratch,
-    sstatus::{self, Sstatus, SPP},
-    stval, stvec,
-    utvec::TrapMode,
-};
 
 pub mod pagefaultHandler;
 

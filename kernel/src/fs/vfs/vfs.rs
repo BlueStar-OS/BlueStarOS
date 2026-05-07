@@ -245,7 +245,7 @@ impl From<VfsStat> for KStat {
     /// `st_blocks` 按 512 字节为单位计算扇区数。
     fn from(v: VfsStat) -> Self {
         let size_i64 = core::cmp::min(v.size, i64::MAX as u64) as i64;
-        let blocks = (v.size + 511) / 512;
+        let blocks = v.size.div_ceil(512);
         Self {
             st_dev: 0,
             st_ino: v.inode as u64,

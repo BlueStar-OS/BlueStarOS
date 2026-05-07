@@ -45,7 +45,7 @@ impl<T> UPSafeCell<T> {
                     loc.line(),
                     loc.column()
                 );
-                return None;
+                None
             }
         }
     }

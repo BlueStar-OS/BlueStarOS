@@ -2,16 +2,14 @@ use crate::alloc::string::ToString;
 use crate::arch::memory::*;
 use crate::arch::task::TaskContext;
 use crate::arch::TrapContext;
-use crate::config::SECTOR_SIZE;
 use crate::error::BlueErr;
 use crate::fs::component::pipe::pipe::{make_pipe, PipeHandle};
 use crate::fs::fs_backend::fat32::Fat32Fs;
 use crate::fs::fs_backend::{Ext4BlockDevice, Ext4Fs};
 use crate::fs::vfs::File;
-use crate::fs::vfs::{self, normalize_path, VfsFsError};
+use crate::fs::vfs::{normalize_path, VfsFsError};
 use crate::fs::vfs::{
-    vfs_fstat_kstat, vfs_getdents64, vfs_mkdir, vfs_open, vfs_stat, vfs_unlink, KStat, OpenFlags,
-    VfsStat, VFS_DT_DIR,
+    vfs_fstat_kstat, vfs_getdents64, vfs_mkdir, vfs_open, vfs_stat, vfs_unlink, KStat, OpenFlags, VFS_DT_DIR,
 };
 use crate::root::MountPath;
 use crate::root::ROOTFS;
@@ -19,11 +17,10 @@ use crate::VfsFs;
 use crate::ARCHITECTURE;
 
 use crate::memory::{CloneFlags, MapSet};
-use crate::shutdown;
 use crate::sync::UPSafeCell;
 use crate::task::file_loader;
 use crate::task::ProcessId_ALLOCTOR;
-use crate::task::{ProcessId, TaskControlBlock, TaskStatus, INIT_PID};
+use crate::task::TaskStatus;
 use crate::time::get_time_tick;
 use crate::TRAP_CONTEXT_ADDR;
 use crate::{
@@ -31,9 +28,6 @@ use crate::{
     task::TASK_MANAER,
     time::{get_time_ms, TimeVal},
 };
-use alloc::boxed::Box;
-use alloc::collections::vec_deque::VecDeque;
-use alloc::format;
 use alloc::string::String;
 use alloc::sync::Arc;
 use alloc::vec;
@@ -53,21 +47,21 @@ struct Timespec {
 ///SYS_UNAME系统调用
 /// 传入新旧文件name
 /// utsname结构体
-const utname_field_len: usize = 65; //byte
+const UTNAME_FIELD_LEN: usize = 65; //byte
 #[repr(C)]
 #[derive(Debug)]
 struct utsname {
-    sysname: [u8; utname_field_len],    //当前操作系统名
-    nodename: [u8; utname_field_len],   //主机名hostname
-    release: [u8; utname_field_len],    //当前发布级别
-    version: [u8; utname_field_len],    //内核版本字符串
-    machine: [u8; utname_field_len],    //当前硬件结构
-    domainname: [u8; utname_field_len], //NIS DOMAIN name
+    sysname: [u8; UTNAME_FIELD_LEN],    //当前操作系统名
+    nodename: [u8; UTNAME_FIELD_LEN],   //主机名hostname
+    release: [u8; UTNAME_FIELD_LEN],    //当前发布级别
+    version: [u8; UTNAME_FIELD_LEN],    //内核版本字符串
+    machine: [u8; UTNAME_FIELD_LEN],    //当前硬件结构
+    domainname: [u8; UTNAME_FIELD_LEN], //NIS DOMAIN name
 }
 
 /// sys_ioctl
 pub fn sys_ioctl() -> isize {
-    return 0;
+    0
 }
 
 /// 退出当前进程组的所有线程
@@ -77,7 +71,7 @@ pub fn sys_exit_group(exit_code: usize) -> isize {
 }
 
 /// 把我的线程 ID (TID) 存在这个地址里。如果我死了，记得把这个地址清零，并唤醒在此等待的 futex。
-pub fn sys_set_tid_address(tidptr: usize) -> isize {
+pub fn sys_set_tid_address(_tidptr: usize) -> isize {
     // simple implent
     sys_getpid()
 }
@@ -210,7 +204,7 @@ pub fn sys_gettimeofday(tv_ptr: usize, _tz_ptr: usize) -> isize {
     unsafe {
         *(phyaddr.unwrap().0 as *mut TimeVal) = time_val;
     }
-    return 0;
+    0
 }
 
 pub fn sys_times(tms_ptr: usize) -> isize {
@@ -235,7 +229,7 @@ pub fn sys_times(tms_ptr: usize) -> isize {
     unsafe {
         *(phyaddr.unwrap().0 as *mut Tms) = tms_st;
     }
-    return time_tick as isize;
+    time_tick as isize
 }
 
 /// POSIX/Linux: mount(source, target, filesystemtype, mountflags, data)
@@ -543,12 +537,12 @@ pub fn sys_umount2(target_ptr: usize, _flags: usize) -> isize {
 impl utsname {
     pub fn new() -> Self {
         Self {
-            sysname: [0; utname_field_len],
-            nodename: [0; utname_field_len],
-            release: [0; utname_field_len],
-            version: [0; utname_field_len],
-            machine: [0; utname_field_len],
-            domainname: [0; utname_field_len],
+            sysname: [0; UTNAME_FIELD_LEN],
+            nodename: [0; UTNAME_FIELD_LEN],
+            release: [0; UTNAME_FIELD_LEN],
+            version: [0; UTNAME_FIELD_LEN],
+            machine: [0; UTNAME_FIELD_LEN],
+            domainname: [0; UTNAME_FIELD_LEN],
         }
     }
 }
@@ -558,10 +552,10 @@ pub fn sys_uname(buf: usize) -> isize {
         return BlueErr::EFAULT.as_isize();
     }
 
-    fn fill_field(dst: &mut [u8; utname_field_len], s: &str) {
+    fn fill_field(dst: &mut [u8; UTNAME_FIELD_LEN], s: &str) {
         dst.fill(0);
         let bytes = s.as_bytes();
-        let n = core::cmp::min(bytes.len(), utname_field_len - 1); //give \0 one byte
+        let n = core::cmp::min(bytes.len(), UTNAME_FIELD_LEN - 1); //give \0 one byte
         dst[..n].copy_from_slice(&bytes[..n]);
         dst[n] = 0;
     }
@@ -1278,7 +1272,7 @@ pub fn sys_lseek(fd: usize, offset: isize, whence: usize) -> isize {
 }
 
 ///SYS_FORK系统调用
-pub fn sys_fork(mode: CloneFlags, stack: usize, ptid: usize, tls: usize, ctid: usize) -> isize {
+pub fn sys_fork(_mode: CloneFlags, stack: usize, _ptid: usize, _tls: usize, _ctid: usize) -> isize {
     //warn!("forlk");
     let mut inner = TASK_MANAER.task_que_inner.lock();
     let current_index = inner.current;
@@ -1370,7 +1364,7 @@ pub fn sys_fork(mode: CloneFlags, stack: usize, ptid: usize, tls: usize, ctid: u
         .push_back(arc_task.clone());
 
     //父亲返回子pid，子返回0.
-    return child_pid as isize;
+    child_pid as isize
 }
 
 /// 从用户空间读取 null 结尾的 C 风格字符串
@@ -1546,7 +1540,7 @@ pub fn sys_read(fd_target: usize, source_buffer: usize, buffer_len: usize) -> is
     }
     if read_len > 0 {
         let mut pt = PageTable::crate_table_from_satp(user_satp);
-        let first = pt
+        let _first = pt
             .translate(VirAddr(source_buffer))
             .map(|pa| unsafe { *(pa.0 as *const u8) });
     }
@@ -1558,7 +1552,7 @@ pub fn sys_read(fd_target: usize, source_buffer: usize, buffer_len: usize) -> is
 ///注意：这个函数永不返回！要么切换到其他任务，要么关机
 pub fn sys_exit(exit_code: usize) -> isize {
     // 若把 init 标记为 Zombie，会导致系统只剩 Zombie/无 Ready 任务，从而调度器报错。
-    let (current_pid, current_task) = {
+    let (_current_pid, current_task) = {
         let inner = TASK_MANAER.task_que_inner.lock();
         if inner.task_queen.is_empty() {
             drop(inner);
@@ -1574,23 +1568,20 @@ pub fn sys_exit(exit_code: usize) -> isize {
 
     //error!("pid :{} exit",current_pid);
 
-    match current_task {
-        Some(ts) => {
-            let parent = &mut ts.lock().parent;
-            if parent.is_some() {
-                // try Wake father
-                let pa = parent
-                    .as_ref()
-                    .expect("Kernel Error")
-                    .upgrade()
-                    .expect("Where is my father");
-                if pa.lock().task_statut == TaskStatus::Blocking {
-                    let pid = pa.lock().pid.0;
-                    TASK_MANAER.wake_task_from_blocking(pid);
-                }
+    if let Some(ts) = current_task {
+        let parent = &mut ts.lock().parent;
+        if parent.is_some() {
+            // try Wake father
+            let pa = parent
+                .as_ref()
+                .expect("Kernel Error")
+                .upgrade()
+                .expect("Where is my father");
+            if pa.lock().task_statut == TaskStatus::Blocking {
+                let pid = pa.lock().pid.0;
+                TASK_MANAER.wake_task_from_blocking(pid);
             }
         }
-        None => {}
     }
 
     // Linux 语义：exit 后任务进入 Zombie，保留 pid/exit_code，等待父进程 wait() 回收(reap)。

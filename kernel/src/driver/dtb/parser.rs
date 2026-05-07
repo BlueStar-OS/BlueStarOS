@@ -1,7 +1,6 @@
 //! DTB Parser
 //! Reference: Linux 5.4.29 drivers/of/fdt.c
 
-use alloc::collections::BTreeMap;
 use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;

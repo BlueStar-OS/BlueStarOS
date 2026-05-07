@@ -6,7 +6,7 @@ use crate::fs::vfs::{vfs_open, OpenFlags};
 use alloc::vec;
 use alloc::vec::Vec;
 use bitflags::bitflags;
-use log::{debug, error, info, warn};
+use log::{debug, error, warn};
 
 bitflags! {
     /// 信号结构体 posix
@@ -48,11 +48,7 @@ bitflags! {
 }
 
 pub fn have_elf_header(data: [u8; 4]) -> bool {
-    if data != [0x7f, b'E', b'L', b'F'] {
-        return false;
-    } else {
-        return true;
-    }
+    data == [0x7f, b'E', b'L', b'F']
 }
 
 /// 文件加载器，根据 app_id 从文件系统 /test 目录加载对应的 ELF 文件
@@ -63,8 +59,8 @@ pub fn file_loader(file_path: &str) -> Vec<u8> {
 
     // 比赛内联init
     if file_path == "/cinit" {
-        let start = app_start as usize;
-        let end = app_end as usize;
+        let start = app_start as *const () as usize;
+        let end = app_end as *const () as usize;
         if end <= start {
             return vec![];
         }
@@ -134,5 +130,4 @@ pub fn file_loader(file_path: &str) -> Vec<u8> {
     out
 }
 
-pub use signal::OsSignal;
 pub use task::*;

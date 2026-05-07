@@ -6,7 +6,7 @@ use crate::memory::MapSet;
 
 pub fn active_memset(memset: &MapSet) {
     use crate::arch::riscv64::asm;
-    use crate::arch::riscv64::satp;
+    
     use log::debug;
     let satps = memset.table.satp_token();
     debug!("Active PageTable: SATP = {:#x}", satps);

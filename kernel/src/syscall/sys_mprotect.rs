@@ -1,7 +1,5 @@
-use log::error;
 
 use crate::arch::memory::VirAddr;
-use crate::debug;
 use crate::error::BlueErr::EINVAL;
 use crate::memory::MmapProt;
 use crate::task::TASK_MANAER;
@@ -28,7 +26,7 @@ use crate::PAGE_SIZE;
 
 pub fn sys_mprotect(addr: usize, len: usize, prot: usize) -> isize {
     // 1. 数据清洗：addr 必须按页对齐，len 不能为零
-    if addr % PAGE_SIZE != 0 || len == 0 {
+    if !addr.is_multiple_of(PAGE_SIZE) || len == 0 {
         return -EINVAL;
     }
 

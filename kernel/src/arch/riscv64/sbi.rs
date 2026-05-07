@@ -1,8 +1,7 @@
 use core::arch::asm;
 
 use crate::root::ROOTFS;
-use crate::{fs::vfs::VfsFs, kprintln};
-use log::error;
+use crate::fs::vfs::VfsFs;
 
 const SET_TIMER: usize = 0;
 const PUTC_CALLID: usize = 1;

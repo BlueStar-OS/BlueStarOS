@@ -6,8 +6,7 @@ use riscv::register::sstatus::SPP;
 pub mod kernel_trap;
 pub mod user_trap;
 
-pub use kernel_trap::kernel_mode_trap_handler;
-pub use user_trap::{app_entry_point, kernel_trap_handler};
+pub use user_trap::kernel_trap_handler;
 
 #[repr(C)]
 #[repr(align(8))]
@@ -37,7 +36,7 @@ impl TrapContext {
         let mut register = [0; 32];
         debug!("SSTATUS:{:#X}", sstatus.bits());
         register[2] = user_sp;
-        register[1] = no_return_start as usize;
+        register[1] = no_return_start as *const () as usize;
         TrapContext {
             x: register,
             sstatus,

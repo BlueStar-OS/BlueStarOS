@@ -5,7 +5,7 @@ use crate::dtb::DeviceNode;
 use crate::register_kernel_mmio;
 use crate::MapAreaFlags;
 use crate::VirNumRange;
-use crate::{dtb_probe, kprintln};
+use crate::dtb_probe;
 use core::fmt;
 use log::error;
 mod bar;

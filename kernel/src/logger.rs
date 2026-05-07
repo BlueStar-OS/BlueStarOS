@@ -1,7 +1,7 @@
 //! Global logger
 
 use crate::{config::*, time::get_time_us};
-use log::{debug, Level, LevelFilter, Log, Metadata, Record};
+use log::{Level, LevelFilter, Log, Metadata, Record};
 
 /// a simple logger
 struct SimpleLogger;
@@ -72,16 +72,16 @@ pub fn sbss();
 pub fn ebss(); */
 pub fn kernel_info_debug() {
     use log::warn;
-    let skernle: usize = skernel as usize;
-    let ekernle: usize = ekernel as usize;
-    let stext: usize = stext as usize;
-    let etext: usize = etext as usize;
-    let srodata: usize = srodata as usize;
-    let erodata: usize = erodata as usize;
-    let sdata: usize = sdata as usize;
-    let edata: usize = edata as usize;
-    let sbss: usize = sbss as usize;
-    let ebss: usize = ebss as usize;
+    let skernle: usize = skernel as *const () as usize;
+    let ekernle: usize = ekernel as *const () as usize;
+    let stext: usize = stext as *const () as usize;
+    let etext: usize = etext as *const () as usize;
+    let srodata: usize = srodata as *const () as usize;
+    let erodata: usize = erodata as *const () as usize;
+    let sdata: usize = sdata as *const () as usize;
+    let edata: usize = edata as *const () as usize;
+    let sbss: usize = sbss as *const () as usize;
+    let ebss: usize = ebss as *const () as usize;
     warn!("Kernel start at {:#x} ,End at: {:#x}", skernle, ekernle);
     warn!(".text start at {:#x} ,End at: {:#x}", stext, etext);
     warn!(".rodata start at {:#x} ,End at: {:#x}", srodata, erodata);
@@ -89,26 +89,26 @@ pub fn kernel_info_debug() {
     warn!(".bss start at {:#x} ,End at: {:#x}", sbss, ebss);
     warn!(
         ".kernelStack start at {:#x} ,End at: {:#x}",
-        kernel_stack_lower_bound as usize, kernel_stack_top as usize
+        kernel_stack_lower_bound as *const () as usize, kernel_stack_top as *const () as usize
     );
 
     warn!(
         "kernel_stack_protect start at {:#x} ,End at: {:#x}",
-        kernel_stack_protect_start as usize, kernel_stack_protect_end as usize
+        kernel_stack_protect_start as *const () as usize, kernel_stack_protect_end as *const () as usize
     );
 
     warn!(
         "Kernel stack at {:#x} ,End at: {:#x}",
-        kernel_stack_lower_bound as usize, kernel_stack_top as usize
+        kernel_stack_lower_bound as *const () as usize, kernel_stack_top as *const () as usize
     );
 
     warn!(
         "kernel_trap_stack_protect start at {:#x} ,End at: {:#x}",
-        kernel_trap_stack_protect_start as usize, kernel_trap_stack_protect_end as usize
+        kernel_trap_stack_protect_start as *const () as usize, kernel_trap_stack_protect_end as *const () as usize
     );
 
     warn!(
         "kernel_trap_stack bottom at {:#x} ,Top at: {:#x}",
-        kernel_trap_stack_bottom as usize, kernel_trap_stack_top as usize
+        kernel_trap_stack_bottom as *const () as usize, kernel_trap_stack_top as *const () as usize
     );
 }

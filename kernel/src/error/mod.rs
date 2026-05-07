@@ -5,4 +5,3 @@ mod transform;
 mod r#type;
 
 pub use r#type::BlueErr;
-pub use transform::from_syscall_ret;

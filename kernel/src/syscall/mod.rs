@@ -147,7 +147,7 @@ pub fn syscall_handler(id: usize, arg: [usize; 6]) -> isize {
         SYS_GETDENTS64 => sys_getdents64(arg[0], arg[1], arg[2]),
         SYS_PIPE2 => sys_pipe(arg[0]),
 
-        SYS_BRK => sys_brk(VirAddr(arg[0])) as isize,
+        SYS_BRK => sys_brk(VirAddr(arg[0])),
 
         SYS_CHDIR => sys_chdir(arg[0]),
         SYS_GETCWD => sys_getcwd(arg[0], arg[1]),

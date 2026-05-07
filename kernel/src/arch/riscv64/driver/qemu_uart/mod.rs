@@ -44,7 +44,6 @@ pub fn getc_blocking() -> u8 {
 // ===== DTB 探测器示例 =====
 
 use crate::driver::dtb::DeviceNode;
-use log::info;
 
 /// UART 16550 探测器
 fn uart_16550_probe(node: &DeviceNode, _compatible: &str) -> Result<(), &'static str> {
@@ -96,5 +95,5 @@ crate::dtb_probe! {
 
 //UART drivers
 pub mod uart {
-    pub use super::{getc, getc_blocking, putc};
+    pub use super::{getc, putc};
 }

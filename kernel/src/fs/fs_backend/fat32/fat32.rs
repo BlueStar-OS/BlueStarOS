@@ -516,7 +516,7 @@ impl Fat32Fs {
     fn write_fat_entry(&self, clus: u32, val: u32) -> Result<(), VfsFsError> {
         let byts_per_sec = self.info.byts_per_sec as u32;
         let off = (clus as u64) * 4;
-        let sec_off = (off / byts_per_sec as u64) as u64;
+        let sec_off = off / byts_per_sec as u64;
         let ent_off = (off % byts_per_sec as u64) as usize;
         let v = (val & 0x0FFFFFFF) | 0xF0000000;
 
@@ -591,7 +591,7 @@ impl Fat32Fs {
         for c in start..end {
             if self.read_fat_entry(c)? == 0 {
                 self.write_fat_entry(c, FAT32_EOC)?;
-                let mut zero = vec![0u8; self.info.clus_bytes as usize];
+                let zero = vec![0u8; self.info.clus_bytes as usize];
                 self.write_cluster(c, &zero)?;
                 return Ok(c);
             }
@@ -786,14 +786,14 @@ impl Fat32Fs {
                 in_ext = true;
                 continue;
             }
-            let ok = (ch >= b'0' && ch <= b'9')
-                || (ch >= b'a' && ch <= b'z')
-                || (ch >= b'A' && ch <= b'Z')
+            let ok = ch.is_ascii_digit()
+                || ch.is_ascii_lowercase()
+                || ch.is_ascii_uppercase()
                 || ch == b'_';
             if !ok {
                 continue;
             }
-            let up = if ch >= b'a' && ch <= b'z' {
+            let up = if ch.is_ascii_lowercase() {
                 ch - 32
             } else {
                 ch
@@ -880,7 +880,7 @@ impl Fat32Fs {
         let checksum = lfn_checksum(&sfn11);
         let mut u16s: Vec<u16> = name.encode_utf16().collect();
         u16s.push(0u16);
-        let lfn_cnt = (u16s.len() + 12) / 13;
+        let lfn_cnt = u16s.len().div_ceil(13);
         let total = lfn_cnt + 1;
         let (start_clus, start_off) = self.find_free_dirent_slots(parent_clus, total)?;
 
@@ -1070,7 +1070,7 @@ impl Fat32Fs {
         let need_clusters = if end_pos == 0 {
             0
         } else {
-            (end_pos + clus_bytes - 1) / clus_bytes
+            end_pos.div_ceil(clus_bytes)
         };
         if need_clusters == 0 {
             return Ok(0);
@@ -1250,7 +1250,7 @@ impl Fat32File {
         &self,
         f: impl FnOnce(&Fat32Fs) -> Result<T, VfsFsError>,
     ) -> Result<T, VfsFsError> {
-        let mut guard = self.mount_fs.lock();
+        let guard = self.mount_fs.lock();
         let fs = guard
             .as_any()
             .downcast_ref::<Fat32Fs>()
@@ -1293,8 +1293,8 @@ impl File for Fat32File {
             fs.write_file_at(
                 self.dirent_loc,
                 self.sfn11,
-                &mut *first,
-                &mut *size,
+                &mut first,
+                &mut size,
                 offset,
                 buf,
             )

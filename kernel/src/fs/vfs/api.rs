@@ -10,7 +10,6 @@ use alloc::string::String;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use log::error;
-use spin::Mutex;
 
 fn resolve_mount(path: &str) -> Result<(MountFs, String, String), VfsFsError> {
     let abs = normalize_path(path)?;
@@ -181,9 +180,8 @@ pub fn normalize_path(path: &str) -> Result<String, VfsFsError> {
 pub fn vfs_open(path: &str, flags: OpenFlags) -> Result<Arc<dyn File>, VfsFsError> {
     let (mnt, abs_path, sub_path) = resolve_mount(path)?;
     let mut guard = mnt.lock();
-    let file = guard.open(mnt.clone(), &sub_path, flags).map_err(|e| {
+    let file = guard.open(mnt.clone(), &sub_path, flags).inspect_err(|&e| {
         error!("vfs_open failed: path={} err={:?}", abs_path, e);
-        e
     })?;
     Ok(file)
 }

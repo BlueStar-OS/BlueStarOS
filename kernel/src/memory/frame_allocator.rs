@@ -4,7 +4,7 @@ use crate::{
     sync::UPSafeCell,
 };
 use buddy_system_allocator::LockedHeap;
-use log::{trace, warn};
+use log::trace;
 
 use lazy_static::lazy_static;
 
@@ -48,11 +48,7 @@ struct PageRange {
 
 impl PageRange {
     fn remaining(&self) -> usize {
-        if self.end > self.current {
-            self.end - self.current
-        } else {
-            0
-        }
+        self.end.saturating_sub(self.current)
     }
 }
 

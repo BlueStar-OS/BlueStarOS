@@ -2,7 +2,6 @@
 // 捕获 Ctrl 组合键并转换为信号投递到当前任务
 
 use crate::arch::driver::uart;
-use crate::kprintln;
 use crate::sync::UPSafeCell;
 use crate::task::signal::{push_signal, OsSignal};
 use crate::task::{Signal, TASK_MANAER};

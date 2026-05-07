@@ -267,7 +267,7 @@ impl RamFs {
 }
 
 fn align_up(x: usize, a: usize) -> usize {
-    (x + a - 1) / a * a
+    x.div_ceil(a) * a
 }
 
 pub struct RamFile {

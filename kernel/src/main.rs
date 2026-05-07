@@ -29,7 +29,6 @@ mod task;
 mod time;
 mod tool;
 mod trap;
-use crate::arch::set_kernel_trap_handler;
 use crate::arch::*;
 use crate::config::*;
 use crate::driver::dtb;
@@ -37,12 +36,9 @@ use crate::fs::vfs::*;
 use crate::logger::*;
 use crate::memory::*;
 use crate::root::RootFs;
-use crate::sync::UPSafeCell;
 use crate::task::run_first_task;
 use crate::time::*;
 use core::arch::global_asm;
-use core::sync::atomic::AtomicU32;
-use core::sync::atomic::Ordering;
 use log::*;
 pub use sbi::*;
 
@@ -54,7 +50,7 @@ pub fn clear_bss() {
         pub fn sbss();
         pub fn ebss();
     }
-    (sbss as usize..ebss as usize).for_each(|a| unsafe { (a as *mut u8).write_volatile(0) });
+    (sbss as *const () as usize..ebss as *const () as usize).for_each(|a| unsafe { (a as *mut u8).write_volatile(0) });
 }
 
 /// the rust entry-point of os
@@ -67,12 +63,12 @@ pub fn blue_main() -> ! {
     //平台初始化 必须放在clearbss之后！ 因为其中有bss的静态初始化页表相关
     arch_init();
 
-    debug!("stext {:#x}", __kernel_trap as usize);
+    debug!("stext {:#x}", __kernel_trap as *const () as usize);
 
-    debug!("traper {:#x}", straper as usize);
+    debug!("traper {:#x}", straper as *const () as usize);
     debug!(
         "trap refume virtualaddr:{:#x}",
-        __kernel_refume as usize - __kernel_trap as usize + TRAP_BOTTOM_ADDR
+        __kernel_refume as *const () as usize - __kernel_trap as *const () as usize + TRAP_BOTTOM_ADDR
     );
 
     warn!("initial file system");
