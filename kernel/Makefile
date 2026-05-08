@@ -3,6 +3,7 @@ ARCH  ?= riscv64
 MODE := release
 QEMU_MACHINE ?= virt
 QEMU_PLAT ?=
+QEMU_7.2 := /opt/qemu-7.2/bin/
 USER_DIR := ../user
 LOG ?= DEBUG
 
@@ -19,17 +20,17 @@ GDB_SET_ARCH = -ex 'set arch riscv:rv64'
 # 驱动 features
 DRIVER_FEATURES ?= qemu_plat
 
-
+	
 QEMU_DEVICE_ARGS = \
 	-drive file=disk.img,format=raw,if=none,id=x0 \
 	-drive file=emmc.img,format=raw,if=none,id=x1 \
 	-net none \
 	-device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0 \
 	-device virtio-blk-device,drive=x1,bus=virtio-mmio-bus.2 \
-	-device virtio-gpu-device,bus=virtio-mmio-bus.1 \
-	-device pcie-root-port,id=my_port \
-	-device edu,dma_mask=0x0ffffff,bus=my_port
-
+	-device pcie-root-port,id=rp0,bus=pcie.0,chassis=1,slot=1 \
+	-device pcie-root-port,id=rp1,bus=pcie.0,chassis=1,slot=2 \
+	-device edu,bus=rp0 \
+	-device VGA,bus=rp1,id=video0
 else ifeq ($(ARCH), aarch64)
 TARGET := aarch64-unknown-none-softfloat
 KERNEL_ENTRY_PA := 0x40080000
@@ -48,9 +49,7 @@ QEMU_DEVICE_ARGS = \
 	-drive file=emmc.img,format=raw,if=none,id=x0 \
 	-net none \
 	-device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0 \
-	-device virtio-gpu-device,bus=virtio-mmio-bus.1 \
-	#pcie 总线设备
-	-device edu,dma_mask=mask,bus=pci.0
+	-device virtio-gpu-device,bus=virtio-mmio-bus.1 
 
 
 else
@@ -92,7 +91,7 @@ DISASM ?= -x
 build: user-makeimg
 	@cargo clean
 	@rm -f $(KERNEL_ELF) $(KERNEL_BIN) src/BlueStarOS.elf src/BlueStarOS.bin
-	@LOG=$(LOG) cargo build --target $(TARGET) $(MODE_ARG) $(FEATURES_ARG) --offline
+	@LOG=$(LOG) cargo build --target $(TARGET) $(MODE_ARG) $(FEATURES_ARG)
 	@# 从 ELF 提取内核符号表，生成 src/kernel_symbols.txt（用于 backtrace 函数名解析）
 	@rust-nm --demangle -n $(KERNEL_ELF) 2>/dev/null | grep ' [tT] ' | grep -v '^[0-9a-f]* t \.L' | awk '{addr=$$1; $$1=""; $$2=""; gsub(/^ +/, ""); print addr " " $$0}' > src/kernel_symbols.txt
 	$(OBJCOPY) $(KERNEL_ELF) --strip-all -O binary $(KERNEL_BIN)
@@ -127,20 +126,25 @@ run: run-inner
 
 run_consent: run-consent-inner
 
+# run-inner: 保留图形窗口，同时把 serial0 绑定到当前终端
 run-inner: build
-	@$(QEMU_PLAT)qemu-system-$(ARCH) \
+	@$(QEMU_PLAT)$(QEMU_7.2)qemu-system-$(ARCH) \
 		-machine $(QEMU_MACHINE) \
 		$(QEMU_CPU) \
 		-m 256m \
 		$(QEMU_BIOS) \
 		$(QEMU_KERNEL) \
 		$(QEMU_DTB_ARG) \
+		-display gtk \
+		-monitor none \
+		-serial stdio \
 		-s \
 		$(QEMU_DEVICE_ARGS) \
-		-nographic
 
 run-consent-inner: user-consent-img
-	@cargo build --target $(TARGET) $(MODE_ARG) $(FEATURES_ARG) --offline
+	@cargo build --target $(TARGET) $(MODE_ARG) $(FEATURES_ARG)
+	@$(QEMU_PLAT)qemu-system-$(ARCH) --version \
+	
 	@$(QEMU_PLAT)qemu-system-$(ARCH) \
 		-machine virt \
 		-kernel $(KERNEL_BIN) \

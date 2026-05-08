@@ -261,7 +261,7 @@ impl Hal for VirtioHal {
     fn virt_to_phys(vaddr: virtio_drivers::VirtAddr) -> virtio_drivers::PhysAddr {
         let mut table = PageTable::get_kernel_table_layer();
         if let Some(paddr) = table.translate(VirAddr(vaddr)) {
-            paddr.0
+            paddr.0 
         } else {
             vaddr
         }

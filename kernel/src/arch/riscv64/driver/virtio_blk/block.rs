@@ -122,14 +122,14 @@ pub fn init_gpu() {
 
     let mut gpu = VirtIOGpu::<VirtioHal>::new(header).expect("Failed to create GPU driver");
     let raw_ref = &mut gpu as *mut VirtIOGpu<VirtioHal>;
-    let fb = gpu
+    let mut fb = gpu
         .setup_framebuffer()
         .expect("Failed to setup framebuffer");
 
     let (width, height) = unsafe { raw_ref.as_mut().unwrap().resolution() };
     kprintln!("Framebuffer resolution: {}x{}", width, height);
     kprintln!("Drawing red square...");
-    draw_red_square(fb, width, height);
+    draw_red_square(&mut fb, width, height);
     gpu.flush().expect("Failed to flush GPU");
     kprintln!("Done!");
 }

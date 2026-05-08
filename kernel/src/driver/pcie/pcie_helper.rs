@@ -1,4 +1,4 @@
-use crate::driver::pcie::PhysiAddr;
+use crate::arch::memory::PhysiAddr;
 use crate::driver::pcie::PCIE_ECAM_ADDR;
 use log::error;
 
@@ -71,7 +71,13 @@ pub unsafe fn cfg_read32(bus: u8, dev: u8, func: u8, offset: u16) -> u32 {
 pub unsafe fn cfg_read16(bus: u8, dev: u8, func: u8, offset: u16) -> u16 {
     // 先按 32 位对齐读，再根据偏移提取对应 16 位
     let aligned = cfg_read32(bus, dev, func, offset & ALIGN32_MASK);
-    let shift = (offset & BYTE_OFFSET_MASK) as u32 * BYTE_TO_BIT_SHIFT;
+
+    // 例子：
+    //   offset = 0x0e
+    //   offset & 0x3 = 0x2
+    //   shift = 2 * 8 = 16
+    // 也就是从对齐后的 32 位字里取高 16 位。
+    let shift = ((offset & BYTE_OFFSET_MASK) as u32) << BYTE_TO_BIT_SHIFT;
     ((aligned >> shift) & U16_MASK) as u16
 }
 

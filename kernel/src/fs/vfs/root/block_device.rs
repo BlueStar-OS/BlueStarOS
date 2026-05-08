@@ -52,18 +52,35 @@ impl RootFs {
         dev_path: &str,
         blk: Arc<Mutex<dyn BlockDevTrait>>,
     ) -> Result<(), VfsFsError> {
+        warn!("[vblock-scan] {}: register begin", dev_path);
         let total_sectors = blk.lock().capacity_in_sectors();
+        warn!(
+            "[vblock-scan] {}: capacity query done, sectors={}, bytes={:#x}",
+            dev_path,
+            total_sectors,
+            total_sectors.saturating_mul(SECTOR_SIZE as u64)
+        );
+
         let whole = Arc::new(BLOCKDEVFILE::new(
             blk.clone(),
             DmlinerEntry::new(0, total_sectors),
         )) as Arc<dyn crate::fs::vfs::File>;
+        warn!("[vblock-scan] {}: mkdev whole begin", dev_path);
         ramfs.mkdev(dev_path, whole)?;
+        warn!("[vblock-scan] {}: mkdev whole done", dev_path);
 
         let mut mbr: [u8; SECTOR_SIZE] = [0; SECTOR_SIZE];
+        warn!("[vblock-scan] {}: read MBR(lba=0) begin", dev_path);
         if let Err(err) = blk.lock().read_block(0, &mut mbr) {
             warn!("Read {}  MBR failed: {:?}", dev_path, err);
             return Ok(());
         }
+        warn!(
+            "[vblock-scan] {}: read MBR(lba=0) done, sig={:#x}{:02x}",
+            dev_path,
+            mbr[511],
+            mbr[510]
+        );
 
         let parts = parsing_mbr_partition(mbr);
         let mbr_ok = parts.as_ref().is_ok_and(|v| !v.is_empty());
@@ -90,22 +107,33 @@ impl RootFs {
                     "{} MBR partition {}: start_lba={}, sectors={}, meta={:?}",
                     dev_path, idx, entry.start_lba, entry.sectors, entry.metadata
                 );
+                warn!(
+                    "[vblock-scan] {}: mkdev MBR part{} begin start_lba={}, sectors={}",
+                    dev_path,
+                    idx + 1,
+                    entry.start_lba,
+                    entry.sectors
+                );
                 let dev = Arc::new(BLOCKDEVFILE::new(
                     blk.clone(),
                     DmlinerEntry::new(entry.start_lba, entry.sectors),
                 )) as Arc<dyn crate::fs::vfs::File>;
                 let path = alloc::format!("{}{}", dev_path, idx + 1);
                 ramfs.mkdev(path.as_str(), dev)?;
+                warn!("[vblock-scan] {}: mkdev MBR part{} done", dev_path, idx + 1);
             }
+            warn!("[vblock-scan] {}: register done via MBR", dev_path);
             return Ok(());
         }
 
         debug!("{} Try Parse GPT Partition table", dev_path);
         let mut lba1: [u8; SECTOR_SIZE] = [0; SECTOR_SIZE];
+        warn!("[vblock-scan] {}: read GPT header(lba=1) begin", dev_path);
         if let Err(err) = blk.lock().read_block(1, &mut lba1) {
             warn!("读取 {} 的 GPT Header 失败: {:?}", dev_path, err);
             return Ok(());
         }
+        warn!("[vblock-scan] {}: read GPT header(lba=1) done", dev_path);
 
         let (entry_lba, num_entries, entry_size) = match parsing_gpt_header(&lba1) {
             Ok(v) => v,
@@ -123,6 +151,11 @@ impl RootFs {
         let entry_sectors = entries_bytes.div_ceil(SECTOR_SIZE);
         let mut entry_buf = alloc::vec![0u8; entry_sectors * SECTOR_SIZE];
         for s in 0..entry_sectors {
+            warn!(
+                "[vblock-scan] {}: read GPT entry sector begin lba={}",
+                dev_path,
+                entry_lba as usize + s
+            );
             if let Err(err) = blk.lock().read_block(
                 entry_lba as usize + s,
                 &mut entry_buf[s * SECTOR_SIZE..(s + 1) * SECTOR_SIZE],
@@ -130,6 +163,11 @@ impl RootFs {
                 warn!("读取 {} 的 GPT 分区项失败: {:?}", dev_path, err);
                 return Ok(());
             }
+            warn!(
+                "[vblock-scan] {}: read GPT entry sector done lba={}",
+                dev_path,
+                entry_lba as usize + s
+            );
         }
 
         let gpt_parts = parsing_gpt_entries(&entry_buf, num_entries, entry_size);
@@ -139,14 +177,23 @@ impl RootFs {
                 "{} GPT partition {}: start_lba={}, sectors={}, meta={:?}",
                 dev_path, idx, gp.start_lba, gp.sectors, gp.metadata
             );
+            warn!(
+                "[vblock-scan] {}: mkdev GPT part{} begin start_lba={}, sectors={}",
+                dev_path,
+                idx + 1,
+                gp.start_lba,
+                gp.sectors
+            );
             let dev = Arc::new(BLOCKDEVFILE::new(
                 blk.clone(),
                 DmlinerEntry::new(gp.start_lba, gp.sectors),
             )) as Arc<dyn crate::fs::vfs::File>;
             let path = alloc::format!("{}{}", dev_path, idx + 1);
             ramfs.mkdev(path.as_str(), dev)?;
+            warn!("[vblock-scan] {}: mkdev GPT part{} done", dev_path, idx + 1);
         }
 
+        warn!("[vblock-scan] {}: register done via GPT", dev_path);
         Ok(())
     }
 

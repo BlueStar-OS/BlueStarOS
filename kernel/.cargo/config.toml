@@ -11,9 +11,3 @@ rustflags = [
     "-Clink-arg=-Tsrc/linker-aarch64.ld", "-Cforce-frame-pointers=yes" , "-C" , "force-frame-pointers=yes"
 ]
 linker = "rust-lld"
-
-[source.crates-io]
-replace-with = "vendored-sources"
-
-[source.vendored-sources]
-directory = "vendor"

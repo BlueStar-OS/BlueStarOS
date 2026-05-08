@@ -3,40 +3,12 @@
 version = 4
 
 [[package]]
-name = "aarch64-cpu"
-version = "10.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6a21cd0131c25c438e19cd6a774adf7e3f64f7f4d723022882facc2dee0f8bc9"
-dependencies = [
- "tock-registers 0.9.0",
-]
-
-[[package]]
-name = "aarch64-cpu-ext"
-version = "0.1.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "52dad5cf7342926ce1c375ec680834e56dd3cdbe8b7adf8a6f99b2854cc52c17"
-dependencies = [
- "aarch64-cpu",
- "tock-registers 0.10.1",
-]
-
-[[package]]
 name = "aho-corasick"
 version = "1.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ddd31a130427c27518df266943a5308ed92d4b226cc639f5a8f1002816174301"
 dependencies = [
  "memchr",
-]
-
-[[package]]
-name = "arm_pl011"
-version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "efcf6afca4502993a737ba1e00952d1321078689da92bf7aab27d4e5756c0bec"
-dependencies = [
- "tock-registers 0.8.1",
 ]
 
 [[package]]
@@ -73,9 +45,9 @@ checksum = "bef38d45163c2f1dde094a7dfd33ccf595c92905c8f8f4fdc18d06fb1037718a"
 
 [[package]]
 name = "bitflags"
-version = "2.10.0"
+version = "2.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "812e12b5285cc515a9c72a5c1d3b6d46a19dac5acfef5265968c166106e31dd3"
+checksum = "c4512299f36f043ab09a583e57bceb5a5aab7a73db1805848e8fef3c9e8c78b3"
 
 [[package]]
 name = "buddy_system_allocator"
@@ -97,62 +69,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "cfg-if"
-version = "1.0.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9330f8b2ff13f34540b44e946ef35111825727b38d33286ef986142615121801"
-
-[[package]]
-name = "crate_interface"
-version = "0.1.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "70272a03a2cef15589bac05d3d15c023752f5f8f2da8be977d983a9d9e6250fb"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn",
-]
-
-[[package]]
-name = "dma-api"
-version = "0.3.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9d51274fe946b4c27cdada87cc6de09a50c0d9192c0f30ba455b29dae09caa0b"
-dependencies = [
- "aarch64-cpu-ext",
-]
-
-[[package]]
-name = "fdt-parser"
-version = "0.4.18"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1f95f0bda5ff920492f6573294d8e3a99b75ee2e5ef93ab313fc6d517fa46785"
-
-[[package]]
 name = "find-msvc-tools"
 version = "0.1.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "645cbb3a84e60b7531617d5ae4e57f7e27308f6445f5abf653209ea76dec8dff"
-
-[[package]]
-name = "kernel_guard"
-version = "0.1.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d10c55bedf6789bc3748e0d8756ee639df1ae25144fd3525ed311044bd9a739f"
-dependencies = [
- "cfg-if",
- "crate_interface",
-]
-
-[[package]]
-name = "kspin"
-version = "0.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3d841fd3aeaa9a55871068f5c3ce48497a6dbcf14e20ca7784a9f68bfdb4c825"
-dependencies = [
- "cfg-if",
- "kernel_guard",
-]
 
 [[package]]
 name = "lazy_static"
@@ -188,7 +108,7 @@ checksum = "f52b00d39961fc5b2736ea853c9cc86238e165017a493d1d5c8eac6bdc4cc273"
 name = "os"
 version = "0.1.0"
 dependencies = [
- "bitflags 2.10.0",
+ "bitflags 2.11.1",
  "buddy_system_allocator",
  "cc",
  "lazy_static",
@@ -197,7 +117,6 @@ dependencies = [
  "riscv",
  "rk3588-clk",
  "rsext4",
- "sdmmc",
  "spin 0.9.8",
  "virtio-drivers",
  "xmas-elf",
@@ -285,14 +204,14 @@ checksum = "df59d8451a4f331a53fbd7c0c349cf4e844ebc051b7081342341a85910d7ac08"
 dependencies = [
  "bare-test-macros",
  "log",
- "tock-registers 0.10.1",
+ "tock-registers",
 ]
 
 [[package]]
 name = "rsext4"
 version = "0.1.0-pre.0"
 dependencies = [
- "bitflags 2.10.0",
+ "bitflags 2.11.1",
  "lazy_static",
  "log",
 ]
@@ -311,24 +230,6 @@ name = "scopeguard"
 version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "94143f37725109f92c262ed2cf5e59bce7498c01bcc1502d7b9afe439a4e9f49"
-
-[[package]]
-name = "sdmmc"
-version = "0.1.0"
-dependencies = [
- "aarch64-cpu",
- "arm_pl011",
- "bare-test-macros",
- "bitflags 2.10.0",
- "cfg-if",
- "dma-api",
- "fdt-parser",
- "kspin",
- "log",
- "paste",
- "smccc",
- "spin 0.10.0",
-]
 
 [[package]]
 name = "semver"
@@ -352,15 +253,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0fda2ff0d084019ba4d7c6f371c95d8fd75ce3524c3cb8fb653a3023f6323e64"
 
 [[package]]
-name = "smccc"
-version = "0.2.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7c73e0ca8c566478040487791c9f488f86c5aec846ca1ab18484be8a1d8c55cd"
-dependencies = [
- "thiserror",
-]
-
-[[package]]
 name = "spin"
 version = "0.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -371,15 +263,6 @@ name = "spin"
 version = "0.9.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6980e8d7511241f8acf4aebddbb1ff938df5eebe98691418c4468d0b72a96a67"
-dependencies = [
- "lock_api",
-]
-
-[[package]]
-name = "spin"
-version = "0.10.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d5fe4ccb98d9c292d56fec89a5e07da7fc4cf0dc11e156b41793132775d3e591"
 dependencies = [
  "lock_api",
 ]
@@ -396,38 +279,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "thiserror"
-version = "2.0.18"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4288b5bcbc7920c07a1149a35cf9590a2aa808e0bc1eafaade0b80947865fbc4"
-dependencies = [
- "thiserror-impl",
-]
-
-[[package]]
-name = "thiserror-impl"
-version = "2.0.18"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ebc4ee7f67670e9b64d05fa4253e753e016c6c95ff35b89b7941d6b856dec1d5"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn",
-]
-
-[[package]]
-name = "tock-registers"
-version = "0.8.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "696941a0aee7e276a165a978b37918fd5d22c55c3d6bda197813070ca9c0f21c"
-
-[[package]]
-name = "tock-registers"
-version = "0.9.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2b9e2fdb3a1e862c0661768b7ed25390811df1947a8acbfbefe09b47078d93c4"
-
-[[package]]
 name = "tock-registers"
 version = "0.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -442,6 +293,7 @@ checksum = "e6e4313cd5fcd3dad5cafa179702e2b244f760991f45397d14d4ebf38247da75"
 [[package]]
 name = "virtio-drivers"
 version = "0.1.0"
+source = "git+https://github.com/rcore-os/virtio-drivers?rev=4ee80e5#4ee80e50babd681869f428ee026167bc12dc6856"
 dependencies = [
  "bitflags 1.3.2",
  "log",

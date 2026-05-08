@@ -50,7 +50,6 @@ bitflags! {
 pub fn have_elf_header(data: [u8; 4]) -> bool {
     data == [0x7f, b'E', b'L', b'F']
 }
-
 /// 文件加载器，根据 app_id 从文件系统 /test 目录加载对应的 ELF 文件
 /// app_id 从 0 开始
 /// 自动elf过滤
@@ -127,6 +126,18 @@ pub fn file_loader(file_path: &str) -> Vec<u8> {
         out.extend_from_slice(&tmp[..n]);
     }
     debug!("Load app for {} success!", file_path);
+
+                // 逐个字节比较
+                let mut zero:u32=0 ;
+                 out.iter().for_each(|x| {
+                    if *x == 0 {
+                        zero+=1;        
+                    }
+                });
+                error!("the mkdir elf zero count is :{} {}",zero,file_path);
+
+
+
     out
 }
 

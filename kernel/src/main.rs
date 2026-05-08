@@ -32,6 +32,7 @@ mod trap;
 use crate::arch::*;
 use crate::config::*;
 use crate::driver::dtb;
+use crate::driver::gpu::inital_gpu;
 use crate::fs::vfs::*;
 use crate::logger::*;
 use crate::memory::*;
@@ -39,6 +40,7 @@ use crate::root::RootFs;
 use crate::task::run_first_task;
 use crate::time::*;
 use core::arch::global_asm;
+use core::ptr::write_volatile;
 use log::*;
 pub use sbi::*;
 
@@ -70,7 +72,7 @@ pub fn blue_main() -> ! {
         "trap refume virtualaddr:{:#x}",
         __kernel_refume as *const () as usize - __kernel_trap as *const () as usize + TRAP_BOTTOM_ADDR
     );
-
+    // inital_gpu();
     warn!("initial file system");
     RootFs::init_rootfs();
 
