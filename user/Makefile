@@ -51,8 +51,8 @@ build: FORCE
 	@set -e; \
 	cfg=$$(mktemp); \
 	trap 'rm -f "$$cfg"' EXIT; \
-	printf '[target.$(TARGET)]\nrustflags = [\n    "-Clink-args=-T$(CURDIR)/src/linker.ld",\n]\n\n[source.crates-io]\nreplace-with = "vendored-sources"\n\n[source.vendored-sources]\ndirectory = "$(CURDIR)/vendor"\n' > "$$cfg"; \
-	cargo build --config "$$cfg" --release --target $(TARGET) --offline
+	printf '[target.$(TARGET)]\nrustflags = [\n    "-Clink-args=-T$(CURDIR)/src/linker.ld",\n]\n\n' > "$$cfg"; \
+	cargo build --config "$$cfg" --release --target $(TARGET)
 	@mkdir -p $(CTEST_OUT_DIR)
 	@test -n "$(RV_MUSL_GCC)" || { echo "error: no RISC-V musl C compiler found. expected one of: /opt/riscv/bin/riscv64-unknown-linux-musl-gcc, /opt/riscv/bin/riscv64-linux-musl-gcc, or one on PATH"; exit 127; }
 	@for t in $(CTEST); do \
@@ -65,8 +65,8 @@ build-aarch64: FORCE
 	@set -e; \
 	cfg=$$(mktemp); \
 	trap 'rm -f "$$cfg"' EXIT; \
-	printf '[target.$(AARCH64_TARGET)]\nrustflags = [\n    "-Clink-args=-T$(CURDIR)/src/linker-aarch64.ld",\n]\n\n[source.crates-io]\nreplace-with = "vendored-sources"\n\n[source.vendored-sources]\ndirectory = "$(CURDIR)/vendor"\n' > "$$cfg"; \
-	cargo build --config "$$cfg" --release --target $(AARCH64_TARGET) --offline
+	printf '[target.$(AARCH64_TARGET)]\nrustflags = [\n    "-Clink-args=-T$(CURDIR)/src/linker-aarch64.ld",\n]\n\n' > "$$cfg"; \
+	cargo build --config "$$cfg" --release --target $(AARCH64_TARGET)
 	@mkdir -p $(AARCH64_CTEST_OUT_DIR)
 	@for t in $(CTEST); do \
 		echo "[ctest-aarch64] CC $$t"; \
