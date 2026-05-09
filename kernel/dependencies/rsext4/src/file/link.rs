@@ -1,5 +1,4 @@
-use super::delete::remove_inodeentry_from_parentdir;
-use super::*;
+use super::{delete::remove_inodeentry_from_parentdir, *};
 
 /// Create a hard link.
 pub fn link<B: BlockDevice>(
@@ -11,19 +10,19 @@ pub fn link<B: BlockDevice>(
     let link_norm = split_paren_child_and_tranlatevalid(link_path);
     let linked_norm = split_paren_child_and_tranlatevalid(linked_path);
 
-    // 1.检查 被链接文件本身是否存在，不存在返回。
+    // Resolve the target inode first.
     let (target_ino, target_inode) = match get_file_inode(fs, block_dev, &linked_norm) {
         Ok(Some(v)) => v,
         Ok(None) => return Err(Ext4Error::not_found()),
         Err(e) => return Err(e),
     };
 
-    // 1.5 不允许链接目录
+    // Hard-linking directories is rejected.
     if target_inode.is_dir() {
         return Err(Ext4Error::permission_denied());
     }
 
-    // 2.检查链接文件本身是否已经存在同名entry，存在返回
+    // Destination entry must not already exist.
     if get_file_inode(fs, block_dev, &link_norm)
         .ok()
         .flatten()
@@ -32,7 +31,7 @@ pub fn link<B: BlockDevice>(
         return Err(Ext4Error::already_exists());
     }
 
-    // link_path 的父目录必须存在且是目录
+    // The destination parent directory must exist and be a directory.
     let (parent_path, child_name) = if let Some(pos) = link_norm.rfind('/') {
         let parent = if pos == 0 {
             "/".to_string()
@@ -55,7 +54,8 @@ pub fn link<B: BlockDevice>(
         return Err(Ext4Error::not_dir());
     }
 
-    // 3.复制目标entry（主要复制 file_type），插入到当前父目录（新名字）
+    // Reuse the source entry's file type when possible so the new directory
+    // entry matches existing metadata.
     let (linked_parent_path, linked_child_name) = if let Some(pos) = linked_norm.rfind('/') {
         let parent = if pos == 0 {
             "/".to_string()
@@ -72,14 +72,14 @@ pub fn link<B: BlockDevice>(
     if let Some((_lpino, mut lp_inode)) = get_inode_with_num(fs, block_dev, &linked_parent_path)
         .ok()
         .flatten()
-        && let Ok(blocks) = resolve_inode_block_allextend(fs, block_dev, &mut lp_inode)
+        && let Ok(blocks) = resolve_inode_block_allextend(block_dev, &mut lp_inode)
     {
         for &phys in blocks.values() {
             let cached = match fs.datablock_cache.get_or_load(block_dev, phys) {
                 Ok(v) => v,
                 Err(_) => continue,
             };
-            let data = &cached.data[..BLOCK_SIZE];
+            let data = &cached.data[..fs.block_size];
             let iter = DirEntryIterator::new(data);
             for (entry, _) in iter {
                 if entry.inode == 0 {
@@ -106,7 +106,8 @@ pub fn link<B: BlockDevice>(
         }
     });
 
-    // insert_dir_entry 会根据 child_name 重新计算 name_len/rec_len（满足“更新名字和长度信息”）
+    // `insert_dir_entry` recalculates name length and record length for the new
+    // entry automatically.
     if insert_dir_entry(
         fs,
         block_dev,
@@ -121,7 +122,7 @@ pub fn link<B: BlockDevice>(
         return Err(Ext4Error::corrupted());
     }
 
-    // 4.更新目标inode的link+1，失败则回滚刚插入的目录项
+    // Update the target link count and roll back the inserted entry on failure.
     let new_links = target_inode.i_links_count.saturating_add(1);
     if fs
         .set_inode_links_count(block_dev, target_ino, new_links)

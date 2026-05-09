@@ -3,13 +3,7 @@
 
 extern crate user_lib;
 use user_lib::print;
-use user_lib::{
-    println,
-    sys_mkdir,
-    sys_stat,
-    sys_unlink,
-    KStat,
-};
+use user_lib::{println, sys_mkdir, sys_stat, sys_unlink, KStat};
 
 #[inline]
 fn ft_name(ft: u32) -> &'static str {

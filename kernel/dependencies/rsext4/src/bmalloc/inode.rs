@@ -1,6 +1,7 @@
+use log::error;
+
 use super::*;
 use crate::error::{Ext4Error, Ext4Result};
-use log::error;
 
 /// Result of an inode allocation request.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -125,20 +126,25 @@ impl InodeAllocator {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use alloc::vec;
+
+    use super::*;
 
     #[test]
     fn test_inode_allocator() {
-        let mut sb = Ext4Superblock::default();
-        sb.s_inodes_per_group = 256;
-        sb.s_first_ino = 11;
+        let sb = Ext4Superblock {
+            s_inodes_per_group: 256,
+            s_first_ino: 11,
+            ..Default::default()
+        };
 
         let allocator = InodeAllocator::new(&sb);
 
         let mut bitmap_data = vec![0u8; 32]; // 256 bits
-        let mut gd = Ext4GroupDesc::default();
-        gd.bg_free_inodes_count_lo = 256;
+        let gd = Ext4GroupDesc {
+            bg_free_inodes_count_lo: 256,
+            ..Default::default()
+        };
 
         let result = allocator.alloc_inode_in_group(&mut bitmap_data, BGIndex::new(0), &gd);
         assert!(result.is_ok());
@@ -150,14 +156,18 @@ mod tests {
 
     #[test]
     fn test_inode_global_conversion() {
-        let mut sb = Ext4Superblock::default();
-        sb.s_inodes_per_group = 256;
-        sb.s_first_ino = 11;
+        let sb = Ext4Superblock {
+            s_inodes_per_group: 256,
+            s_first_ino: 11,
+            ..Default::default()
+        };
 
         let allocator = InodeAllocator::new(&sb);
 
         // Validate the round-trip conversion between global and group-local indices.
-        let (group, inode_in_group) = allocator.global_to_group(InodeNumber::new(257).unwrap()).unwrap();
+        let (group, inode_in_group) = allocator
+            .global_to_group(InodeNumber::new(257).unwrap())
+            .unwrap();
         assert_eq!(group, BGIndex::new(1));
         assert_eq!(inode_in_group, RelativeInodeIndex::new(0));
 

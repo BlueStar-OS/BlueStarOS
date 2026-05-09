@@ -1,16 +1,10 @@
 //! Extent tree node parsing and update helpers.
 
-use alloc::vec;
-use alloc::vec::*;
+use alloc::{vec, vec::*};
+
 use log::{debug, error};
 
-use crate::bmalloc::AbsoluteBN;
-use crate::blockdev::*;
-use crate::config::*;
-use crate::disknode::*;
-use crate::endian::*;
-use crate::error::*;
-use crate::ext4::*;
+use crate::{blockdev::*, bmalloc::AbsoluteBN, disknode::*, endian::*, error::*, ext4::*};
 
 mod insert;
 mod node;

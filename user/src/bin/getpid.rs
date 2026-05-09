@@ -3,7 +3,7 @@
 
 extern crate user_lib;
 use user_lib::print;
-use user_lib::{println, sys_getpid, sys_getppid, sys_fork, sys_wait, sys_exit};
+use user_lib::{println, sys_exit, sys_fork, sys_getpid, sys_getppid, sys_wait};
 
 #[no_mangle]
 pub fn main() -> usize {

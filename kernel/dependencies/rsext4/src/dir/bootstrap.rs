@@ -1,22 +1,19 @@
 //! Root directory bootstrap helpers.
 
-use crate::bmalloc::BGIndex;
-use crate::blockdev::*;
-use crate::checksum::update_ext4_dirblock_csum32;
-use crate::config::*;
-use crate::crc32c::ext4_superblock_has_metadata_csum;
-use crate::dir::insert_dir_entry;
-use crate::disknode::*;
-use crate::endian::DiskFormat;
-use crate::entries::*;
-use crate::error::*;
-use crate::ext4::*;
-use crate::file::*;
-use crate::metadata::Ext4InodeMetadataUpdate;
-use crate::superblock::Ext4Superblock;
 use log::debug;
 
+use crate::{
+    blockdev::*, bmalloc::BGIndex, checksum::update_ext4_dirblock_csum32,
+    crc32c::ext4_superblock_has_metadata_csum, dir::insert_dir_entry, disknode::*,
+    endian::DiskFormat, entries::*, error::*, ext4::*, file::*, metadata::Ext4InodeMetadataUpdate,
+    superblock::Ext4Superblock,
+};
+
 /// Creates the root directory contents and inode.
+///
+/// This formats the first directory block with `.` and `..`, persists a fresh
+/// root inode through the metadata path, and updates the directory count in the
+/// first block group.
 pub fn create_root_directory_entry<B: BlockDevice>(
     fs: &mut Ext4FileSystem,
     block_dev: &mut Jbd2Dev<B>,
@@ -29,7 +26,8 @@ pub fn create_root_directory_entry<B: BlockDevice>(
     let root_gen = fs.get_root(block_dev)?.i_generation;
 
     {
-        let cached = fs.datablock_cache.create_new(data_block);
+        // Format the initial root directory block before the inode is finalized.
+        let cached = fs.datablock_cache.create_new(block_dev, data_block)?;
         let data = &mut cached.data;
 
         let dot_name = b".";
@@ -43,11 +41,11 @@ pub fn create_root_directory_entry<B: BlockDevice>(
 
         let dotdot_name = b"..";
         let dotdot_rec_len = if has_checksum {
-            (BLOCK_SIZE as u16)
+            (fs.block_size as u16)
                 .saturating_sub(dot_rec_len)
                 .saturating_sub(Ext4DirEntryTail::TAIL_LEN)
         } else {
-            (BLOCK_SIZE as u16).saturating_sub(dot_rec_len)
+            (fs.block_size as u16).saturating_sub(dot_rec_len)
         };
         let dotdot = Ext4DirEntry2::new(
             root_inode_num.raw(),
@@ -71,7 +69,7 @@ pub fn create_root_directory_entry<B: BlockDevice>(
 
         if has_checksum {
             let tail = Ext4DirEntryTail::new();
-            let tail_offset = BLOCK_SIZE - Ext4DirEntryTail::TAIL_LEN as usize;
+            let tail_offset = fs.block_size - Ext4DirEntryTail::TAIL_LEN as usize;
             tail.to_disk_bytes(
                 &mut data[tail_offset..tail_offset + Ext4DirEntryTail::TAIL_LEN as usize],
             );
@@ -79,14 +77,21 @@ pub fn create_root_directory_entry<B: BlockDevice>(
         }
     }
 
+    // Persist a clean directory inode that points at the newly initialized block.
     let dir_mode = Ext4Inode::S_IFDIR | 0o755;
     let mut inode = Ext4Inode::empty_for_reuse(fs.default_inode_extra_isize());
     inode.i_links_count = 2;
-    inode.i_size_lo = BLOCK_SIZE as u32;
+    inode.i_size_lo = fs.block_size as u32;
     inode.i_size_high = 0;
-    inode.i_blocks_lo = (BLOCK_SIZE / 512) as u32;
+    inode.i_blocks_lo = (fs.block_size / 512) as u32;
     inode.l_i_blocks_high = 0;
-    build_file_block_mapping(fs, &mut inode, &[data_block], block_dev);
+    build_file_block_mapping_with_inode_num(
+        fs,
+        &mut inode,
+        fs.root_inode,
+        &[data_block],
+        block_dev,
+    );
     fs.finalize_inode_update(
         block_dev,
         fs.root_inode,
@@ -94,6 +99,7 @@ pub fn create_root_directory_entry<B: BlockDevice>(
         Ext4InodeMetadataUpdate::create(dir_mode),
     )?;
 
+    // Group 0 now contains one more live directory.
     if let Some(desc) = fs.get_group_desc_mut(BGIndex::new(0)) {
         let newc = desc.used_dirs_count().saturating_add(1);
         desc.bg_used_dirs_count_lo = (newc & 0xFFFF) as u16;
@@ -108,10 +114,14 @@ pub fn create_root_directory_entry<B: BlockDevice>(
 }
 
 /// Creates `/lost+found` and links it from the root directory.
+///
+/// The helper is idempotent for repeated mkfs-style setup and follows the same
+/// directory bootstrap flow as root creation before linking the entry under `/`.
 pub fn create_lost_found_directory<B: BlockDevice>(
     fs: &mut Ext4FileSystem,
     block_dev: &mut Jbd2Dev<B>,
 ) -> Ext4Result<()> {
+    // Allow callers to reuse the helper during setup without duplicating the directory.
     if file_entry_exisr(fs, block_dev, "/lost+found")? {
         return Ok(());
     }
@@ -127,7 +137,8 @@ pub fn create_lost_found_directory<B: BlockDevice>(
     let lost_gen = fs.get_inode_by_num(block_dev, lost_ino)?.i_generation;
 
     {
-        let cached = fs.datablock_cache.create_new(data_block);
+        // Format the first block of the new directory, including the checksum tail.
+        let cached = fs.datablock_cache.create_new(block_dev, data_block)?;
         let data = &mut cached.data;
 
         let dot_name = b".";
@@ -141,11 +152,11 @@ pub fn create_lost_found_directory<B: BlockDevice>(
 
         let dotdot_name = b"..";
         let dotdot_rec_len = if has_checksum {
-            (BLOCK_SIZE as u16)
+            (fs.block_size as u16)
                 .saturating_sub(dot_rec_len)
                 .saturating_sub(Ext4DirEntryTail::TAIL_LEN)
         } else {
-            (BLOCK_SIZE as u16).saturating_sub(dot_rec_len)
+            (fs.block_size as u16).saturating_sub(dot_rec_len)
         };
         let dotdot = Ext4DirEntry2::new(
             root_inode_num.raw(),
@@ -169,7 +180,7 @@ pub fn create_lost_found_directory<B: BlockDevice>(
 
         if has_checksum {
             let tail = Ext4DirEntryTail::new();
-            let tail_offset = BLOCK_SIZE - Ext4DirEntryTail::TAIL_LEN as usize;
+            let tail_offset = fs.block_size - Ext4DirEntryTail::TAIL_LEN as usize;
             tail.to_disk_bytes(
                 &mut data[tail_offset..tail_offset + Ext4DirEntryTail::TAIL_LEN as usize],
             );
@@ -181,17 +192,24 @@ pub fn create_lost_found_directory<B: BlockDevice>(
     let dir_mode = Ext4Inode::S_IFDIR | 0o755;
     let mut lost_inode = Ext4Inode::empty_for_reuse(fs.default_inode_extra_isize());
     lost_inode.i_links_count = 2;
-    lost_inode.i_size_lo = BLOCK_SIZE as u32;
+    lost_inode.i_size_lo = fs.block_size as u32;
     lost_inode.i_size_high = 0;
-    lost_inode.i_blocks_lo = (BLOCK_SIZE / 512) as u32;
+    lost_inode.i_blocks_lo = (fs.block_size / 512) as u32;
     lost_inode.l_i_blocks_high = 0;
     lost_inode.i_flags =
         Ext4Inode::mask_flags_for_mode(dir_mode, root_inode.i_flags & Ext4Inode::EXT4_FL_INHERITED);
-    build_file_block_mapping(fs, &mut lost_inode, &[data_block], block_dev);
+    build_file_block_mapping_with_inode_num(
+        fs,
+        &mut lost_inode,
+        lost_ino,
+        &[data_block],
+        block_dev,
+    );
     debug!(
         "When create lost+found inode iblock,:{:?} ,data_block:{:?}",
         lost_inode.i_block, data_block
     );
+    // Carry project inheritance only when the feature bit and parent flag both allow it.
     let mut create_update = Ext4InodeMetadataUpdate::create(dir_mode);
     if fs
         .superblock
@@ -202,6 +220,7 @@ pub fn create_lost_found_directory<B: BlockDevice>(
     }
     fs.finalize_inode_update(block_dev, lost_ino, &mut lost_inode, create_update)?;
 
+    // Account the directory in its owning group before publishing the name in root.
     if let Some(desc) = fs.get_group_desc_mut(lf_group) {
         let newc = desc.used_dirs_count().saturating_add(1);
         desc.bg_used_dirs_count_lo = (newc & 0xFFFF) as u16;
@@ -217,6 +236,7 @@ pub fn create_lost_found_directory<B: BlockDevice>(
         "lost+found",
         Ext4DirEntry2::EXT4_FT_DIR,
     )?;
+    // The root gains one more subdirectory link after `lost+found` becomes visible.
     let root_new_links = root_inode.i_links_count.saturating_add(1);
     fs.set_inode_links_count(block_dev, fs.root_inode, root_new_links)?;
 

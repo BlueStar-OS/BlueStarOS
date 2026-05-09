@@ -1,18 +1,20 @@
 //! Hash tree lookup flow and fallback logic.
 
 use alloc::vec::Vec;
+
 use log::{debug, error, warn};
 
-use crate::bmalloc::AbsoluteBN;
-use crate::blockdev::{BlockDevice, Jbd2Dev};
-use crate::config::BLOCK_SIZE;
-use crate::disknode::Ext4Inode;
-use crate::entries::{DirEntryIterator, Ext4DirEntryInfo, Ext4DxEntry, classic_dir, htree_dir};
-use crate::ext4::Ext4FileSystem;
-use crate::loopfile::{resolve_inode_block, resolve_inode_block_allextend};
-
-use super::{Ext4InodeHashTreeExt, HashTreeError, HashTreeManager, HashTreeNode, HashTreeSearchResult};
-
+use super::{
+    Ext4InodeHashTreeExt, HashTreeError, HashTreeManager, HashTreeNode, HashTreeSearchResult,
+};
+use crate::{
+    blockdev::{BlockDevice, Jbd2Dev},
+    bmalloc::{AbsoluteBN, LogicalBN},
+    disknode::Ext4Inode,
+    entries::{DirEntryIterator, Ext4DirEntryInfo, Ext4DxEntry, classic_dir, htree_dir},
+    ext4::Ext4FileSystem,
+    loopfile::{resolve_inode_block, resolve_inode_block_allextend},
+};
 pub(super) fn lookup<B: BlockDevice>(
     manager: &HashTreeManager,
     fs: &mut Ext4FileSystem,
@@ -20,22 +22,31 @@ pub(super) fn lookup<B: BlockDevice>(
     dir_inode: &Ext4Inode,
     target_name: &[u8],
 ) -> Result<HashTreeSearchResult, HashTreeError> {
+    debug!(
+        "Starting hash tree lookup: {:?}",
+        core::str::from_utf8(target_name)
+    );
 
     if !dir_inode.is_htree_indexed() {
         return manager.fallback_to_linear_search(fs, block_dev, dir_inode, target_name);
     }
 
-    let target_hash = htree_dir::calculate_hash(
-        target_name,
-        manager.hash_version,
-        &manager.hash_seed,
-    );
+    let target_hash =
+        htree_dir::calculate_hash(target_name, manager.hash_version, &manager.hash_seed);
+    debug!("Target hash value: 0x{target_hash:08x}");
 
     let root_block = manager.get_root_block(block_dev, dir_inode)?;
     let root_data = manager.read_block_data(fs, block_dev, root_block)?;
     let root_info = manager.parse_root_node(&root_data)?;
 
-    match manager.search_in_hash_tree(fs, block_dev, dir_inode, &root_info, target_hash, target_name) {
+    match manager.search_in_hash_tree(
+        fs,
+        block_dev,
+        dir_inode,
+        &root_info,
+        target_hash,
+        target_name,
+    ) {
         Ok(result) => Ok(result),
         Err(err) => {
             warn!("Hash tree lookup failed: {err}, falling back to linear search");
@@ -79,15 +90,23 @@ impl HashTreeManager {
         target_name: &[u8],
     ) -> Result<HashTreeSearchResult, HashTreeError> {
         match node {
-            HashTreeNode::Root { entries, .. } | HashTreeNode::Internal { entries, .. } => {
-                self.search_in_entries(fs, block_dev, dir_inode, entries, target_hash, target_name, 0)
-            }
+            HashTreeNode::Root { entries, .. } | HashTreeNode::Internal { entries, .. } => self
+                .search_in_entries(
+                    fs,
+                    block_dev,
+                    dir_inode,
+                    entries,
+                    target_hash,
+                    target_name,
+                    0,
+                ),
             HashTreeNode::Leaf { block_num, .. } => {
                 self.search_in_leaf_block(fs, block_dev, *block_num, target_name)
             }
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub(super) fn search_in_entries<B: BlockDevice>(
         &self,
         fs: &mut Ext4FileSystem,
@@ -117,7 +136,14 @@ impl HashTreeManager {
             self.search_in_leaf_data(&block_data, target_name, block_num)
         } else {
             let internal_node = self.parse_internal_node(&block_data)?;
-            self.search_in_hash_tree(fs, block_dev, dir_inode, &internal_node, target_hash, target_name)
+            self.search_in_hash_tree(
+                fs,
+                block_dev,
+                dir_inode,
+                &internal_node,
+                target_hash,
+                target_name,
+            )
         }
     }
 
@@ -162,9 +188,13 @@ impl HashTreeManager {
         dir_inode: &Ext4Inode,
         target_name: &[u8],
     ) -> Result<HashTreeSearchResult, HashTreeError> {
+        debug!(
+            "Using linear search: {:?}",
+            core::str::from_utf8(target_name)
+        );
 
         let total_size = dir_inode.size() as usize;
-        let block_bytes = BLOCK_SIZE;
+        let block_bytes = fs.block_size;
         let total_blocks = if total_size == 0 {
             0
         } else {
@@ -173,13 +203,13 @@ impl HashTreeManager {
 
         if dir_inode.have_extend_header_and_use_extend() {
             let mut inode_copy = *dir_inode;
-            let blocks_map = match resolve_inode_block_allextend(fs, block_dev, &mut inode_copy) {
+            let blocks_map = match resolve_inode_block_allextend(block_dev, &mut inode_copy) {
                 Ok(map) => map,
                 Err(_) => return Err(HashTreeError::BlockOutOfRange),
             };
 
             for lbn in 0..total_blocks {
-                let phys = match blocks_map.get(&(lbn as u32)) {
+                let phys = match blocks_map.get(&(LogicalBN::new(lbn as u32))) {
                     Some(block) => *block,
                     None => continue,
                 };

@@ -5,9 +5,12 @@
 
 use std::cell::Cell;
 
-use rsext4::bmalloc::AbsoluteBN;
-use rsext4::error::{Ext4Error, Ext4Result};
-use rsext4::*;
+use rsext4::{
+    api::SeekWhence,
+    bmalloc::AbsoluteBN,
+    error::{Ext4Error, Ext4Result},
+    *,
+};
 
 /// Simple in-memory block device used by the integration tests.
 struct TestBlockDevice {
@@ -17,11 +20,15 @@ struct TestBlockDevice {
     now: Cell<i64>,
 }
 
+fn open_rw_create() -> bool {
+    true
+}
+
 impl TestBlockDevice {
     fn new(size: usize) -> Self {
         Self {
             data: vec![0; size],
-            block_size: rsext4::BLOCK_SIZE as u32, // Match the ext4 block size used by the crate.
+            block_size: 1024u32 << rsext4::LOG_BLOCK_SIZE, // Match the mkfs default block size.
             is_open: false,
             now: Cell::new(1_700_000_000),
         }
@@ -143,10 +150,16 @@ fn test_file_operations() {
 
     // Then switch to the descriptor-style API and validate that open/write/read
     // observe the same backing state.
-    let mut file = open(&mut jbd2_dev, &mut fs, "/filetest/api.txt", true).expect("open failed");
+    let mut file = open(
+        &mut jbd2_dev,
+        &mut fs,
+        "/filetest/api.txt",
+        open_rw_create(),
+    )
+    .expect("open failed");
 
     write_at(&mut jbd2_dev, &mut fs, &mut file, b"API test").expect("write_at failed");
-    lseek(&mut file, 0).expect("lseek failed");
+    lseek(&mut jbd2_dev, &mut fs, &mut file, 0, SeekWhence::Set).expect("lseek failed");
 
     let bytes_read = read_at(&mut jbd2_dev, &mut fs, &mut file, 8).expect("read_at failed");
     assert_eq!(bytes_read, b"API test");

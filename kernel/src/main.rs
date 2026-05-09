@@ -52,7 +52,8 @@ pub fn clear_bss() {
         pub fn sbss();
         pub fn ebss();
     }
-    (sbss as *const () as usize..ebss as *const () as usize).for_each(|a| unsafe { (a as *mut u8).write_volatile(0) });
+    (sbss as *const () as usize..ebss as *const () as usize)
+        .for_each(|a| unsafe { (a as *mut u8).write_volatile(0) });
 }
 
 /// the rust entry-point of os
@@ -70,12 +71,12 @@ pub fn blue_main() -> ! {
     debug!("traper {:#x}", straper as *const () as usize);
     debug!(
         "trap refume virtualaddr:{:#x}",
-        __kernel_refume as *const () as usize - __kernel_trap as *const () as usize + TRAP_BOTTOM_ADDR
+        __kernel_refume as *const () as usize - __kernel_trap as *const () as usize
+            + TRAP_BOTTOM_ADDR
     );
     inital_gpu();
     warn!("initial file system");
     RootFs::init_rootfs();
-
     run_first_task();
 
     warn!("All right,kernel Will end\n");

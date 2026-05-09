@@ -3,9 +3,9 @@
 
 extern crate alloc;
 
-use user_lib::{print, println, utsname_field_len};
-use user_lib::UtsName;
 use user_lib::sys_uname;
+use user_lib::UtsName;
+use user_lib::{print, println, utsname_field_len};
 
 fn cstr_field_to_str(field: &[u8; utsname_field_len]) -> &str {
     let end = field.iter().position(|&b| b == 0).unwrap_or(field.len());

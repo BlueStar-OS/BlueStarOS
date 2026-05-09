@@ -3,8 +3,8 @@
 
 extern crate user_lib;
 use user_lib::print;
+use user_lib::syscall::{sys_clone, sys_exit, sys_getpid, sys_wait};
 use user_lib::{args, println};
-use user_lib::syscall::{sys_clone, sys_getpid, sys_wait, sys_exit};
 
 #[no_mangle]
 pub fn main() -> usize {
@@ -26,7 +26,11 @@ pub fn main() -> usize {
 
     // parent
     let child_pid = ret;
-    println!("clone_test: parent pid={} child_pid={}", sys_getpid(), child_pid);
+    println!(
+        "clone_test: parent pid={} child_pid={}",
+        sys_getpid(),
+        child_pid
+    );
 
     let mut status: isize = -1;
     let waited = sys_wait(&mut status as *mut isize);

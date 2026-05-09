@@ -101,6 +101,7 @@ pub fn syscall_handler(id: usize, arg: [usize; 6]) -> isize {
         SYS_SET_TID_ADDRESS => sys_set_tid_address(arg[0]),
         SYS_EXIT_GROUP => sys_exit_group(arg[0]),
         SYS_WRITEV => sys_writev(arg[0] as i32, arg[1], arg[2] as i32),
+        SYS_IOCTL => sys_ioctl(arg[0], arg[1], arg[2]),
         SYS_WRITE => sys_write(arg[0], arg[1], arg[2]),
         SYS_READ => sys_read(arg[0], arg[1], arg[2]),
         SYS_EXIT => sys_exit(arg[0]),
@@ -161,6 +162,7 @@ pub fn syscall_handler(id: usize, arg: [usize; 6]) -> isize {
         SYS_UMOUNT2 => sys_umount2(arg[0], arg[1]),
         SYS_MPROTECT => sys_mprotect(arg[0], arg[1], arg[2]),
         // Not implemented yet in this kernel:
+        // TODO(dirinkbottle): musl/doom 还会继续撞到 readv、clock_gettime、rt_sig*。
         SYS_SETPRIORITY | SYS_LINKAT => {
             error!("Unimplemented syscall id={}", id);
             BlueErr::ENOSYS.as_isize()

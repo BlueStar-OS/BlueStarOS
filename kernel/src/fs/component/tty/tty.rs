@@ -1,6 +1,7 @@
 use crate::arch::driver::uart;
 use crate::arch::{disable_irq, enable_irq, wait_for_interrupt};
 use crate::disable_timer_interrupt;
+use crate::driver::gpu::vga_console::VgaScreen;
 use crate::enable_timer_interrupt;
 use crate::fs::vfs::{File, OpenFlags, VfsFsError};
 use crate::task::TASK_MANAER;
@@ -21,7 +22,7 @@ pub struct Stderr;
 
 impl Stdin {
     #[inline]
-    fn poll_input() -> Option<u8> {
+    pub(crate) fn poll_input() -> Option<u8> {
         #[cfg(any(target_arch = "riscv64", target_arch = "aarch64"))]
         {
             crate::arch::driver::keyboard::read_input()
@@ -49,7 +50,7 @@ impl Stdin {
 
     /// `suspend_and_run_task()` 只能在 trap 顶层安全调用。
     /// AArch64 键盘 IRQ 会在 syscall 的内核栈上唤醒 `wfi`，这里不能直接调度。
-    pub fn get_char() -> u8 {
+    pub(crate) fn get_char() -> u8 {
         loop {
             if let Some(c) = Self::poll_input() {
                 return c;
@@ -67,6 +68,11 @@ impl File for Stdout {
     fn write(&self, buf: &[u8]) -> Result<usize, VfsFsError> {
         for &byte in buf {
             uart::putc(byte);
+            unsafe {
+                if !VgaScreen.fb_base.is_null() {
+                    VgaScreen.draw_char(byte as char)
+                }
+            }
         }
         Ok(buf.len())
     }
@@ -115,9 +121,7 @@ impl File for Stderr {
 
 impl Write for Stdout {
     fn write_str(&mut self, s: &str) -> core::fmt::Result {
-        for cha in s.chars() {
-            uart::putc(cha as u8);
-        }
+        let _ = self.write(s.as_bytes());
         Ok(())
     }
 }
@@ -125,7 +129,7 @@ impl Write for Stdout {
 /// 打印函数
 pub fn print(fmt: fmt::Arguments) {
     let mut stdout = Stdout;
-    stdout.write_fmt(fmt).unwrap()
+    stdout.write_fmt(fmt).unwrap();
 }
 
 pub fn stdin_file() -> Arc<dyn File> {

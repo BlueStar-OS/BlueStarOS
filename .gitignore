@@ -10,5 +10,7 @@ tmp
 other/
 .gitnexus
 *.bin
+linux
+initrd.gz
 AGENTS.md
 CLAUDE.md

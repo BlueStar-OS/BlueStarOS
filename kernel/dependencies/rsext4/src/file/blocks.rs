@@ -1,9 +1,11 @@
 use super::*;
+use crate::bmalloc::LogicalBN;
 
-/// Builds block mappings for a file inode from absolute data block numbers.
-pub fn build_file_block_mapping<B: BlockDevice>(
+/// Builds block mappings and enables checksums for external extent nodes.
+pub fn build_file_block_mapping_with_inode_num<B: BlockDevice>(
     fs: &mut Ext4FileSystem,
     inode: &mut Ext4Inode,
+    inode_num: InodeNumber,
     data_blocks: &[AbsoluteBN],
     block_dev: &mut Jbd2Dev<B>,
 ) {
@@ -15,11 +17,11 @@ pub fn build_file_block_mapping<B: BlockDevice>(
     }
 
     if fs.superblock.has_extents() {
-        // 使用 extent 映射数据块，优先合并连续块
+        // Prefer extents and merge contiguous physical blocks into the same run.
         inode.i_flags |= Ext4Inode::EXT4_EXTENTS_FL;
         inode.i_block = [0; 15];
 
-        //初始头构建
+        // Make sure the embedded root header exists before inserting extents.
         if !inode.have_extend_header_and_use_extend() {
             inode.i_flags |= Ext4Inode::EXT4_EXTENTS_FL;
             inode.write_extend_header();
@@ -42,8 +44,12 @@ pub fn build_file_block_mapping<B: BlockDevice>(
             if is_contiguous {
                 run_len = run_len.saturating_add(1);
             } else {
-                // 结束当前 run，生成一个 extent
-                let ext = Ext4Extent::new(run_start_lbn, run_start_pblk, run_len as u16);
+                // Finish the current physical run and emit one extent.
+                let ext = Ext4Extent::new(
+                    LogicalBN::new(run_start_lbn),
+                    run_start_pblk,
+                    run_len as u16,
+                );
                 exts_vec.push(ext);
 
                 run_start_lbn = lbn;
@@ -52,11 +58,16 @@ pub fn build_file_block_mapping<B: BlockDevice>(
             }
         }
 
-        let ext = Ext4Extent::new(run_start_lbn, run_start_pblk, run_len as u16);
+        let ext = Ext4Extent::new(
+            LogicalBN::new(run_start_lbn),
+            run_start_pblk,
+            run_len as u16,
+        );
         exts_vec.push(ext);
 
-        // 构造一个叶子根节点，并通过 ExtentTree 将其写入 inode.i_block
-        let mut tree = ExtentTree::new(inode);
+        // Insert the computed extents through `ExtentTree` so the inode root
+        // receives the same serialized structure as runtime writes.
+        let mut tree = ExtentTree::with_checksum(inode, &fs.superblock, inode_num);
         for extend in exts_vec {
             tree.insert_extent(fs, extend, block_dev)
                 .expect("Extend insert Failed!");

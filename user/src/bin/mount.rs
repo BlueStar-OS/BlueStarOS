@@ -2,10 +2,10 @@
 #![no_main]
 
 extern crate user_lib;
-use user_lib::print;
-use user_lib::{args, println};
 use user_lib::error::*;
+use user_lib::print;
 use user_lib::syscall::sys_mount;
+use user_lib::{args, println};
 
 /// 将 errno 负数值翻译为常量名
 fn errname(ret: isize) -> &'static str {
@@ -34,7 +34,11 @@ pub fn main() -> usize {
 
     let source = argv[1].as_str();
     let target = argv[2].as_str();
-    let fstype = if argv.len() >= 4 { argv[3].as_str() } else { "auto" };
+    let fstype = if argv.len() >= 4 {
+        argv[3].as_str()
+    } else {
+        "auto"
+    };
 
     let ret = sys_mount(source, target, fstype, 0, "");
     if ret < 0 {

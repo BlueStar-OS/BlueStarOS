@@ -3,14 +3,18 @@
 
 extern crate user_lib;
 
-use user_lib::{args, println,print};
-use user_lib::syscall::{sys_mkdir, sys_mount, sys_open, sys_getdents64, sys_close, O_RDONLY};
+use user_lib::syscall::{sys_close, sys_getdents64, sys_mkdir, sys_mount, sys_open, O_RDONLY};
+use user_lib::{args, print, println};
 
 #[no_mangle]
 pub fn main() -> usize {
     // usage: mount_test [target]
     let argv = args();
-    let target = if argv.len() >= 2 { argv[1].as_str() } else { "/mnt/ext4" };
+    let target = if argv.len() >= 2 {
+        argv[1].as_str()
+    } else {
+        "/mnt/ext4"
+    };
 
     // Ensure mountpoint directories exist.
     let _ = sys_mkdir("/mnt");

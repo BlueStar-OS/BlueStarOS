@@ -1,13 +1,15 @@
 //! Inode table cache helpers.
 
-use crate::bmalloc::{AbsoluteBN, BGIndex, InodeNumber};
-use crate::blockdev::*;
-use crate::config::*;
-use crate::disknode::*;
-use crate::endian::*;
-use crate::error::*;
-use alloc::collections::BTreeMap;
-use alloc::vec::Vec;
+use alloc::{collections::BTreeMap, vec::Vec};
+
+use crate::{
+    blockdev::*,
+    bmalloc::{AbsoluteBN, BGIndex, InodeNumber},
+    config::*,
+    disknode::*,
+    endian::*,
+    error::*,
+};
 
 /// Cache key for one global inode number.
 pub type InodeCacheKey = InodeNumber;
@@ -139,20 +141,18 @@ impl InodeCache {
         block_num: AbsoluteBN,
         offset: usize,
     ) -> Ext4Result<&CachedInode> {
-        // 如果缓存中不存在，则加载
+        // Load the inode from disk on the first cache miss.
         if !self.cache.contains_key(&inode_num) {
-            // 检查是否需要淘汰
             if self.cache.len() >= self.max_entries {
                 self.evict_lru(block_dev)?;
             }
 
-            // 从磁盘加载
             let inode = self.load_inode(block_dev, block_num, offset)?;
             let cached = CachedInode::new(inode, inode_num, block_num, offset);
             self.cache.insert(inode_num, cached);
         }
 
-        // 更新访问时间
+        // Refresh the LRU timestamp on every access.
         self.access_counter += 1;
         if let Some(cached) = self.cache.get_mut(&inode_num) {
             cached.last_access = self.access_counter;
@@ -169,7 +169,7 @@ impl InodeCache {
         block_num: AbsoluteBN,
         offset: usize,
     ) -> Ext4Result<&mut CachedInode> {
-        // 如果缓存中不存在，则加载
+        // Load the inode from disk on the first mutable cache miss.
         if !self.cache.contains_key(&inode_num) {
             if self.cache.len() >= self.max_entries {
                 self.evict_lru(block_dev)?;
@@ -180,7 +180,7 @@ impl InodeCache {
             self.cache.insert(inode_num, cached);
         }
 
-        // 更新访问时间并返回可变引用
+        // Refresh the LRU timestamp before returning the mutable handle.
         self.access_counter += 1;
         if let Some(cached) = self.cache.get_mut(&inode_num) {
             cached.last_access = self.access_counter;
@@ -316,7 +316,7 @@ impl InodeCache {
 
         let mut idx = 0usize;
         while idx < dirty_inodes.len() {
-            let (block_num, _, _) = dirty_inodes[idx];
+            let (block_num, ..) = dirty_inodes[idx];
 
             block_dev.read_block(block_num)?;
             {
@@ -336,7 +336,7 @@ impl InodeCache {
             block_dev.write_block(block_num, true)?;
         }
 
-        // 清除所有脏标记
+        // All flushed entries are now clean.
         for cached in self.cache.values_mut() {
             cached.dirty = false;
         }
@@ -431,7 +431,7 @@ mod tests {
 
         let inodes_per_group = 128;
         let inode_table_start = 100;
-        let block_size = BLOCK_SIZE;
+        let block_size = runtime_block_size();
 
         let (block, offset, group) = cache
             .calc_inode_location(

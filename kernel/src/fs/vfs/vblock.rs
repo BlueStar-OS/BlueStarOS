@@ -36,6 +36,14 @@ pub trait BlockDevTrait: Send + Sync {
     /// `lba`: 逻辑扇区号。`buf.len()` 必须 >= `SECTOR_SIZE`。
     fn write_block(&mut self, lba: usize, buf: &[u8]) -> Result<(), VfsFsError>;
 
+    /// 将设备或驱动缓存中的脏数据刷到稳定存储。
+    ///
+    /// 流程：
+    /// 1. 文件系统调用 `File::flush()`；
+    /// 2. `BLOCKDEVFILE::flush()` 把请求下推到这里；
+    /// 3. 具体块设备决定是发送硬件 flush 命令，还是在无缓存场景下直接成功。
+    fn flush(&mut self) -> Result<(), VfsFsError>;
+
     /// 设备总扇区数。
     fn capacity_in_sectors(&self) -> u64;
 }
@@ -199,6 +207,11 @@ impl File for BLOCKDEVFILE {
         }
 
         Ok(read_pos)
+    }
+
+    /// 将底层块设备缓存刷到稳定存储。
+    fn flush(&self) -> Result<(), VfsFsError> {
+        self.blockdevice.lock().flush()
     }
 
     /// 调整文件光标。

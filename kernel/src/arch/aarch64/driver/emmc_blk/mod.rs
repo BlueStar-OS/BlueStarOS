@@ -75,6 +75,13 @@ impl BlockDevTrait for EmmcBlk {
             .map_err(|_| VfsFsError::IO)
     }
 
+    /// 当前 eMMC host 驱动没有额外的软件写回缓存。
+    ///
+    /// TODO(dirinkbottle): 后续补 eMMC cache control / sanitize 时，在这里接真实 flush。
+    fn flush(&mut self) -> Result<(), VfsFsError> {
+        Ok(())
+    }
+
     fn capacity_in_sectors(&self) -> u64 {
         self.capacity_sectors
     }

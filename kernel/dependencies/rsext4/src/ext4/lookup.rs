@@ -23,8 +23,7 @@ impl Ext4FileSystem {
         Ok(inode)
     }
 
-    ///获取根目录
-    ///上层api封装 获取根目录 inode为2
+    /// Loads the root inode from inode table storage.
     pub fn get_root<B: BlockDevice>(
         &mut self,
         block_dev: &mut Jbd2Dev<B>,
@@ -37,11 +36,13 @@ impl Ext4FileSystem {
             self.root_inode,
             self.superblock.s_inodes_per_group,
             inode_table_start,
-            BLOCK_SIZE,
+            self.block_size,
         )?;
         let result =
             self.inodetable_cahce
                 .get_or_load(block_dev, self.root_inode, block_num, offset)?;
+        debug!("Root inode i_mode: {}", result.inode.i_mode);
+        debug!("Root inode detail: {:?}", result.inode);
         Ok(result.inode)
     }
 }

@@ -1,14 +1,15 @@
-use alloc::vec::Vec;
+use alloc::{vec, vec::Vec};
 use core::cell::Cell;
 
-use crate::bmalloc::{AbsoluteBN, BlockAllocator, InodeAllocator, InodeNumber};
-use crate::blockdev::{BlockDevice, Jbd2Dev};
-use crate::config::DEFAULT_INODE_SIZE;
-use crate::disknode::{Ext4Inode, Ext4Timestamp};
-use crate::error::Ext4Error;
-use crate::ext4::Ext4FileSystem;
-
 use super::*;
+use crate::{
+    blockdev::{BlockDevice, Jbd2Dev},
+    bmalloc::{AbsoluteBN, BlockAllocator, InodeAllocator, InodeNumber},
+    config::DEFAULT_INODE_SIZE,
+    disknode::{Ext4Inode, Ext4Timestamp},
+    error::Ext4Error,
+    ext4::Ext4FileSystem,
+};
 
 struct MockBlockDevice {
     data: Vec<u8>,
@@ -18,8 +19,7 @@ struct MockBlockDevice {
 
 impl MockBlockDevice {
     fn new(size: usize) -> Self {
-        let mut data = Vec::new();
-        data.resize(size, 0);
+        let data = vec![0; size];
         Self {
             data,
             is_open: false,
@@ -29,12 +29,7 @@ impl MockBlockDevice {
 }
 
 impl BlockDevice for MockBlockDevice {
-    fn write(
-        &mut self,
-        buffer: &[u8],
-        block_id: AbsoluteBN,
-        count: u32,
-    ) -> Result<(), Ext4Error> {
+    fn write(&mut self, buffer: &[u8], block_id: AbsoluteBN, count: u32) -> Result<(), Ext4Error> {
         if !self.is_open {
             return Err(Ext4Error::badf());
         }
@@ -97,12 +92,16 @@ impl BlockDevice for MockBlockDevice {
 }
 
 fn create_test_fs() -> Ext4FileSystem {
-    use crate::cache::{BitmapCache, DataBlockCache, InodeCache};
-    use crate::superblock::Ext4Superblock;
+    use crate::{
+        cache::{BitmapCache, DataBlockCache, InodeCache},
+        superblock::Ext4Superblock,
+    };
 
-    let mut superblock = Ext4Superblock::default();
-    superblock.s_hash_seed = [0x12345678, 0x87654321, 0xABCDEF00, 0x00FEDCBA];
-    superblock.s_def_hash_version = 0x8;
+    let superblock = Ext4Superblock {
+        s_hash_seed: [0x12345678, 0x87654321, 0xABCDEF00, 0x00FEDCBA],
+        s_def_hash_version: 0x8,
+        ..Default::default()
+    };
 
     let inode_size = match superblock.s_inode_size {
         0 => DEFAULT_INODE_SIZE as usize,
@@ -121,6 +120,7 @@ fn create_test_fs() -> Ext4FileSystem {
         group_count: 1,
         mounted: true,
         journal_sb_block_start: None,
+        block_size: 4096,
     }
 }
 
@@ -213,8 +213,7 @@ fn test_dx_entry_parsing() {
     let fs = create_test_fs();
     let manager = create_hash_tree_manager(&fs);
 
-    let mut test_data = Vec::new();
-    test_data.resize(16, 0);
+    let mut test_data = vec![0; 16];
     test_data[0..4].copy_from_slice(&0x12345678u32.to_le_bytes());
     test_data[4..8].copy_from_slice(&1u32.to_le_bytes());
     test_data[8..12].copy_from_slice(&0x87654321u32.to_le_bytes());

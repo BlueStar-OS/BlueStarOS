@@ -1,25 +1,88 @@
-use super::mkfs::read_superblock;
-use super::*;
+use super::{mkfs::read_superblock, *};
 
 impl Ext4FileSystem {
-    ///创建根目录
-    ///文件系统初始化时调用
+    /// Creates the root directory tree during bootstrap.
     fn create_root_dir<B: BlockDevice>(&mut self, block_dev: &mut Jbd2Dev<B>) -> Ext4Result<()> {
-        // 逻辑迁移到 mkd::create_root_directory_entry 中
+        // The actual on-disk initialization lives in the dedicated directory
+        // bootstrap helper.
         create_root_directory_entry(self, block_dev)
     }
 
-    /// 打开Ext4文件系统
+    fn dirty_for_mount(superblock: &mut Ext4Superblock) {
+        superblock.s_state &= !Ext4Superblock::EXT4_VALID_FS;
+        superblock.s_mnt_count = superblock.s_mnt_count.saturating_add(1);
+    }
+
+    fn inode_cache_size(superblock: &Ext4Superblock) -> usize {
+        match superblock.s_inode_size {
+            0 => DEFAULT_INODE_SIZE as usize,
+            n => n as usize,
+        }
+    }
+
+    fn reset_runtime_from_superblock<B: BlockDevice>(
+        &mut self,
+        block_dev: &mut Jbd2Dev<B>,
+    ) -> Ext4Result<()> {
+        let block_size = self.superblock.block_size() as usize;
+        set_runtime_block_size(block_size);
+        self.block_size = block_size;
+        self.group_count = self.superblock.block_groups_count();
+        self.group_descs =
+            Self::load_group_descriptors(block_dev, &self.superblock, self.group_count)?;
+        self.block_allocator = BlockAllocator::new(&self.superblock);
+        self.inode_allocator = InodeAllocator::new(&self.superblock);
+        self.bitmap_cache = BitmapCache::create_default();
+        self.inodetable_cahce =
+            InodeCache::new(INODE_CACHE_MAX, Self::inode_cache_size(&self.superblock));
+        self.datablock_cache = DataBlockCache::new(DATABLOCK_CACHE_MAX, block_size);
+        Ok(())
+    }
+
+    fn reload_after_journal_replay<B: BlockDevice>(
+        &mut self,
+        block_dev: &mut Jbd2Dev<B>,
+    ) -> Ext4Result<()> {
+        self.superblock = read_superblock(block_dev).map_err(|_| Ext4Error::io())?;
+        self.superblock.verify_superblock()?;
+        let block_size = self.superblock.block_size() as usize;
+        set_runtime_block_size(block_size);
+        self.block_size = block_size;
+        Self::dirty_for_mount(&mut self.superblock);
+        self.reset_runtime_from_superblock(block_dev)
+    }
+
+    fn journal_blocks<B: BlockDevice>(
+        &mut self,
+        block_dev: &mut Jbd2Dev<B>,
+        journal_inode: &mut Ext4Inode,
+    ) -> Ext4Result<Vec<AbsoluteBN>> {
+        let journal_block_count = journal_inode.size().div_ceil(self.block_size as u64);
+        let journal_block_map = resolve_inode_block_allextend(block_dev, journal_inode)?;
+        let mut journal_blocks = Vec::new();
+        for logical in 0..journal_block_count {
+            let logical = u32::try_from(logical).map_err(|_| Ext4Error::corrupted())?;
+            let phys = journal_block_map
+                .get(&LogicalBN::new(logical))
+                .copied()
+                .ok_or_else(Ext4Error::corrupted)?;
+            journal_blocks.push(phys);
+        }
+        Ok(journal_blocks)
+    }
+
+    /// Mounts an ext4 filesystem from the given block device.
     pub fn mount<B: BlockDevice>(block_dev: &mut Jbd2Dev<B>) -> Result<Self, Ext4Error> {
         debug!("Start mounting Ext4 filesystem...");
 
-        //在mount时应该重放一遍日志
-        //block_dev.set_journal_superblock(super_block, jouranl_start_block);
+        // Mount flow:
+        // 1. read and verify the superblock,
+        // 2. load group descriptors and allocator state,
+        // 3. repair bootstrap directories if they are missing,
+        // 4. initialize journal replay state when journaling is enabled.
+        let mut superblock = read_superblock(block_dev).map_err(|_| Ext4Error::io())?;
+        let block_size = superblock.block_size() as usize;
 
-        // 1. 读取超级块（按 ext4 标准偏移 1024 字节，大小 1024 字节）
-        let superblock = read_superblock(block_dev).map_err(|_| Ext4Error::io())?;
-
-        // 2. 验证魔数
         if superblock.s_magic != EXT4_SUPER_MAGIC {
             error!(
                 "Invalid magic: {:#x}, expected: {:#x}",
@@ -29,46 +92,39 @@ impl Ext4FileSystem {
         }
         debug!("Superblock magic verified");
         superblock.verify_superblock()?;
+        set_runtime_block_size(block_size);
 
-        // 3. 检查文件系统状态
-        if superblock.s_state == Ext4Superblock::EXT4_ERROR_FS {
+        // Continue mounting even for an error-state filesystem so higher layers
+        // can inspect or attempt repair.
+        if superblock.s_state & Ext4Superblock::EXT4_ERROR_FS != 0 {
             warn!("Filesystem is in error state");
-            //  return Err(Ext4Error::corrupted());
         }
 
-        // 4. 计算块组数量
+        // Mark the filesystem as "not cleanly unmounted" before any writes.
+        Self::dirty_for_mount(&mut superblock);
+
         let group_count = superblock.block_groups_count();
         debug!("Block group count: {group_count}");
 
-        // 5. 读取所有块组描述符
         let group_descs = Self::load_group_descriptors(block_dev, &superblock, group_count)?;
         debug!("Loaded {} group descriptors", group_descs.len());
 
-        // 6. 初始化分配器
         let block_allocator = BlockAllocator::new(&superblock);
         let inode_allocator = InodeAllocator::new(&superblock);
         debug!("Allocators initialized");
 
-        // 7. 初始化位图缓存（最多缓存8个位图）
         let bitmap_cache = BitmapCache::create_default();
         debug!("Bitmap cache initialized (lazy loading)");
 
-        // 初始化inode缓存
         // NOTE: inode size is a filesystem property (superblock.s_inode_size), not a fixed constant.
         // Using a wrong inode size will make inode table offsets incorrect and may read zeroed inodes
         // (e.g. /dev becomes mode=0, then VFS mount fails with ENOTDIR).
-        let inode_size = match superblock.s_inode_size {
-            0 => DEFAULT_INODE_SIZE as usize,
-            n => n as usize,
-        };
-        let inode_cache = InodeCache::new(INODE_CACHE_MAX, inode_size);
+        let inode_cache = InodeCache::new(INODE_CACHE_MAX, Self::inode_cache_size(&superblock));
         debug!("Inode cache initialized");
 
-        // 初始化数据块缓存
-        let datablock_cache = DataBlockCache::new(DATABLOCK_CACHE_MAX, BLOCK_SIZE);
+        let datablock_cache = DataBlockCache::new(DATABLOCK_CACHE_MAX, block_size);
         debug!("Data block cache initialized");
 
-        // 构造文件系统实例
         let mut fs = Self {
             superblock,
             group_descs,
@@ -81,8 +137,10 @@ impl Ext4FileSystem {
             group_count,
             mounted: true,
             journal_sb_block_start: None,
+            block_size,
         };
-        //详细debug输出
+        // Dump the core topology once so later failures have useful context in
+        // the logs.
         debug_super_and_desc(&fs.superblock, &fs);
 
         // rootinode check !
@@ -91,7 +149,8 @@ impl Ext4FileSystem {
             let root_inode = fs.get_root(block_dev).map_err(|_| Ext4Error::io())?;
             if root_inode.i_mode == 0 || !root_inode.is_dir() {
                 warn!(
-                    "Root inode is uninitialized or not a directory, creating root and lost+found... i_mode: {}, is_dir: {}",
+                    "Root inode is uninitialized or not a directory, creating root and \
+                     lost+found... i_mode: {}, is_dir: {}",
                     root_inode.i_mode,
                     root_inode.is_dir()
                 );
@@ -99,65 +158,69 @@ impl Ext4FileSystem {
             }
         }
 
-        // lost+found check!
+        // Verify the recovery directory after the root directory is known good.
         debug!("Checking lost+found directory...");
         {
-            // 1. 优先信任超级块中的 s_lpf_ino（如果非 0）
+            // Trust the superblock hint when present, but still validate via a
+            // path lookup so stale metadata does not silently pass.
             if fs.superblock.s_lpf_ino != 0 {
                 let ino = fs.superblock.s_lpf_ino;
                 debug!("Lost+found inode recorded in superblock: {ino}");
             } else {
-                warn!("s_lpf_ino is 0, lost+found not recorded in superblock");
+                debug!("s_lpf_ino is 0, lost+found inode hint missing in superblock");
             }
 
-            // 2. 通过路径做一次校验（不会在失败时创建新目录）
             match find_file(&mut fs, block_dev, "/lost+found") {
                 Ok(_inode) => {
                     info!("/lost+found exists (path resolution)");
                 }
                 Err(err) if err.code == Errno::ENOENT => {
                     info!("/lost+found not found by path scan;will create!");
-                    create_lost_found_directory(&mut fs, block_dev).ok();
+                    if create_lost_found_directory(&mut fs, block_dev).is_err() {
+                        warn!("/lost+found missing and create failed");
+                    }
                 }
                 Err(err) => return Err(err),
             }
         }
 
-        // journal check
+        // Journal bootstrap has two stages: ensure the journal inode exists,
+        // then load its superblock and enable replay on the device wrapper.
         {
             if fs.superblock.has_journal() {
-                let mut jouranl_exist: bool = true;
-                fs.modify_inode(block_dev, InodeNumber::new(JOURNAL_FILE_INODE as u32)?, |ji| {
-                    jouranl_exist = ji.i_mode != 0;
-                })
+                let mut journal_exists = true;
+                fs.modify_inode(
+                    block_dev,
+                    InodeNumber::new(JOURNAL_FILE_INODE as u32)?,
+                    |ji| {
+                        journal_exists = ji.i_mode != 0;
+                    },
+                )
                 .expect("file system error panic!");
 
                 if fs
                     .superblock
                     .has_feature_compat(Ext4Superblock::EXT4_FEATURE_COMPAT_HAS_JOURNAL)
-                    && !jouranl_exist
+                    && !journal_exists
                 {
-                    // 不存在但 superblock 声明有 journal，则创建一个新的 journal 文件
                     create_journal_entry(&mut fs, block_dev).expect("create journal entry failed");
-                    //dump_journal_inode(&mut fs, block_dev);
                 }
             }
-            //实际启用Journal
-            if block_dev.is_use_journal() {
-                // 到这里为止：journal inode 一定存在
-                // 初始化 jbd2：读入 journal 超级块并塞进 Jbd2Dev
+            if block_dev.is_use_journal() && fs.superblock.has_journal() {
+                // By this point the journal inode must exist, so resolve its
+                // first data block and hand the loaded journal superblock to
+                // `Jbd2Dev`.
                 let mut j_inode = fs
                     .get_inode_by_num(block_dev, InodeNumber::new(JOURNAL_FILE_INODE as u32)?)
                     .expect("load journal inode failed");
 
-                // 解析 journal inode 第 0 号逻辑块 -> 物理块
-                let journal_first_block = resolve_inode_block(block_dev, &mut j_inode, 0)
-                    .and_then(|opt| opt.ok_or(Ext4Error::corrupted()))
-                    .expect("resolve journal first block failed");
+                let journal_blocks = fs.journal_blocks(block_dev, &mut j_inode)?;
+                let journal_first_block = journal_blocks
+                    .first()
+                    .copied()
+                    .ok_or_else(Ext4Error::corrupted)?;
 
-                //写入fs
                 fs.journal_sb_block_start = Some(journal_first_block);
-                // 通过数据块缓存读出 journal superblock 内容
                 let journal_data = fs
                     .datablock_cache
                     .get_or_load(block_dev, journal_first_block)
@@ -167,15 +230,25 @@ impl Ext4FileSystem {
 
                 let j_sb = JournalSuperBllockS::from_disk_bytes(&journal_data);
 
-                // 把 journal superblock 交给 Jbd2Dev，由它内部 lazy-init JBD2DEVSYSTEM
-                block_dev.set_journal_superblock(j_sb, fs.journal_sb_block_start.unwrap());
+                block_dev.set_journal_superblock_with_mapping(j_sb, journal_blocks)?;
 
-                // Mount-time journal replay for crash recovery.
-                block_dev.journal_replay(); //这里是在读取超级块之后再进行回放的，目前为了快速开启日志时数据不一致问题已经在写入超级块，块组描述符时直接落盘
+                // Replay after reading the filesystem metadata. Superblock and
+                // descriptor writes are already forced to media to avoid stale
+                // reads during fast recovery.
+                if block_dev.journal_replay_checked() != ReplayStatus::Complete {
+                    return Err(Ext4Error::corrupted());
+                }
+
+                // Journal replay can update the superblock, group descriptors,
+                // bitmaps, inode table, and directory blocks. Drop all metadata
+                // read before replay and continue mounting from the recovered
+                // on-disk state.
+                fs.reload_after_journal_replay(block_dev)?;
             }
         }
 
-        //详细的Inode/DataBlock占用情况
+        // Emit a one-shot bitmap usage summary and verify bitmap checksums on
+        // group 0 when metadata checksums are enabled.
         {
             let g0 = match fs.group_descs.first() {
                 Some(desc) => desc,
@@ -188,13 +261,17 @@ impl Ext4FileSystem {
 
             let inode_bitmap_data = fs
                 .bitmap_cache
-                .get_or_load(block_dev, inode_cache_key, AbsoluteBN::new(inode_bitmap_blk))
-                .expect("Blcok Read Failed!")
+                .get_or_load(
+                    block_dev,
+                    inode_cache_key,
+                    AbsoluteBN::new(inode_bitmap_blk),
+                )
+                .expect("block read failed")
                 .clone();
             let blockbitmap_data = fs
                 .bitmap_cache
                 .get_or_load(block_dev, data_cache_key, AbsoluteBN::new(data_bitmap_blk))
-                .expect("Blcok Read Failed!");
+                .expect("block read failed");
 
             if ext4_superblock_has_metadata_csum(&fs.superblock) {
                 if !g0.is_inode_bitmap_uninit() {
@@ -203,7 +280,8 @@ impl Ext4FileSystem {
                     let stored_inode = g0.inode_bitmap_csum();
                     if expected_inode != stored_inode {
                         error!(
-                            "Inode bitmap checksum mismatch group=0 expected={expected_inode:#x} stored={stored_inode:#x}"
+                            "Inode bitmap checksum mismatch group=0 expected={expected_inode:#x} \
+                             stored={stored_inode:#x}"
                         );
                         return Err(Ext4Error::checksum());
                     }
@@ -215,14 +293,15 @@ impl Ext4FileSystem {
                     let stored_block = g0.block_bitmap_csum();
                     if expected_block != stored_block {
                         error!(
-                            "Block bitmap checksum mismatch group=0 expected={expected_block:#x} stored={stored_block:#x}"
+                            "Block bitmap checksum mismatch group=0 expected={expected_block:#x} \
+                             stored={stored_block:#x}"
                         );
                         return Err(Ext4Error::checksum());
                     }
                 }
             }
 
-            let mut indoe_count: u64 = 0;
+            let mut inode_count: u64 = 0;
             let mut datablock_count: u64 = 0;
             let inode_data_array = &inode_bitmap_data.data;
             let datablock_array = &blockbitmap_data.data;
@@ -234,7 +313,7 @@ impl Ext4FileSystem {
                         break;
                     }
                     if tmp & 0x1 == 0x1 {
-                        indoe_count += 1;
+                        inode_count += 1;
                     }
                     tmp >>= 1;
                 }
@@ -254,19 +333,18 @@ impl Ext4FileSystem {
             });
 
             debug!(
-                "Bitmap usage: inodes used = {indoe_count}, data blocks used = {datablock_count}"
+                "Bitmap usage: inodes used = {inode_count}, data blocks used = {datablock_count}"
             );
         }
 
-        //debug
-        // info!(" Ext4文件系统挂载成功！");
         info!("Ext4 filesystem mounted");
         info!("  - block size: {} bytes", fs.superblock.block_size());
         info!("  - total blocks: {}", fs.superblock.blocks_count());
         info!("  - free blocks: {}", fs.superblock.free_blocks_count());
         info!("  - total inodes: {}", fs.superblock.s_inodes_count);
         info!("  - free inodes: {}", fs.superblock.s_free_inodes_count);
-        //缓存刷新回磁盘
+        // Flush caches once at the end of mount so any bootstrap repairs are
+        // persisted before normal operation begins.
         fs.datablock_cache
             .flush_all(block_dev)
             .expect("flush failed!");
@@ -275,19 +353,25 @@ impl Ext4FileSystem {
             .flush_all(block_dev)
             .expect("flush failed!");
 
+        // Write the superblock with EXT4_VALID_FS cleared so that a later mount
+        // can distinguish an unclean shutdown from a real EXT4_ERROR_FS state.
+        fs.sync_superblock(block_dev)?;
+
         Ok(fs)
     }
 
-    /// 加载所有块组描述符 顺序性
+    /// Loads all block-group descriptors in on-disk order.
     fn load_group_descriptors<B: BlockDevice>(
         block_dev: &mut Jbd2Dev<B>,
         superblock: &Ext4Superblock,
         group_count: u32,
     ) -> Result<Vec<Ext4GroupDesc>, Ext4Error> {
         let mut group_descs = Vec::new();
-        let gdt_base: u64 = BLOCK_SIZE as u64;
+        let block_size = superblock.block_size() as usize;
+        let gdt_base = Self::primary_gdt_byte_offset(superblock, block_size);
 
-        // 为了减少重复读块，这里缓存当前块号
+        // Cache the currently loaded GDT block to avoid rereading the same
+        // block for neighboring descriptors.
         let mut current_block: Option<AbsoluteBN> = None;
 
         let desc_size = superblock.get_desc_size() as usize;
@@ -295,11 +379,10 @@ impl Ext4FileSystem {
         debug!("Loading group descriptors: {group_count} groups, desc_size = {desc_size} bytes");
         for group_id in 0..group_count {
             let byte_offset = gdt_base + group_id as u64 * desc_size as u64;
-            let block_size_u64 = BLOCK_SIZE as u64;
+            let block_size_u64 = block_size as u64;
             let block_num = AbsoluteBN::new(byte_offset / block_size_u64);
             let in_block = (byte_offset % block_size_u64) as usize;
 
-            // 只在块号变化时重新读取块
             if current_block != Some(block_num) {
                 block_dev
                     .read_block(block_num)
@@ -333,7 +416,7 @@ impl Ext4FileSystem {
     }
 }
 
-/// 简化的挂载函数（用于兼容旧代码）
+/// Thin compatibility wrapper around [`Ext4FileSystem::mount`].
 pub fn mount<B: BlockDevice>(block_dev: &mut Jbd2Dev<B>) -> Ext4Result<Ext4FileSystem> {
     match Ext4FileSystem::mount(block_dev) {
         Ok(_fs) => {

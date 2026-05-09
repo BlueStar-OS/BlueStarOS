@@ -5,10 +5,12 @@
 
 use std::cell::Cell;
 
-use rsext4::bmalloc::AbsoluteBN;
-use rsext4::disknode::Ext4Inode;
-use rsext4::error::{Ext4Error, Ext4Result};
-use rsext4::*;
+use rsext4::{
+    bmalloc::AbsoluteBN,
+    disknode::Ext4Inode,
+    error::{Ext4Error, Ext4Result},
+    *,
+};
 
 fn test_mkdir<B: BlockDevice>(
     device: &mut Jbd2Dev<B>,
@@ -29,7 +31,7 @@ impl MockBlockDevice {
     fn new(size: usize) -> Self {
         Self {
             data: vec![0; size],
-            block_size: rsext4::BLOCK_SIZE as u32,
+            block_size: 1024u32 << rsext4::LOG_BLOCK_SIZE,
             now: Cell::new(1_700_000_000),
         }
     }

@@ -6,7 +6,7 @@ extern crate user_lib;
 use user_lib::*;
 ///MKDIR
 #[no_mangle]
-pub fn main()->usize{
+pub fn main() -> usize {
     let argv = args();
     if argv.len() < 2 {
         println!("usage: mkdir <path>");

@@ -5,13 +5,15 @@
 
 use std::cell::Cell;
 
-use rsext4::bmalloc::AbsoluteBN;
-use rsext4::disknode::Ext4Inode;
-use rsext4::error::{Ext4Error, Ext4Result};
-use rsext4::superblock::Ext4Superblock;
-use rsext4::*;
+use rsext4::{
+    bmalloc::AbsoluteBN,
+    disknode::Ext4Inode,
+    error::{Ext4Error, Ext4Result},
+    superblock::Ext4Superblock,
+    *,
+};
 
-const INODE_SIZE: u16 = DEFAULT_INODE_SIZE as u16;
+const INODE_SIZE: u16 = DEFAULT_INODE_SIZE;
 
 /// In-memory block device with a monotonically increasing clock.
 struct TimedBlockDevice {
@@ -24,7 +26,7 @@ impl TimedBlockDevice {
     fn new(size: usize) -> Self {
         Self {
             data: vec![0; size],
-            block_size: BLOCK_SIZE as u32,
+            block_size: 1024u32 << rsext4::LOG_BLOCK_SIZE,
             now: Cell::new(1_700_000_000),
         }
     }
@@ -98,6 +100,10 @@ fn lookup_inode(
     find_file(fs, dev, path).expect("inode not found")
 }
 
+fn open_readonly() -> bool {
+    false
+}
+
 #[test]
 fn test_create_delete_and_reallocate_inode_updates_dtime() {
     let (mut dev, mut fs) = setup_fs();
@@ -131,7 +137,7 @@ fn test_create_delete_and_reallocate_inode_updates_dtime() {
     assert_eq!(link_inode.i_dtime, 0);
     assert!(link_inode.crtime_ts(INODE_SIZE).is_some());
 
-    let file = open(&mut dev, &mut fs, "/meta/file", false).expect("open failed");
+    let file = open(&mut dev, &mut fs, "/meta/file", open_readonly()).expect("open failed");
     let deleted_ino = file.inode_num;
     delete_file(&mut fs, &mut dev, "/meta/file").expect("delete failed");
 
@@ -168,7 +174,7 @@ fn test_read_write_truncate_and_noatime_update_expected_timestamps() {
     let before = lookup_inode(&mut dev, &mut fs, "/rw/file");
     let before_atime = before.atime_ts(INODE_SIZE);
 
-    let mut file = open(&mut dev, &mut fs, "/rw/file", false).expect("open failed");
+    let mut file = open(&mut dev, &mut fs, "/rw/file", open_readonly()).expect("open failed");
     let data = read_at(&mut dev, &mut fs, &mut file, 5).expect("read_at failed");
     assert_eq!(data, b"hello");
 
@@ -188,7 +194,8 @@ fn test_read_write_truncate_and_noatime_update_expected_timestamps() {
     assert_eq!(after_flags.i_flags & Ext4Inode::EXT4_INDEX_FL, 0);
 
     let atime_before_noatime_read = after_flags.atime_ts(INODE_SIZE);
-    let mut noatime_file = open(&mut dev, &mut fs, "/rw/file", false).expect("open failed");
+    let mut noatime_file =
+        open(&mut dev, &mut fs, "/rw/file", open_readonly()).expect("open failed");
     read_at(&mut dev, &mut fs, &mut noatime_file, 5).expect("read_at failed");
     let after_noatime_read = lookup_inode(&mut dev, &mut fs, "/rw/file");
     assert_eq!(

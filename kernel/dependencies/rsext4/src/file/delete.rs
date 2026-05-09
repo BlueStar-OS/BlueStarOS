@@ -6,16 +6,36 @@ fn free_inode_with_dtime<B: BlockDevice>(
     inode_num: InodeNumber,
     inode: &mut Ext4Inode,
 ) -> Ext4Result<()> {
-    let mut used_blocks: Vec<AbsoluteBN> = resolve_inode_block_allextend(fs, block_dev, inode)?
+    let mut used_blocks: Vec<AbsoluteBN> = resolve_inode_block_allextend(block_dev, inode)?
         .into_values()
         .collect();
+    if inode.have_extend_header_and_use_extend() {
+        used_blocks.extend(
+            ExtentTree::with_checksum(inode, &fs.superblock, inode_num)
+                .external_node_blocks(block_dev)?,
+        );
+    }
     used_blocks.sort_unstable();
+    used_blocks.dedup();
 
-    let _ = fs.apply_inode_dtime(block_dev, inode_num, Ext4DtimeUpdate::SetNow)?;
+    let updated_inode = fs.apply_inode_dtime(block_dev, inode_num, Ext4DtimeUpdate::SetNow)?;
 
     for blk in used_blocks {
         fs.free_block(block_dev, blk)?;
     }
+
+    *inode = updated_inode;
+    inode.i_block = [0; 15];
+    inode.i_blocks_lo = 0;
+    inode.l_i_blocks_high = 0;
+    inode.i_size_lo = 0;
+    inode.i_size_high = 0;
+    fs.finalize_inode_update(
+        block_dev,
+        inode_num,
+        inode,
+        Ext4InodeMetadataUpdate::link_count_change(),
+    )?;
 
     fs.free_inode(block_dev, inode_num)
 }
@@ -26,7 +46,8 @@ pub fn unlink<B: BlockDevice>(
     block_dev: &mut Jbd2Dev<B>,
     link_path: &str,
 ) -> Ext4Result<()> {
-    //首先逐级扫描entry找到对应linkentry。
+    // Resolve the parent directory and target entry before mutating link
+    // counts or directory contents.
     let norm_path = split_paren_child_and_tranlatevalid(link_path);
     let (parent_path, child_name) = if let Some(pos) = norm_path.rfind('/') {
         let parent = if pos == 0 {
@@ -49,21 +70,22 @@ pub fn unlink<B: BlockDevice>(
     };
 
     let mut target_ino: Option<InodeNumber> = None;
-    let blocks = resolve_inode_block_allextend(fs, block_dev, &mut parent_inode)?;
+    let blocks = resolve_inode_block_allextend(block_dev, &mut parent_inode)?;
 
     for &phys in blocks.values() {
         let cached = match fs.datablock_cache.get_or_load(block_dev, phys) {
             Ok(v) => v,
             Err(_) => continue,
         };
-        let data = &cached.data[..BLOCK_SIZE];
+        let data = &cached.data[..fs.block_size];
         let iter = DirEntryIterator::new(data);
         for (entry, _) in iter {
             if entry.inode == 0 {
                 continue;
             }
             if entry.name == child_name.as_bytes() {
-                target_ino = Some(InodeNumber::new(entry.inode).map_err(|_| Ext4Error::corrupted())?);
+                target_ino =
+                    Some(InodeNumber::new(entry.inode).map_err(|_| Ext4Error::corrupted())?);
                 break;
             }
         }
@@ -82,16 +104,17 @@ pub fn unlink<B: BlockDevice>(
         return Err(Ext4Error::is_dir());
     }
 
-    //首先对指向inode 的link -1。
+    // Drop the link count on the target inode first.
     let new_links = target_inode.i_links_count.saturating_sub(1);
     fs.set_inode_links_count(block_dev, target_ino, new_links)?;
 
-    //如果此时link数为0就调用deletefile删除对应文件.   这里不复用deletefile，因为需要额外的定位
+    // When the final link disappears, free blocks and inode through the shared
+    // deletion path.
     if new_links == 0 {
         free_inode_with_dtime(fs, block_dev, target_ino, &mut target_inode)?;
     }
 
-    //最后调用removeentryfromparent移除entry
+    // Remove the directory entry only after inode state is updated.
     remove_inodeentry_from_parentdir(fs, block_dev, &parent_path, &child_name)?;
     Ok(())
 }
@@ -115,7 +138,7 @@ pub fn remove_inodeentry_from_parentdir<B: BlockDevice>(
     }
 
     let total_size = parent_inode.size() as usize;
-    let block_bytes = BLOCK_SIZE;
+    let block_bytes = fs.block_size;
     let total_blocks = if total_size == 0 {
         0
     } else {
@@ -157,7 +180,8 @@ pub fn remove_inodeentry_from_parentdir<B: BlockDevice>(
                     break;
                 }
 
-                // Only compare name bytes within the current entry's rec_len.
+                // Only compare the name inside this entry's recorded `rec_len`
+                // so malformed trailing bytes do not leak into the comparison.
                 if name_len > 0 && offset + 8 + name_len <= entry_end {
                     let name = &data[offset + 8..offset + 8 + name_len];
                     if inode != 0 && name == name_bytes {
@@ -263,16 +287,15 @@ pub fn delete_dir<B: BlockDevice>(
         stage: 0,
     });
 
-    // 算法采用while显式栈实现。
+    // Walk the directory tree with an explicit stack so deep trees do not rely
+    // on recursion.
     while let Some(mut frame) = stack.pop() {
-        // 1.首先遍历对应目录块。DirEntryIterator遍历所有entry（跳过. ..）。
+        // Stage 0 scans children and pushes subdirectories for a depth-first
+        // traversal.
         if frame.stage == 0 {
-            let block_bytes = BLOCK_SIZE;
+            let block_bytes = fs.block_size;
 
-            let dir_blocks = match resolve_inode_block_allextend(fs, block_dev, &mut frame.inode) {
-                Ok(v) => v,
-                Err(e) => return Err(e),
-            };
+            let dir_blocks = resolve_inode_block_allextend(block_dev, &mut frame.inode)?;
 
             let mut to_descend: Vec<(
                 alloc::string::String,
@@ -283,13 +306,11 @@ pub fn delete_dir<B: BlockDevice>(
             let mut removed_child_dirs: u16 = 0;
 
             for &phys in dir_blocks.values() {
-                // 先收集 entry，避免在持有 datablock_cache 借用时再次可变借用 fs
+                // Collect child entries first to avoid nested mutable borrows of
+                // `fs` while the data-block cache entry is live.
                 let mut child_entries: Vec<(InodeNumber, alloc::string::String)> = Vec::new();
                 {
-                    let cached = match fs.datablock_cache.get_or_load(block_dev, phys) {
-                        Ok(v) => v,
-                        Err(e) => return Err(e),
-                    };
+                    let cached = fs.datablock_cache.get_or_load(block_dev, phys)?;
                     let data = &cached.data[..block_bytes];
                     let iter = DirEntryIterator::new(data);
                     for (entry, _) in iter {
@@ -317,16 +338,12 @@ pub fn delete_dir<B: BlockDevice>(
                         alloc::format!("{}/{}", frame.path, child_name)
                     };
 
-                    // 每次扫描到的entry把entry的path 用error输出。
                     debug!("scan entry path={child_path}");
 
-                    // 2.判断entry类型。
-                    let child_inode = match fs.get_inode_by_num(block_dev, child_ino) {
-                        Ok(v) => v,
-                        Err(e) => return Err(e),
-                    };
+                    let child_inode = fs.get_inode_by_num(block_dev, child_ino)?;
 
-                    // 是普通文件或者是链接，调用deletefile删除对应文件。
+                    // Delete non-directory children immediately. Directories are
+                    // deferred to the DFS stack.
                     if !child_inode.is_dir() {
                         delete_file(fs, block_dev, &child_path)?;
                         continue;
@@ -338,18 +355,14 @@ pub fn delete_dir<B: BlockDevice>(
             }
 
             if removed_child_dirs != 0 {
-                match fs.get_inode_by_num(block_dev, frame.ino_num) {
-                    Ok(current_inode) => {
-                        let new_links = current_inode
-                            .i_links_count
-                            .saturating_sub(removed_child_dirs);
-                        fs.set_inode_links_count(block_dev, frame.ino_num, new_links)?;
-                    }
-                    Err(e) => return Err(e),
-                }
+                let current_inode = fs.get_inode_by_num(block_dev, frame.ino_num)?;
+                let new_links = current_inode
+                    .i_links_count
+                    .saturating_sub(removed_child_dirs);
+                fs.set_inode_links_count(block_dev, frame.ino_num, new_links)?;
             }
 
-            // 深度优先：反向压栈
+            // Push children in reverse so traversal order remains stable.
             let parent_path_for_children = frame.path.clone();
 
             frame.stage = 1;
@@ -368,13 +381,12 @@ pub fn delete_dir<B: BlockDevice>(
             continue;
         }
 
-        // 当深入的目录为空时（只剩下.和..）返回上一级
-        let mut cur_inode = match fs.get_inode_by_num(block_dev, frame.ino_num) {
-            Ok(v) => v,
-            Err(e) => return Err(e),
-        };
+        // Stage 1 runs after all children are removed, so the directory should
+        // now contain only `.` and `..`.
+        let mut cur_inode = fs.get_inode_by_num(block_dev, frame.ino_num)?;
 
-        // 如果此时的dir类型的entrylinks数不是2就warn发出警告然后继续
+        // A fully drained directory should have exactly the `.` and `..` links
+        // left. Warn if the count disagrees, but keep deleting.
         if cur_inode.i_links_count != 2 {
             warn!(
                 "dir inode links_count != 2 (links={}) path={} ino={}",
@@ -382,14 +394,14 @@ pub fn delete_dir<B: BlockDevice>(
             );
         }
 
-        // 调用函数从父目录删除这条entry。
+        // Remove the entry from the parent directory and then fix the parent's
+        // directory link count.
         if let (Some(pp), Some(name)) = (&frame.parent_path, &frame.name_in_parent) {
             let removed_path = if pp == "/" {
                 alloc::format!("/{name}")
             } else {
                 alloc::format!("{pp}/{name}")
             };
-            // 删除entry时一样。
             debug!("delete entry path={removed_path}");
 
             remove_inodeentry_from_parentdir(fs, block_dev, pp, name)?;
@@ -402,7 +414,7 @@ pub fn delete_dir<B: BlockDevice>(
 
         free_inode_with_dtime(fs, block_dev, frame.ino_num, &mut cur_inode)?;
 
-        // 最后更新块组的dir计数-1。
+        // Keep the group-descriptor directory count in sync with the removal.
         let (group_idx, _idx_in_group) = fs.inode_allocator.global_to_group(frame.ino_num)?;
         if let Some(desc) = fs.get_group_desc_mut(group_idx) {
             let before = desc.used_dirs_count();
@@ -421,7 +433,7 @@ pub fn delete_file<B: BlockDevice>(
     block_dev: &mut Jbd2Dev<B>,
     path: &str,
 ) -> Ext4Result<()> {
-    //find inode
+    // find inode
     let norm_path = split_paren_child_and_tranlatevalid(path);
     let target = match get_file_inode(fs, block_dev, &norm_path) {
         Ok(Some((ino_num, inode))) => (ino_num, inode),
@@ -434,20 +446,17 @@ pub fn delete_file<B: BlockDevice>(
         return Err(Ext4Error::is_dir());
     }
 
-    //link-1
+    // Drop the file's link count before removing the parent entry.
     let new_links = target_inode.i_links_count.saturating_sub(1);
     fs.set_inode_links_count(block_dev, ino_num, new_links)?;
     if new_links == 0 {
         debug!("Will free inode:{ino_num} path:{path}");
         free_inode_with_dtime(fs, block_dev, ino_num, &mut target_inode)?;
     } else {
-        error!(
-            "Inode num:{} links:{} >0 ,only remove entry!",
-            ino_num, new_links
-        );
+        debug!("inode {ino_num} still has {new_links} link(s); removing directory entry only");
     }
 
-    // 计算父目录路径和子名
+    // Resolve the parent path and child name for the directory-entry removal.
     let (parent_path, child_name) = if let Some(pos) = norm_path.rfind('/') {
         let parent = if pos == 0 {
             "/".to_string()
@@ -460,7 +469,6 @@ pub fn delete_file<B: BlockDevice>(
         ("/".to_string(), norm_path)
     };
 
-    // 查找父目录 inode
     remove_inodeentry_from_parentdir(fs, block_dev, &parent_path, &child_name)?;
     Ok(())
 }

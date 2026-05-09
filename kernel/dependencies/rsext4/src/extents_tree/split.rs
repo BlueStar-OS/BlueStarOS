@@ -1,22 +1,23 @@
 use super::*;
+use crate::config::runtime_block_size;
 
-/// 用于在递归插入时向上冒泡分裂信息
+/// Split information bubbled upward during recursive insertion.
 pub(super) struct SplitInfo {
-    ///分裂出去的右节点的起始逻辑块号 (Key)
+    /// First logical block covered by the new right-hand node.
     pub(super) start_block: u32,
-    ///分裂出去的右节点的物理块号 (Value)
+    /// Physical block storing the new right-hand node.
     pub(super) phy_block: AbsoluteBN,
 }
 
 impl<'a> ExtentTree<'a> {
-    /// 计算标准数据块能容纳的条目数
+    /// Returns the maximum number of entries that fit in one metadata block.
     pub(super) fn calc_block_eh_max() -> u16 {
         let hdr_size = Ext4ExtentHeader::disk_size();
-        let entry_size = Ext4Extent::disk_size(); // Index 和 Extent 大小一样，都是 12
-        (BLOCK_SIZE.saturating_sub(hdr_size) / entry_size) as u16
+        let entry_size = Ext4Extent::disk_size(); // Index and extent entries are both 12 bytes.
+        (runtime_block_size().saturating_sub(hdr_size) / entry_size) as u16
     }
 
-    /// 辅助：获取节点的起始逻辑块号
+    /// Returns the first logical block covered by a node.
     pub(super) fn get_node_start_block(node: &ExtentNode) -> u32 {
         match node {
             ExtentNode::Leaf { entries, .. } => {

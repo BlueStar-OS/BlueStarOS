@@ -1,20 +1,12 @@
 #![no_std]
 #![no_main]
 
-extern crate user_lib;
 extern crate alloc;
-use alloc::vec::{ Vec};
-use user_lib::{getcwd, print};
+extern crate user_lib;
 use alloc::vec;
-use user_lib::{
-    args,
-    String,
-    println,
-    O_RDONLY,
-    sys_close,
-    sys_getdents64,
-    sys_open,
-};
+use alloc::vec::Vec;
+use user_lib::{args, println, sys_close, sys_getdents64, sys_open, String, O_RDONLY};
+use user_lib::{getcwd, print};
 
 const DT_DIR: u8 = 4;
 const DT_REG: u8 = 8;
@@ -90,7 +82,7 @@ pub fn main() -> usize {
         return 1;
     }
 
-    let mut buf:Vec<u8> = vec![0;8192];
+    let mut buf: Vec<u8> = vec![0; 8192];
     loop {
         let n = sys_getdents64(fd as usize, buf.as_mut_ptr() as usize, buf.capacity());
         if n < 0 {

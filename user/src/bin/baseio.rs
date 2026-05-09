@@ -2,12 +2,12 @@
 #![no_main]
 //read 和 write系统调用
 use core::usize;
-use user_lib::String;
 use user_lib::print;
 use user_lib::println;
+use user_lib::String;
 use user_lib::{
-    O_APPEND, O_CREAT, O_RDONLY, O_RDWR, O_TRUNC, O_WRONLY, SEEK_END, SEEK_SET, sys_close, sys_creat,
-    sys_lseek, sys_open, sys_read, sys_write,
+    sys_close, sys_creat, sys_lseek, sys_open, sys_read, sys_write, O_APPEND, O_CREAT, O_RDONLY,
+    O_RDWR, O_TRUNC, O_WRONLY, SEEK_END, SEEK_SET,
 };
 extern crate user_lib;
 
@@ -64,7 +64,10 @@ pub fn main() -> usize {
         println!("[fs] reopen read mismatch");
         return 7;
     }
-    println!("read data:{:?}",String::from_utf8(buf2[..nr2 as usize].to_vec()));
+    println!(
+        "read data:{:?}",
+        String::from_utf8(buf2[..nr2 as usize].to_vec())
+    );
 
     // Permission test: O_RDONLY must reject write.
     let fd_ro = sys_open(path, O_RDONLY);

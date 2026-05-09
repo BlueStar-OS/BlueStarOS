@@ -280,6 +280,7 @@ impl TaskControlBlock {
         let align_pad = (16 - base_line_size % 16) % 16;
         base_line_size = base_line_size.saturating_add(align_pad);
 
+        // TODO(dirinkbottle): 这里后面要把 16 字节随机块真正放上初始用户栈，并回填 AT_RANDOM。
         let mut str_real_start_addr = user_sp - base_line_size + str_start_offset;
 
         let mut base_blob: Vec<u8> = vec![0u8; base_line_size];
@@ -813,10 +814,9 @@ impl TaskManager {
                     Some((best_idx, best_pass)) => {
                         if pass < best_pass {
                             selected = Some((idx, pass));
-                        } else if pass == best_pass
-                            && best_idx == current && idx != current {
-                                selected = Some((idx, pass));
-                            }
+                        } else if pass == best_pass && best_idx == current && idx != current {
+                            selected = Some((idx, pass));
+                        }
                     }
                     None => selected = Some((idx, pass)),
                 }

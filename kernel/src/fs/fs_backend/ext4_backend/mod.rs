@@ -28,8 +28,13 @@ impl RsExt4BlockDevice for Ext4BlockDevice {
     fn close(&mut self) -> rsext4::Ext4Result<()> {
         Ok(())
     }
+
+    /// 将 rsext4 的 block-device flush 下推到 BlueStarOS VFS。
+    ///
+    /// rsext4 在 journal commit / filesystem sync 时会调用这里；底层的
+    /// `BLOCKDEVFILE::flush()` 会继续调用真实块设备的 `BlockDevTrait::flush()`。
     fn flush(&mut self) -> rsext4::Ext4Result<()> {
-        Ok(())
+        self.0.flush().map_err(|_| rsext4::Ext4Error::io())
     }
     fn is_open(&self) -> bool {
         true

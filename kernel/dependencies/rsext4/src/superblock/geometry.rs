@@ -1,10 +1,12 @@
 //! Geometry and validation helpers for the ext4 superblock.
 
 use super::Ext4Superblock;
-use crate::checksum::{ext4_superblock_csum32, ext4_update_superblock_checksum};
-use crate::config::*;
-use crate::crc32c::ext4_superblock_has_metadata_csum;
-use crate::error::*;
+use crate::{
+    checksum::{ext4_superblock_csum32, ext4_update_superblock_checksum},
+    config::*,
+    crc32c::ext4_superblock_has_metadata_csum,
+    error::*,
+};
 
 impl Ext4Superblock {
     /// Returns whether the superblock magic is valid.
@@ -58,17 +60,13 @@ impl Ext4Superblock {
     pub fn descs_per_block(&self) -> u32 {
         let block_size = self.block_size() as u32;
         let desc_size = self.s_desc_size as u32;
-        if desc_size == 0 {
-            0
-        } else {
-            block_size / desc_size
-        }
+        block_size.checked_div(desc_size).unwrap_or(0)
     }
 
     /// Returns the on-disk group descriptor size in bytes.
     pub fn get_desc_size(&self) -> u16 {
         if self.s_desc_size == 0 {
-            if self.has_feature_compat(Ext4Superblock::EXT4_FEATURE_INCOMPAT_64BIT) {
+            if self.has_feature_incompat(Ext4Superblock::EXT4_FEATURE_INCOMPAT_64BIT) {
                 return GROUP_DESC_SIZE;
             } else {
                 return GROUP_DESC_SIZE_OLD;

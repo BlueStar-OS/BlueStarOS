@@ -5,7 +5,7 @@ impl<'a> ExtentTree<'a> {
         Self::parse_node_from_bytes(bytes)
     }
 
-    /// 从原始字节缓冲区解析一个 extent 节点（根或子节点）
+    /// Parses one extent-tree node from raw bytes.
     pub(super) fn parse_node_from_bytes(bytes: &[u8]) -> Option<ExtentNode> {
         let hdr_size = Ext4ExtentHeader::disk_size();
         if bytes.len() < hdr_size {
@@ -37,7 +37,7 @@ impl<'a> ExtentTree<'a> {
         let mut offset = hdr_size;
 
         if header.eh_depth == 0 {
-            // 叶子节点：解析 Ext4Extent
+            // Leaf nodes store extents directly.
             let mut vec = Vec::with_capacity(entries);
             let et_size = Ext4Extent::disk_size();
             for _ in 0..entries {
@@ -59,7 +59,7 @@ impl<'a> ExtentTree<'a> {
                 entries: vec,
             })
         } else {
-            // 内部节点：解析 Ext4ExtentIdx
+            // Internal nodes store child indexes.
             let mut vec = Vec::with_capacity(entries);
             let idx_size = Ext4ExtentIdx::disk_size();
             for _ in 0..entries {
@@ -83,7 +83,7 @@ impl<'a> ExtentTree<'a> {
         }
     }
 
-    /// 查找包含给定逻辑块的 extent（如果有）
+    /// Finds the extent covering `lblock`, if any.
     pub fn find_extent<B: BlockDevice>(
         &mut self,
         dev: &mut Jbd2Dev<B>,
@@ -96,7 +96,7 @@ impl<'a> ExtentTree<'a> {
         self.find_in_node(dev, &root, lblock)
     }
 
-    /// 在给定节点下查找逻辑块对应的 extent
+    /// Recursively searches one node for the extent covering `lblock`.
     #[allow(clippy::only_used_in_recursion)]
     fn find_in_node<B: BlockDevice>(
         &mut self,
@@ -107,9 +107,9 @@ impl<'a> ExtentTree<'a> {
         match node {
             ExtentNode::Leaf { entries, .. } => {
                 for et in entries {
-                    let start = et.ee_block; // 逻辑起始块
-                    let len = et.ee_len as u32; // 覆盖长度
-                    let end = start.saturating_add(len); // 半开区间 [start, end)
+                    let start = et.ee_block;
+                    let len = et.len();
+                    let end = start.saturating_add(len); // half-open range [start, end)
                     if lblock >= start && lblock < end {
                         return Ok(Some(*et));
                     }
@@ -121,7 +121,7 @@ impl<'a> ExtentTree<'a> {
                     return Ok(None);
                 }
 
-                // 在索引条目中找到最后一个 ei_block <= lblock 的条目
+                // Descend through the last child whose key is <= target.
                 let mut chosen = &entries[0];
                 for idx in entries {
                     if idx.ei_block <= lblock {
@@ -131,9 +131,8 @@ impl<'a> ExtentTree<'a> {
                     }
                 }
 
-                let child_block = AbsoluteBN::new(
-                    (chosen.ei_leaf_hi as u64) << 32 | (chosen.ei_leaf_lo as u64),
-                );
+                let child_block =
+                    AbsoluteBN::new((chosen.ei_leaf_hi as u64) << 32 | (chosen.ei_leaf_lo as u64));
 
                 debug!("Descending into extent child block {child_block} for lblock {lblock}");
 

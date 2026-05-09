@@ -1,11 +1,8 @@
 //! Data block cache helpers.
 
-use crate::bmalloc::AbsoluteBN;
-use crate::blockdev::*;
-use crate::config::*;
-use crate::error::*;
-use alloc::collections::BTreeMap;
-use alloc::vec::Vec;
+use alloc::{collections::BTreeMap, vec::Vec};
+
+use crate::{blockdev::*, bmalloc::AbsoluteBN, config::*, error::*};
 /// Cache key for one physical data block.
 pub type BlockCacheKey = AbsoluteBN;
 
@@ -63,7 +60,7 @@ impl DataBlockCache {
 
     /// Creates a data block cache with default settings.
     pub fn create_default() -> Self {
-        Self::new(64, BLOCK_SIZE)
+        Self::new(64, runtime_block_size())
     }
 
     /// Loads one block from disk.
@@ -83,7 +80,7 @@ impl DataBlockCache {
         block_dev: &mut Jbd2Dev<B>,
         block_num: AbsoluteBN,
     ) -> Ext4Result<&CachedBlock> {
-        // 如果缓存中不存在，则加载
+        // Load from disk on the first cache miss.
         if !self.cache.contains_key(&block_num) {
             if self.cache.len() >= self.max_entries {
                 self.evict_lru(block_dev)?;
@@ -94,7 +91,7 @@ impl DataBlockCache {
             self.cache.insert(block_num, cached);
         }
 
-        // 更新访问时间
+        // Refresh the LRU timestamp on every access.
         self.access_counter += 1;
         if let Some(cached) = self.cache.get_mut(&block_num) {
             cached.last_access = self.access_counter;
@@ -145,9 +142,17 @@ impl DataBlockCache {
     }
 
     /// Creates a brand-new cached block and marks it dirty.
-    pub fn create_new(&mut self, block_num: AbsoluteBN) -> &mut CachedBlock {
+    pub fn create_new<B: BlockDevice>(
+        &mut self,
+        block_dev: &mut Jbd2Dev<B>,
+        block_num: AbsoluteBN,
+    ) -> Ext4Result<&mut CachedBlock> {
+        if self.cache.contains_key(&block_num) {
+            self.evict(block_dev, block_num)?;
+        }
+
         if self.cache.len() >= self.max_entries {
-            // 这里无法调用需要 block_dev 的 evict_lru，交由调用方控制
+            self.evict_lru(block_dev)?;
         }
 
         let data = alloc::vec![0u8; self.block_size];
@@ -158,7 +163,7 @@ impl DataBlockCache {
         cached.last_access = self.access_counter;
 
         self.cache.insert(block_num, cached);
-        self.cache.get_mut(&block_num).unwrap()
+        self.cache.get_mut(&block_num).ok_or(Ext4Error::corrupted())
     }
 
     /// Marks a cached data block dirty.
@@ -201,7 +206,7 @@ impl DataBlockCache {
         B: BlockDevice,
         F: FnOnce(&mut [u8]),
     {
-        let cached = self.create_new(block_num);
+        let cached = self.create_new(block_dev, block_num)?;
         f(&mut cached.data);
         cached.mark_dirty();
 
@@ -215,7 +220,7 @@ impl DataBlockCache {
 
     /// Evicts the least recently used block, flushing it first if needed.
     fn evict_lru<B: BlockDevice>(&mut self, block_dev: &mut Jbd2Dev<B>) -> Ext4Result<()> {
-        // 找到最小的last_access
+        // Evict the least recently accessed block.
         let lru_key = self
             .cache
             .iter()
@@ -238,7 +243,6 @@ impl DataBlockCache {
         if let Some(cached) = self.cache.remove(&block_num)
             && cached.dirty
         {
-            // 写回磁盘
             Self::write_block_static(block_dev, cached.block_num, &cached.data)?;
         }
         Ok(())
@@ -259,8 +263,8 @@ impl DataBlockCache {
 
         dirty_blocks.sort_by_key(|(block_num, _)| *block_num);
 
-        // 将连续块聚合后，使用 write_blocks 一次性写回
-        let max_part_size = BLOCK_SIZE * 100; //最大聚合块数;
+        // Batch contiguous dirty blocks into one `write_blocks` call.
+        let max_part_size = runtime_block_size() * 100;
         let block_size = self.block_size;
         let mut idx = 0usize;
         while idx < dirty_blocks.len() {
@@ -282,13 +286,14 @@ impl DataBlockCache {
                 buf.extend_from_slice(&dirty_blocks[idx + off].1);
             }
 
-            let run_len_u32 = u32::try_from(run_len).map_err(|_| Ext4Error::from(Errno::EOVERFLOW))?;
+            let run_len_u32 =
+                u32::try_from(run_len).map_err(|_| Ext4Error::from(Errno::EOVERFLOW))?;
             block_dev.write_blocks(&buf, start_block, run_len_u32, false)?;
 
             idx += run_len;
         }
 
-        // 清除脏标记
+        // All flushed entries are now clean.
         for cached in self.cache.values_mut() {
             cached.dirty = false;
         }
@@ -365,10 +370,62 @@ pub struct DataBlockCacheStats {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::disknode::Ext4Timestamp;
+
+    struct TestBlockDevice {
+        data: Vec<u8>,
+        block_size: usize,
+    }
+
+    impl TestBlockDevice {
+        fn new(blocks: usize) -> Self {
+            let block_size = runtime_block_size();
+            Self {
+                data: alloc::vec![0; blocks * block_size],
+                block_size,
+            }
+        }
+    }
+
+    impl BlockDevice for TestBlockDevice {
+        fn read(&mut self, buffer: &mut [u8], block_id: AbsoluteBN, _count: u32) -> Ext4Result<()> {
+            let start = block_id.as_usize()? * self.block_size;
+            let end = start + buffer.len();
+            buffer.copy_from_slice(&self.data[start..end]);
+            Ok(())
+        }
+
+        fn write(&mut self, buffer: &[u8], block_id: AbsoluteBN, _count: u32) -> Ext4Result<()> {
+            let start = block_id.as_usize()? * self.block_size;
+            let end = start + buffer.len();
+            self.data[start..end].copy_from_slice(buffer);
+            Ok(())
+        }
+
+        fn open(&mut self) -> Ext4Result<()> {
+            Ok(())
+        }
+
+        fn close(&mut self) -> Ext4Result<()> {
+            Ok(())
+        }
+
+        fn total_blocks(&self) -> u64 {
+            (self.data.len() / self.block_size) as u64
+        }
+
+        fn block_size(&self) -> u32 {
+            self.block_size as u32
+        }
+
+        fn current_time(&self) -> Ext4Result<Ext4Timestamp> {
+            Ok(Ext4Timestamp::new(0, 0))
+        }
+    }
 
     #[test]
     fn test_datablock_cache_basic() {
-        let cache = DataBlockCache::new(8, BLOCK_SIZE);
+        let cache = DataBlockCache::new(8, runtime_block_size());
         let stats = cache.stats();
 
         assert_eq!(stats.total_entries, 0);
@@ -378,12 +435,17 @@ mod tests {
 
     #[test]
     fn test_create_new_block() {
-        let mut cache = DataBlockCache::new(8, BLOCK_SIZE);
+        let mut cache = DataBlockCache::new(8, runtime_block_size());
 
-        let block = cache.create_new(AbsoluteBN::new(100));
+        let device = TestBlockDevice::new(1024);
+        let mut jbd2_dev = Jbd2Dev::initial_jbd2dev(0, device, false);
+
+        let block = cache
+            .create_new(&mut jbd2_dev, AbsoluteBN::new(100))
+            .expect("create new block");
         assert_eq!(block.block_num, AbsoluteBN::new(100));
-        assert_eq!(block.data.len(), BLOCK_SIZE);
-        assert!(block.dirty); // 新块应该标记为脏
+        assert_eq!(block.data.len(), runtime_block_size());
+        assert!(block.dirty); // New cache entries should start dirty.
 
         let stats = cache.stats();
         assert_eq!(stats.total_entries, 1);
@@ -392,12 +454,34 @@ mod tests {
 
     #[test]
     fn test_invalidate() {
-        let mut cache = DataBlockCache::new(8, BLOCK_SIZE);
+        let mut cache = DataBlockCache::new(8, runtime_block_size());
 
-        cache.create_new(AbsoluteBN::new(100));
+        let device = TestBlockDevice::new(1024);
+        let mut jbd2_dev = Jbd2Dev::initial_jbd2dev(0, device, false);
+
+        cache
+            .create_new(&mut jbd2_dev, AbsoluteBN::new(100))
+            .expect("create new block");
         assert_eq!(cache.cache.len(), 1);
 
         cache.invalidate(AbsoluteBN::new(100));
         assert_eq!(cache.cache.len(), 0);
+    }
+
+    #[test]
+    fn create_new_respects_lru_limit() {
+        let mut cache = DataBlockCache::new(2, runtime_block_size());
+        let device = TestBlockDevice::new(1024);
+        let mut jbd2_dev = Jbd2Dev::initial_jbd2dev(0, device, false);
+
+        for block in 10..14 {
+            cache
+                .create_new(&mut jbd2_dev, AbsoluteBN::new(block))
+                .expect("create new block");
+        }
+
+        let stats = cache.stats();
+        assert_eq!(stats.total_entries, 2);
+        assert_eq!(stats.max_entries, 2);
     }
 }

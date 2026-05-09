@@ -1,8 +1,6 @@
-//! # JBD2 日志系统模块
-//!
-//! 提供 ext4 文件系统的日志功能，确保文件系统的一致性和可靠性。
+//! JBD2 journal support for the ext4 implementation.
 
 #[allow(clippy::module_inception)]
 pub mod jbd2;
-/// JBD2 系统实现
+/// Journal implementation data structures.
 pub mod jbdstruct;

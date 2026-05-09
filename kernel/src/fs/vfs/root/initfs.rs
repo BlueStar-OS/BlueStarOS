@@ -1,5 +1,6 @@
 use super::{MountPath, RootFs, ROOTFS};
 use crate::config::{CONSENT, MB};
+use crate::fs::component::devices::{framebuffer_device_file, keyboard_device_file};
 use crate::fs::fs_backend::fat32::Fat32Fs;
 use crate::fs::fs_backend::{Ext4BlockDevice, Ext4Fs, RamFs};
 use crate::fs::vfs::vfs::VfsFs;
@@ -11,6 +12,78 @@ use log::{debug, error, warn};
 use spin::Mutex;
 
 impl RootFs {
+    /// 在启动期 ramfs 根上注册内建设备节点。
+    ///
+    /// 这里故意创建为 `/fb0`、`/keyboard`，而不是 `/dev/fb0`：
+    /// 后续 ext4 根切换成功后，整个旧 ramfs 会被重新挂到 `/dev`，
+    /// 因而它的根目录项会自然变成最终系统视角里的 `/dev/fb0`
+    /// 和 `/dev/keyboard`。
+    fn register_bootstrap_device_nodes() {
+        let rootfs_guard = ROOTFS.lock();
+        let root = rootfs_guard.as_ref().expect("root vfs not init");
+        let Ok(Some((fs, _))) = root.resolve_mount_point("/") else {
+            error!("register_bootstrap_device_nodes: root mount point missing");
+            return;
+        };
+        drop(rootfs_guard);
+
+        let mut fs_guard = fs.lock();
+        let Some(ramfs) = fs_guard.as_any_mut().downcast_mut::<RamFs>() else {
+            error!("register_bootstrap_device_nodes: root fs is not ramfs");
+            return;
+        };
+
+        if let Err(err) = ramfs.mkdev("/fb0", framebuffer_device_file()) {
+            error!(
+                "register_bootstrap_device_nodes: create /fb0 failed: {}",
+                err
+            );
+        }
+        if let Err(err) = ramfs.mkdev("/keyboard", keyboard_device_file()) {
+            error!(
+                "register_bootstrap_device_nodes: create /keyboard failed: {}",
+                err
+            );
+        }
+    }
+
+    /// 在“保持 ramfs 为最终根”的降级模式里，把根目录设备镜像到 `/dev`。
+    ///
+    /// 因为这条路径不会发生“旧 ramfs 挂回 `/dev`”的动作，所以要手工再创建一份
+    /// `/dev/fb0` 与 `/dev/keyboard`。
+    fn mirror_bootstrap_devices_into_dev_dir() {
+        for (source_path, target_path) in [("/fb0", "/dev/fb0"), ("/keyboard", "/dev/keyboard")] {
+            let Ok(source_file) = vfs_open(source_path, OpenFlags::empty()) else {
+                error!(
+                    "mirror_bootstrap_devices_into_dev_dir: open {} failed",
+                    source_path
+                );
+                continue;
+            };
+
+            let rootfs_guard = ROOTFS.lock();
+            let root = rootfs_guard.as_ref().expect("root vfs not init");
+            let Ok(Some((fs, _))) = root.resolve_mount_point("/") else {
+                error!("mirror_bootstrap_devices_into_dev_dir: root mount point missing");
+                continue;
+            };
+            drop(rootfs_guard);
+
+            let mut fs_guard = fs.lock();
+            let Some(ramfs) = fs_guard.as_any_mut().downcast_mut::<RamFs>() else {
+                error!("mirror_bootstrap_devices_into_dev_dir: root fs is not ramfs");
+                continue;
+            };
+
+            if let Err(err) = ramfs.mkdev(target_path, source_file) {
+                error!(
+                    "mirror_bootstrap_devices_into_dev_dir: create {} failed: {}",
+                    target_path, err
+                );
+            }
+        }
+    }
+
     /// 初始化根文件系统，并在可能时切换到 ext4 根分区。
     ///
     /// 入口流程总览：
@@ -34,6 +107,12 @@ impl RootFs {
             mount_poinr: mount_point,
         };
         *(ROOTFS.lock()) = Some(vfs_root);
+
+        // Step 1.1:
+        // 把 framebuffer/keyboard 这类“启动早期就已经存在”的内建设备节点挂到
+        // bootstrap ramfs 根目录。后续若成功切换 ext4 根，整个 ramfs 会作为 `/dev`
+        // 回挂，不需要重复创建。
+        Self::register_bootstrap_device_nodes();
 
         // Step 2:
         // 遍历 GLOBAL_BLOCKS 中已经注册的块设备，
@@ -104,6 +183,7 @@ impl RootFs {
         let _ = vfs_mkdir("/bin");
         let _ = vfs_mkdir("/mnt");
         let _ = vfs_mkdir("/dev");
+        Self::mirror_bootstrap_devices_into_dev_dir();
 
         // Step 3.6:
         // 把 `/vda` 镜像到 `/dev` 下，便于调试以及用户态按设备路径访问。

@@ -9,7 +9,8 @@ use crate::fs::fs_backend::{Ext4BlockDevice, Ext4Fs};
 use crate::fs::vfs::File;
 use crate::fs::vfs::{normalize_path, VfsFsError};
 use crate::fs::vfs::{
-    vfs_fstat_kstat, vfs_getdents64, vfs_mkdir, vfs_open, vfs_stat, vfs_unlink, KStat, OpenFlags, VFS_DT_DIR,
+    vfs_fstat_kstat, vfs_getdents64, vfs_mkdir, vfs_open, vfs_stat, vfs_unlink, KStat, OpenFlags,
+    VFS_DT_DIR,
 };
 use crate::root::MountPath;
 use crate::root::ROOTFS;
@@ -59,9 +60,63 @@ struct utsname {
     domainname: [u8; UTNAME_FIELD_LEN], //NIS DOMAIN name
 }
 
-/// sys_ioctl
-pub fn sys_ioctl() -> isize {
-    0
+/// 把 VFS 层错误映射为 Linux 风格 errno。
+fn vfs_error_to_blue_errno(error: VfsFsError) -> BlueErr {
+    match error {
+        VfsFsError::BadFd => BlueErr::EBADF,
+        VfsFsError::Invalid => BlueErr::EINVAL,
+        VfsFsError::PermissionDenied => BlueErr::EACCES,
+        VfsFsError::NotFound => BlueErr::ENOENT,
+        VfsFsError::NotDir => BlueErr::ENOTDIR,
+        VfsFsError::IsDir => BlueErr::EISDIR,
+        VfsFsError::AlreadyExists => BlueErr::EEXIST,
+        VfsFsError::Busy => BlueErr::EBUSY,
+        VfsFsError::NoSpace => BlueErr::ENOSPC,
+        VfsFsError::BrokenPipe => BlueErr::EPIPE,
+        VfsFsError::NoDevice => BlueErr::ENODEV,
+        VfsFsError::Mounted
+        | VfsFsError::Unmounted
+        | VfsFsError::MountFail
+        | VfsFsError::UnmountFail => BlueErr::EBUSY,
+        // Linux 的 `vfs_ioctl()` 在文件没有实现 `->unlocked_ioctl` 时返回 `-ENOTTY`，
+        // 参考 Linux 5.4.29 `fs/ioctl.c:29-52`。
+        VfsFsError::NotSupported => BlueErr::ENOTTY,
+        VfsFsError::IO => BlueErr::EIO,
+    }
+}
+
+/// `ioctl(fd, cmd, arg)` 最小实现。
+///
+/// 当前流程仿照 Linux `vfs_ioctl()`：
+/// 1. 先通过 fd 找到打开文件；
+/// 2. 调用文件对象自己的 `ioctl` 回调；
+/// 3. 若文件不支持 ioctl，则返回 `ENOTTY`。
+///
+/// 参考 Linux 5.4.29 `fs/ioctl.c:29-52`。
+pub fn sys_ioctl(fd: usize, cmd: usize, arg: usize) -> isize {
+    let file = match TASK_MANAER.get_current_fd(fd) {
+        Some(Some(file)) => file,
+        _ => {
+            warn!("sys_ioctl: invalid fd={} cmd={:#x} arg={:#x}", fd, cmd, arg);
+            return BlueErr::EBADF.as_isize();
+        }
+    };
+
+    match file.ioctl(cmd as u32, arg) {
+        Ok(return_value) => return_value as isize,
+        Err(error) => {
+            let errno = vfs_error_to_blue_errno(error);
+            error!(
+                "sys_ioctl: file.ioctl failed fd={} cmd={:#x} arg={:#x} err={} errno={}",
+                fd,
+                cmd,
+                arg,
+                error,
+                errno.code()
+            );
+            errno.as_isize()
+        }
+    }
 }
 
 /// 退出当前进程组的所有线程
@@ -81,6 +136,7 @@ pub struct iovec {
     iovec_base: usize,
     iovec_len: usize,
 }
+
 pub fn sys_writev(fd: i32, iov_vec: usize, iov_cnt: i32) -> isize {
     let iovec_base = core::mem::size_of::<iovec>();
     let usize_size = core::mem::size_of::<usize>();
@@ -516,12 +572,11 @@ pub fn sys_umount2(target_ptr: usize, _flags: usize) -> isize {
         .any(|task| {
             let tcwd = &task.lock().cwd;
             tcwd.starts_with(&key.0)
-        }) || 
+        }) ||
         // fix,嵌套挂载不允许卸载
         rootfs.mount_poinr.iter().find(|mt|{
             (*mt.0)!=key && (*mt.0.0).starts_with(&key.0)
         }).is_some();
-        
 
     if mp_busy {
         error!("[sys_umount]: Vblock:{} busy!", &key.0);
@@ -760,8 +815,7 @@ pub fn sys_brk(new_brk: VirAddr) -> isize {
         return new_brkaddr as isize;
     }
 
-    // expand：需要把 [old_brk, new_brk) 涉及到的新页映射出来。
-    // 已经映射的旧页不需要重复映射：从包含 old_brk 的页的下一页开始。
+    // TODO(dirinkbottle): 这里后面要重新审视 brk 扩展和 mmap/prot-none 预留区的关系。
     let mut start_vpn: VirNumber = VirAddr(old_brk.saturating_sub(1)).floor_down();
     start_vpn.step();
     loop {
@@ -780,8 +834,6 @@ pub fn sys_brk(new_brk: VirAddr) -> isize {
     let end_vpn: VirNumber = VirAddr(new_brkaddr - 1).floor_down();
 
     if start_vpn.0 <= end_vpn.0 {
-        // 注意：add_area 会检查区间是否与现有 MapArea 重叠，
-        // 所以这里从 floor_up(old_brk) 开始，避免覆盖旧页。
         tcb.memory_set.add_area(
             crate::memory::VirNumRange(start_vpn, end_vpn),
             crate::memory::MapType::Maped,

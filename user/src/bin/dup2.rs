@@ -1,17 +1,10 @@
 #![no_std]
 #![no_main]
 
-extern crate user_lib;
 extern crate alloc;
+extern crate user_lib;
 use user_lib::print;
-use user_lib::{
-    println,
-    sys_pipe,
-    sys_close,
-    sys_write,
-    sys_read,
-    sys_dup2,
-};
+use user_lib::{println, sys_close, sys_dup2, sys_pipe, sys_read, sys_write};
 
 #[no_mangle]
 pub fn main() -> usize {

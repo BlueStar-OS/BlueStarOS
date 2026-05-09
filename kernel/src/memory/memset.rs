@@ -755,9 +755,7 @@ impl MapSet {
         let len_align_page_viraddr: VirAddr = VirAddr(len).floor_down().into();
         let len: usize = len_align_page_viraddr.0;
 
-        // Minimal policy:
-        // - start searching from a page-aligned brk
-        // - keep a gap below TRAP_CONTEXT
+        // TODO(dirinkbottle): 这里后面要重新检查“从哪里开始找匿名 mmap 空洞”。
         let cur_align_page_viraddr: VirAddr = VirAddr(len).floor_up().into();
         let mut cur = cur_align_page_viraddr.0;
         let upper = TRAP_CONTEXT_ADDR.saturating_sub(PAGE_SIZE);
@@ -1068,6 +1066,7 @@ impl MapSet {
             }
             any_touched = true;
 
+            // TODO(dirinkbottle): MAP_FIXED / brk guard page 对普通 area 的拆分行为要重审。
             if area.mmap.is_empty() {
                 new_areas.push(area);
                 continue;
@@ -1417,7 +1416,7 @@ impl MapSet {
 
     pub fn get_kernel_range_from_kernel_top(kernel_stack_top: VirAddr) -> VirNumRange {
         let kernel_bottom = kernel_stack_top.0 - KERNEL_STACK_SIZE + 1;
-        
+
         VirNumRange::new(VirAddr(kernel_bottom), VirAddr(kernel_stack_top.0 - 1))
     }
 
@@ -1564,7 +1563,12 @@ impl MapSet {
         Some(self.areas.remove(index))
     }
 
-    ///输入range，maptype和flags 自动处理maparea的映射和物理帧挂载以及对应memset的pagetable映射,处理数据的复制映射   但是映射用户栈不需要数据
+    /// 输入 range、map type 和 flags，建立一个新的 `MapArea` 并按需补齐页表映射。
+    ///
+    /// 注意：
+    /// - 这里默认调用方已经完成“地址区间不重叠”的判定；
+    /// - 对普通 ELF/heap/stack 这类非 `mmap` area，会立即分配页帧并建好 PTE；
+    /// - 对 `mmap` area，只登记 `MapArea` / `MmapEntry` 元数据，具体页帧等首次缺页再补。
     pub fn add_area(
         &mut self,
         range: VirNumRange,

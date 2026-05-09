@@ -1,7 +1,7 @@
 use super::*;
 
 impl Ext4FileSystem {
-    /// 在整个文件系统中分配指定数量的连续数据块
+    /// Allocates a contiguous run of data blocks anywhere in the filesystem.
     pub fn alloc_blocks<B: BlockDevice>(
         &mut self,
         block_dev: &mut Jbd2Dev<B>,
@@ -28,11 +28,14 @@ impl Ext4FileSystem {
             let mut alloc_res: Result<BlockAlloc, Ext4Error> = Err(Ext4Error::no_space());
 
             debug!(
-                "alloc_blocks: candidate group={group_idx} bitmap_block={bitmap_block} starting contiguous allocation of {count} blocks"
+                "alloc_blocks: candidate group={group_idx} bitmap_block={bitmap_block} starting \
+                 contiguous allocation of {count} blocks"
             );
 
             if ext4_superblock_has_metadata_csum(&self.superblock) && !desc.is_block_bitmap_uninit()
             {
+                // Validate the current bitmap contents before mutating them so
+                // checksum-protected filesystems fail fast on corruption.
                 let bm = self
                     .bitmap_cache
                     .get_or_load(block_dev, cache_key, bitmap_block)?;
@@ -40,12 +43,15 @@ impl Ext4FileSystem {
                 let stored = desc.block_bitmap_csum();
                 if expected != stored {
                     error!(
-                        "alloc_blocks: block bitmap checksum mismatch group={group_idx} expected={expected:#x} stored={stored:#x}"
+                        "alloc_blocks: block bitmap checksum mismatch group={group_idx} \
+                         expected={expected:#x} stored={stored:#x}"
                     );
                     return Err(Ext4Error::checksum());
                 }
             }
 
+            // The actual allocation happens under the bitmap-cache mutation so
+            // the updated bitmap bytes remain coherent with cache state.
             self.bitmap_cache
                 .modify(block_dev, cache_key, bitmap_block, |data| {
                     alloc_res = self
@@ -77,7 +83,8 @@ impl Ext4FileSystem {
                 desc_mut.bg_flags &= !Ext4GroupDesc::EXT4_BG_BLOCK_UNINIT;
 
                 debug!(
-                    "alloc_blocks: group={} free_blocks_count change {} -> {} (allocated {} blocks starting at global={})",
+                    "alloc_blocks: group={} free_blocks_count change {} -> {} (allocated {} \
+                     blocks starting at global={})",
                     group_idx, before, new_count, count, alloc.global_block
                 );
             }
@@ -89,7 +96,8 @@ impl Ext4FileSystem {
             self.superblock.s_free_blocks_count_hi = (sb_after >> 32) as u32;
 
             debug!(
-                "alloc_blocks: superblock free_blocks_count change {sb_before} -> {sb_after} (delta=-{count})"
+                "alloc_blocks: superblock free_blocks_count change {sb_before} -> {sb_after} \
+                 (delta=-{count})"
             );
 
             let mut blocks = Vec::with_capacity(count as usize);
@@ -98,7 +106,8 @@ impl Ext4FileSystem {
             }
 
             debug!(
-                "Allocated blocks: group={}, first_block_in_group={}, first_global_block={}, count={} [bitmap updated, writeback deferred]",
+                "Allocated blocks: group={}, first_block_in_group={}, first_global_block={}, \
+                 count={} [bitmap updated, writeback deferred]",
                 alloc.group_idx, alloc.block_in_group, alloc.global_block, count
             );
 
@@ -119,7 +128,7 @@ impl Ext4FileSystem {
             .ok_or(Ext4Error::no_space())
     }
 
-    /// 在整个文件系统中分配指定数量的 inode
+    /// Allocates the requested number of inodes across all groups.
     pub fn alloc_inodes<B: BlockDevice>(
         &mut self,
         block_dev: &mut Jbd2Dev<B>,
@@ -154,6 +163,8 @@ impl Ext4FileSystem {
                 }
             }
 
+            // Allocate directly from the inode bitmap so the cache owns the
+            // only mutable copy while we flip bits.
             self.bitmap_cache
                 .modify(block_dev, cache_key, bitmap_block, |data| {
                     for _ in 0..count {
@@ -218,6 +229,8 @@ impl Ext4FileSystem {
             self.superblock.s_free_inodes_count =
                 self.superblock.s_free_inodes_count.saturating_sub(count);
 
+            // Reset newly allocated inode table entries to a clean reused-inode
+            // baseline before higher layers fill in metadata.
             let placeholder = Ext4Inode::empty_for_reuse(self.default_inode_extra_isize());
             for inode_num in &inodes {
                 let fresh = placeholder;
@@ -257,7 +270,7 @@ impl Ext4FileSystem {
         Ok(ino)
     }
 
-    /// 根据全局物理块号释放一个数据块
+    /// Frees one data block given its absolute physical block number.
     pub fn free_block<B: BlockDevice>(
         &mut self,
         block_dev: &mut Jbd2Dev<B>,
@@ -280,8 +293,8 @@ impl Ext4FileSystem {
         if ext4_superblock_has_metadata_csum(&self.superblock) {
             let (uninit, stored) = {
                 let gdesc = self
-                .get_group_desc(group_idx)
-                .ok_or(Ext4Error::corrupted())?;
+                    .get_group_desc(group_idx)
+                    .ok_or(Ext4Error::corrupted())?;
                 (gdesc.is_block_bitmap_uninit(), gdesc.block_bitmap_csum())
             };
             if !uninit {
@@ -339,7 +352,7 @@ impl Ext4FileSystem {
         Ok(())
     }
 
-    /// 根据 inode 号释放一个 inode
+    /// Frees one inode given its global inode number.
     pub fn free_inode<B: BlockDevice>(
         &mut self,
         block_dev: &mut Jbd2Dev<B>,

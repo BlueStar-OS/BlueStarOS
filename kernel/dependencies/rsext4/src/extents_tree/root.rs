@@ -1,18 +1,49 @@
 use super::*;
+use crate::{
+    bmalloc::InodeNumber,
+    config::runtime_block_size,
+    crc32c::{ext4_crc32c_seed_from_superblock, ext4_superblock_has_metadata_csum},
+    superblock::Ext4Superblock,
+};
 
-/// 绑定到单个 inode 的 extent 树视图（不持有 BlockDev，按需传入）
+/// Extent-tree view bound to a single inode.
 pub struct ExtentTree<'a> {
     pub inode: &'a mut Ext4Inode,
+    inode_num: Option<InodeNumber>,
+    generation: u32,
+    checksum_seed: Option<u32>,
 }
 
 impl<'a> ExtentTree<'a> {
-    /// 构造：从给定 inode 开始操作其 extent 树
+    /// Creates an extent-tree handle backed by the given inode.
     pub fn new(inode: &'a mut Ext4Inode) -> Self {
-        Self { inode }
+        let generation = inode.i_generation;
+        Self {
+            inode,
+            inode_num: None,
+            generation,
+            checksum_seed: None,
+        }
+    }
+
+    /// Creates an extent-tree handle with enough metadata to checksum external nodes.
+    pub fn with_checksum(
+        inode: &'a mut Ext4Inode,
+        superblock: &Ext4Superblock,
+        inode_num: InodeNumber,
+    ) -> Self {
+        let generation = inode.i_generation;
+        Self {
+            inode,
+            inode_num: Some(inode_num),
+            generation,
+            checksum_seed: ext4_superblock_has_metadata_csum(superblock)
+                .then(|| ext4_crc32c_seed_from_superblock(superblock)),
+        }
     }
 
     pub(super) fn add_inode_sectors_for_block(&mut self) {
-        let add_sectors = (BLOCK_SIZE / 512) as u64;
+        let add_sectors = (runtime_block_size() / 512) as u64;
         let cur = ((self.inode.l_i_blocks_high as u64) << 32) | (self.inode.i_blocks_lo as u64);
         let newv = cur.saturating_add(add_sectors);
         self.inode.i_blocks_lo = (newv & 0xFFFF_FFFF) as u32;
@@ -20,20 +51,60 @@ impl<'a> ExtentTree<'a> {
     }
 
     pub(super) fn sub_inode_sectors_for_block(&mut self) {
-        let sub_sectors = (BLOCK_SIZE / 512) as u64;
+        let sub_sectors = (runtime_block_size() / 512) as u64;
         let cur = ((self.inode.l_i_blocks_high as u64) << 32) | (self.inode.i_blocks_lo as u64);
         let newv = cur.saturating_sub(sub_sectors);
         self.inode.i_blocks_lo = (newv & 0xFFFF_FFFF) as u32;
         self.inode.l_i_blocks_high = ((newv >> 32) & 0xFFFF) as u16;
     }
 
-    /// 从 inode.i_block 解析根节点
+    /// Walks all extent-tree blocks that live outside the inode's inline root.
+    pub fn external_node_blocks<B: BlockDevice>(
+        &self,
+        dev: &mut Jbd2Dev<B>,
+    ) -> Ext4Result<Vec<AbsoluteBN>> {
+        let Some(root) = self.load_root_from_inode() else {
+            return Ok(Vec::new());
+        };
+
+        fn walk<B: BlockDevice>(
+            dev: &mut Jbd2Dev<B>,
+            node: &ExtentNode,
+            out: &mut Vec<AbsoluteBN>,
+        ) -> Ext4Result<()> {
+            match node {
+                ExtentNode::Leaf { .. } => Ok(()),
+                ExtentNode::Index { entries, .. } => {
+                    for idx in entries {
+                        let child = AbsoluteBN::new(
+                            ((idx.ei_leaf_hi as u64) << 32) | idx.ei_leaf_lo as u64,
+                        );
+                        out.push(child);
+                        dev.read_block(child)?;
+                        let child_node =
+                            ExtentTree::parse_node(dev.buffer()).ok_or(Ext4Error::corrupted())?;
+                        walk(dev, &child_node, out)?;
+                    }
+                    Ok(())
+                }
+            }
+        }
+
+        let mut blocks = Vec::new();
+        walk(dev, &root, &mut blocks)?;
+        blocks.sort_unstable();
+        blocks.dedup();
+        Ok(blocks)
+    }
+
+    /// Parses the inline extent root from `inode.i_block`.
     pub fn load_root_from_inode(&self) -> Option<ExtentNode> {
-        // inode.i_block 是 15 * u32 = 60 字节，正好容纳一个 extent 节点
-        let iblocks = &self.inode.i_block; //不同端序解析为错误端序
+        // `inode.i_block` holds 15 little-endian words, which is exactly enough
+        // for one inline extent node.
+        let iblocks = &self.inode.i_block;
         let mut bytes: [u8; 60] = [0; 60];
         for idx in 0..15 {
-            //正确处理字节序
+            // Re-encode each word as little-endian before parsing.
             let trans_b1 = iblocks[idx].to_le_bytes();
             bytes[idx * 4] = trans_b1[0];
             bytes[idx * 4 + 1] = trans_b1[1];
@@ -43,19 +114,17 @@ impl<'a> ExtentTree<'a> {
         Self::parse_node_from_bytes(&bytes)
     }
 
-    /// 将根节点写回 inode.i_block
+    /// Serializes the root node back into `inode.i_block`.
     pub fn store_root_to_inode(&mut self, node: &ExtentNode) {
         let hdr_size = Ext4ExtentHeader::disk_size();
 
         match node {
             ExtentNode::Leaf { header, entries } => {
-                // 仅支持 depth=0：header + 若干 Ext4Extent 写入到 i_block（60 字节）
+                // Inline leaf root: header plus extents packed into 60 bytes.
                 let mut buf = [0u8; 60];
 
-                // 写 header
                 header.to_disk_bytes(&mut buf[0..hdr_size]);
 
-                // 写 extents
                 let et_size = Ext4Extent::disk_size();
                 for (i, e) in entries.iter().enumerate() {
                     let off = hdr_size + i * et_size;
@@ -65,7 +134,7 @@ impl<'a> ExtentTree<'a> {
                     e.to_disk_bytes(&mut buf[off..off + et_size]);
                 }
 
-                // 将 60 字节解释为 15 个 u32 写回 i_block
+                // Copy the serialized bytes back as 15 little-endian words.
                 for i in 0..15 {
                     let off = i * 4;
                     let v =
@@ -74,7 +143,7 @@ impl<'a> ExtentTree<'a> {
                 }
             }
             ExtentNode::Index { header, entries } => {
-                // depth>0：header + 若干 Ext4ExtentIdx 写入到 inode.i_block
+                // Inline index root: header plus child indexes packed into `i_block`.
                 let mut buf = [0u8; 60];
 
                 header.to_disk_bytes(&mut buf[0..hdr_size]);
@@ -99,26 +168,42 @@ impl<'a> ExtentTree<'a> {
     }
 
     /// Writes an extent node to an absolute physical block.
+    fn update_extent_block_checksum(&self, buf: &mut [u8]) {
+        let (Some(seed), Some(inode_num)) = (self.checksum_seed, self.inode_num) else {
+            return;
+        };
+        if buf.len() < 4 {
+            return;
+        }
+
+        let tail = buf.len() - 4;
+        buf[tail..].fill(0);
+        let inode_le = inode_num.raw().to_le_bytes();
+        let generation_le = self.generation.to_le_bytes();
+        let checksum =
+            crate::checksum::ext4_metadata_csum32(seed, &[&inode_le, &generation_le, &buf[..tail]]);
+        buf[tail..].copy_from_slice(&checksum.to_le_bytes());
+    }
+
     pub(super) fn write_node_to_block<B: BlockDevice>(
+        &self,
         dev: &mut Jbd2Dev<B>,
         block_id: AbsoluteBN,
         node: &ExtentNode,
-        eh_max: u16,
     ) -> Ext4Result<()> {
         let hdr_size = Ext4ExtentHeader::disk_size();
-        // 读取块
+        let block_eh_max = Self::calc_block_eh_max();
+        // Load the target block before overwriting the node payload.
         dev.read_block(block_id)?;
         let buf = dev.buffer_mut();
+        buf.fill(0);
 
         match node {
             ExtentNode::Leaf { header, entries } => {
                 let et_size = Ext4Extent::disk_size();
-                // 确保 header 中的 max 正确（因为内存中的 node 可能来自 root，max 很小）
                 let mut disk_header = *header;
-                disk_header.eh_max = eh_max;
-                // 写 header
+                disk_header.eh_max = block_eh_max;
                 disk_header.to_disk_bytes(&mut buf[0..hdr_size]);
-                // 写 extents
                 for (i, e) in entries.iter().enumerate() {
                     let off = hdr_size + i * et_size;
                     if off + et_size > buf.len() {
@@ -130,11 +215,9 @@ impl<'a> ExtentTree<'a> {
             ExtentNode::Index { header, entries } => {
                 let idx_size = Ext4ExtentIdx::disk_size();
                 let mut disk_header = *header;
-                disk_header.eh_max = eh_max;
+                disk_header.eh_max = block_eh_max;
 
-                // 写 header
                 disk_header.to_disk_bytes(&mut buf[0..hdr_size]);
-                // 写索引
                 for (i, idx) in entries.iter().enumerate() {
                     let off = hdr_size + i * idx_size;
                     if off + idx_size > buf.len() {
@@ -144,7 +227,8 @@ impl<'a> ExtentTree<'a> {
                 }
             }
         }
-        // 标记脏并写回
+        self.update_extent_block_checksum(buf);
+        // Mark the metadata block dirty and write it back.
         dev.write_block(block_id, true)?;
         Ok(())
     }

@@ -47,7 +47,7 @@ use core::arch::asm;
 use core::ptr::read_volatile;
 use core::sync::atomic::{AtomicU16, Ordering};
 
-use alloc::sync::Arc;
+use alloc::{sync::Arc, vec::Vec};
 use log::{debug, error, info};
 use spin::Mutex;
 
@@ -63,7 +63,7 @@ use crate::driver::pcie::{
 };
 use crate::error::BlueErr;
 use crate::fs::vfs::{register_global_block_device, BlockDevTrait, VfsFsError};
-use crate::memory::alloc_contiguous_frames;
+use crate::memory::{alloc_contiguous_frames, FramTracker};
 use crate::time::kernel_sleep;
 mod cst;
 /// NVMe PCI class code：Base Class = 0x01, Sub Class = 0x08, Prog IF = 0x02。
@@ -225,10 +225,13 @@ pub enum NvmeAdminOpcode {
 
 /// NVMe I/O Opcode。
 ///
-/// 第一版只需要读写。
+/// Linux 5.4.29 参考：
+/// - `include/linux/nvme.h:559-561`：`flush/write/read` opcode；
+/// - `drivers/nvme/host/core.c:600-605`：Flush 命令只需要 opcode + namespace id。
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(u8)]
 pub enum NvmeIoOpcode {
+    Flush = 0x00,
     Write = 0x01,
     Read = 0x02,
 }
@@ -748,7 +751,7 @@ pub struct NvmeQueueState {
 ///
 /// 这不是 Linux `struct nvme_dev` 的一比一翻译，而是当前内核第一版最小可用集合。
 /// 先把“能读写一个 namespace 并挂到 VFS”做通，再考虑 PRP pool、MSI-X、多队列。
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct NvmeController {
     /// PCIe 枚举结果快照。
     pub pcie_device: PcieDeviceInfo,
@@ -764,6 +767,17 @@ pub struct NvmeController {
     pub admin_queue: NvmeQueueState,
     /// 第一版唯一的 I/O Queue。
     pub io_queue: NvmeQueueState,
+    /// Admin SQ 对应的物理页帧所有权。
+    ///
+    /// 这些页会被控制器通过 ASQ DMA 访问，因此必须和控制器对象同生命周期。
+    /// 之前这里用 `mem::forget()` 强行泄漏；现在改成由控制器持有，驱动释放时自动回收。
+    pub admin_submission_queue_frames: Vec<FramTracker>,
+    /// Admin CQ 对应的物理页帧所有权。
+    pub admin_completion_queue_frames: Vec<FramTracker>,
+    /// 第一版唯一 I/O SQ 的物理页帧所有权。
+    pub io_submission_queue_frames: Vec<FramTracker>,
+    /// 第一版唯一 I/O CQ 的物理页帧所有权。
+    pub io_completion_queue_frames: Vec<FramTracker>,
 }
 
 /// 暴露给 VFS 的 NVMe 块设备。
@@ -965,6 +979,13 @@ impl BlockDevTrait for NvmeBlockDevice {
             .map_err(nvme_blue_err_to_vfs_error)
     }
 
+    /// 将 NVMe volatile write cache 中的数据刷到非易失介质。
+    fn flush(&mut self) -> Result<(), VfsFsError> {
+        self.controller
+            .flush_namespace_polling()
+            .map_err(nvme_blue_err_to_vfs_error)
+    }
+
     /// 返回 namespace 中的 512B sector 数量。
     fn capacity_in_sectors(&self) -> u64 {
         let total_bytes =
@@ -1083,9 +1104,10 @@ impl NvmeController {
 
         debug!("Build admin queue: {:?}", self.admin_queue);
 
-        // TODO(dirinkbottle): NvmeController 应该持有这些 FrameTracker，驱动卸载时再释放。
-        core::mem::forget(admin_sq_frames);
-        core::mem::forget(admin_cq_frames);
+        // 把队列 backing pages 的所有权挂到控制器对象上，避免 `mem::forget()`
+        // 导致永久泄漏，同时保持 DMA 生命周期覆盖整个控制器生命周期。
+        self.admin_submission_queue_frames = admin_sq_frames;
+        self.admin_completion_queue_frames = admin_cq_frames;
 
         Ok(())
     }
@@ -1133,6 +1155,10 @@ impl NvmeController {
             doorbell_stride,
             admin_queue: NvmeQueueState::default(),
             io_queue: NvmeQueueState::default(),
+            admin_submission_queue_frames: Vec::new(),
+            admin_completion_queue_frames: Vec::new(),
+            io_submission_queue_frames: Vec::new(),
+            io_completion_queue_frames: Vec::new(),
         };
 
         if (controller_config & cc::ENABLE) != 0 {
@@ -1351,9 +1377,9 @@ impl NvmeController {
             doorbell_stride: self.doorbell_stride,
         };
 
-        // TODO(dirinkbottle): NvmeController 应该持有这些 FrameTracker，驱动卸载时再释放。
-        core::mem::forget(io_sq_frames);
-        core::mem::forget(io_cq_frames);
+        // 和 admin queue 一样，I/O queue backing pages 由控制器对象持有。
+        self.io_submission_queue_frames = io_sq_frames;
+        self.io_completion_queue_frames = io_cq_frames;
 
         Ok(())
     }
@@ -1395,6 +1421,32 @@ impl NvmeController {
             buffer_phys_addr,
             "write-logical-blocks",
         )
+    }
+
+    /// 发送 NVMe Flush 命令，确保 namespace 中已完成的写入落到稳定介质。
+    ///
+    /// Linux 5.4.29 参考：
+    /// - `include/linux/nvme.h:559`：`nvme_cmd_flush = 0x00`；
+    /// - `drivers/nvme/host/core.c:600-605`：Flush 命令填写 opcode 与 nsid。
+    pub fn flush_namespace_polling(&mut self) -> Result<(), BlueErr> {
+        let bar0_space = self.bar0_space()?;
+        let command = NvmeRwCommand {
+            opcode: NvmeIoOpcode::Flush as u8,
+            command_id: next_command_id().0,
+            namespace_id: self.namespace_id.0,
+            ..Default::default()
+        };
+
+        unsafe {
+            let cqe =
+                submit_io_sqe_polling(&bar0_space, &mut self.io_queue, &command, "flush-namespace");
+            if (cqe.status >> 1) != 0 {
+                return Err(BlueErr::EIO);
+            }
+            asm!("fence iorw, iorw");
+        }
+
+        Ok(())
     }
 
     /// 发一个任意 64B Admin SQE，并在 Admin CQ 上轮询完成。

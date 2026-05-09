@@ -1,105 +1,132 @@
-//! # 配置常量定义
-//!
-//! 定义了 ext4 文件系统实现中使用的各种配置常量，包括块大小、
-//! 块组参数、inode参数等。
+//! Configuration constants used across the ext4 implementation.
+
+use core::sync::atomic::{AtomicUsize, Ordering};
 
 use crate::superblock::*;
 
 // ============================================================================
-// Journal 相关配置
+// Journal configuration
 // ============================================================================
-/// JBD2 日志缓冲区最大数量
-pub const JBD2_BUFFER_MAX: usize = 10; //最多10条缓存
+/// Maximum number of in-memory JBD2 update buffers.
+pub const JBD2_BUFFER_MAX: usize = 10;
 
 // ============================================================================
-// 块相关配置
+// Block geometry
 // ============================================================================
-/// Ext4 块大小（字节）
-pub const BLOCK_SIZE: usize = 4096; //usize没问题
-pub const BLOCK_SIZE_U32: u32 = BLOCK_SIZE as u32;
 
-/// Ext4 块大小对数（log2）
+/// Log2 delta stored in `s_log_block_size`.
 ///
-/// 用于超级块的 s_log_block_size 字段
-pub const LOG_BLOCK_SIZE: u32 = 2; // 4096 = 1024 << 2
+/// ext4 encodes the real block size as `1024 << s_log_block_size`, so `2`
+/// means a 4 KiB block size.
+pub const LOG_BLOCK_SIZE: u32 = 2;
+
+/// Default runtime block size used before mount discovers the real geometry.
+const DEFAULT_RUNTIME_BLOCK_SIZE: usize = 1024usize << LOG_BLOCK_SIZE;
+
+/// Process-local current ext4 block size.
+///
+/// The crate assumes a single active ext4 instance at a time, so this global
+/// runtime view is intentionally internal-only.
+static RUNTIME_BLOCK_SIZE: AtomicUsize = AtomicUsize::new(DEFAULT_RUNTIME_BLOCK_SIZE);
+
+/// Returns the current ext4 block size in bytes.
+pub(crate) fn runtime_block_size() -> usize {
+    RUNTIME_BLOCK_SIZE.load(Ordering::Acquire)
+}
+
+/// Returns the current ext4 block size in bytes as `u32`.
+pub(crate) fn runtime_block_size_u32() -> u32 {
+    runtime_block_size() as u32
+}
+
+/// Updates the process-local ext4 block size after mount discovers geometry.
+pub(crate) fn set_runtime_block_size(block_size: usize) {
+    debug_assert!(block_size.is_power_of_two());
+    debug_assert!(block_size >= 1024);
+    RUNTIME_BLOCK_SIZE.store(block_size, Ordering::Release);
+}
+
 // ============================================================================
-// 块组相关配置
+// Block-group layout
 // ============================================================================
 
-/// 块组描述符大小（字节）
-/// 标准 Ext4（64位）：64字节
+/// Size of a 64-bit ext4 group descriptor in bytes.
 pub const GROUP_DESC_SIZE: u16 = 64;
-/// 旧版 Ext4（32位）：32字节
+/// Size of a legacy 32-bit ext4 group descriptor in bytes.
 pub const GROUP_DESC_SIZE_OLD: u16 = 32;
 // ============================================================================
-// Inode 相关配置
+// Inode geometry
 // ============================================================================
 
-/// Inode 默认大小（字节）
+/// Default inode size in bytes.
 ///
 /// NOTE: real inode size is stored in superblock.s_inode_size.
 /// This constant should only be used as a fallback when s_inode_size is 0.
 pub const DEFAULT_INODE_SIZE: u16 = 256;
 
 // ============================================================================
-// 数据结构缓存相关配置,在小的嵌入式系统中可以适当调小防止崩内存
+// Cache sizing
 // ============================================================================
-/// 是否使用多级缓存(Inode表/datablock/bitmap/gdt 缓存) 默认开启（建议在某些特殊情况下关闭，会增加文件系统的开销）
+/// Enables the multi-level cache stack for inode tables, data blocks, bitmaps,
+/// and group descriptors.
 pub const USE_MULTILEVEL_CACHE: bool = cfg!(feature = "USE_MULTILEVEL_CACHE");
-///Inodecahe数量
+/// Maximum number of inode-table cache entries.
 pub const INODE_CACHE_MAX: usize = 128;
-///Datablock cahce数量
+/// Maximum number of data-block cache entries.
 pub const DATABLOCK_CACHE_MAX: usize = 128;
-///BITMAP cache数量
+/// Maximum number of bitmap cache entries.
 pub const BITMAP_CACHE_MAX: usize = 128;
 
-//============================================================================
-//目录项DirEntry配置
-//============================================================================
-pub const DIRNAME_LEN: usize = 255; //目录名长度
-///保留inodes数量
+// ============================================================================
+// Directory entry layout
+// ============================================================================
+/// Maximum ext4 directory entry name length.
+pub const DIRNAME_LEN: usize = 255;
+/// Number of reserved inode numbers at the start of the filesystem.
 pub const RESERVED_INODES: u32 = 10;
 
 // ============================================================================
-// 文件系统布局
+// Filesystem layout
 // ============================================================================
 
-/// 超级块在分区中的偏移量（字节）
-/// 总是从 1024 字节开始，跳过引导扇区
+/// On-disk byte offset of the primary superblock.
+///
+/// ext4 keeps the primary superblock at byte offset 1024 so the leading boot
+/// area remains untouched.
 pub const SUPERBLOCK_OFFSET: u64 = 1024;
 
-/// 超级块大小（字节）
+/// Serialized superblock size in bytes.
 pub const SUPERBLOCK_SIZE: usize = 1024;
 
-/// 预留的 GDT 块数（用于未来扩展块组描述符）
+/// Number of reserved GDT blocks kept for future online resize growth.
 pub const RESERVED_GDT_BLOCKS: u32 = 0;
 
 // ============================================================================
-// 特性标志
+// Feature flags
 // ============================================================================
 
-/// 默认的兼容特性标志
+/// Default COMPAT feature bitset written by mkfs.
 pub const DEFAULT_FEATURE_COMPAT: u32 =
     Ext4Superblock::EXT4_FEATURE_COMPAT_HAS_JOURNAL | Ext4Superblock::EXT4_FEATURE_COMPAT_DIR_INDEX;
-/// 默认的不兼容特性标志
+/// Default INCOMPAT feature bitset written by mkfs.
 pub const DEFAULT_FEATURE_INCOMPAT: u32 = Ext4Superblock::EXT4_FEATURE_INCOMPAT_FILETYPE
     | Ext4Superblock::EXT4_FEATURE_INCOMPAT_64BIT
     | Ext4Superblock::EXT4_FEATURE_INCOMPAT_EXTENTS;
 
-/// 默认的只读兼容特性标志
+/// Default RO_COMPAT feature bitset written by mkfs.
 pub const DEFAULT_FEATURE_RO_COMPAT: u32 = Ext4Superblock::EXT4_FEATURE_RO_COMPAT_EXTRA_ISIZE
     | Ext4Superblock::EXT4_FEATURE_RO_COMPAT_SPARSE_SUPER
     | Ext4Superblock::EXT4_FEATURE_RO_COMPAT_METADATA_CSUM;
 
 // ============================================================================
-// 魔数和版本
+// Magic values and versioning
 // ============================================================================
 
-/// Ext4 超级块魔数
+/// ext4 superblock magic stored in `s_magic`.
 pub const EXT4_SUPER_MAGIC: u16 = 0xEF53;
 
-/// 文件系统版本（主版本号）
+/// Filesystem major revision advertised by mkfs.
 pub const EXT4_MAJOR_VERSION: u32 = 1;
 
-/// 文件系统版本（次版本号）
+/// Filesystem minor revision advertised by mkfs.
 pub const EXT4_MINOR_VERSION: u16 = 0;

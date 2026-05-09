@@ -1,68 +1,71 @@
 use super::*;
 
-/// 文件系统布局信息（仅用于 mkfs 阶段的计算）
+/// Derived filesystem geometry used only during mkfs planning.
 pub struct FsLayoutInfo {
-    /// 逻辑块大小（字节）
+    /// Total filesystem blocks.
+    total_blocks: u64,
+    /// Logical block size in bytes.
     block_size: u32,
-    /// 每组块数
+    /// Blocks per group.
     blocks_per_group: u32,
-    /// 每组 inode 数
+    /// Inodes per group.
     inodes_per_group: u32,
-    /// inode 大小（字节）
+    /// Inode size in bytes.
     inode_size: u16,
-    /// 块组数
+    /// Number of block groups.
     groups: u32,
-    /// 块组描述符大小（字节）
+    /// Group-descriptor size in bytes.
     desc_size: u16,
-    /// 每块能容纳的组描述符个数
+    /// Number of descriptors that fit in one block.
     descs_per_block: u32,
-    /// 主 GDT 实际占用的块数
+    /// Number of blocks occupied by the primary GDT.
     gdt_blocks: u32,
-    /// 每组 inode 表占用的块数
+    /// Number of blocks occupied by each group's inode table.
     inode_table_blocks: u32,
-    /// 第一个数据块号（对应 s_first_data_block）
+    /// First data block number stored in `s_first_data_block`.
     first_data_block: u32,
-    /// 预留的 GDT 块数（应等于 RESERVED_GDT_BLOCKS）
+    /// Reserved GDT blocks kept for future growth.
     reserved_gdt_blocks: u32,
-    /// 组0的块位图块号
+    /// Group 0 block-bitmap block number.
     group0_block_bitmap: u32,
-    /// 组0的 inode 位图块号
+    /// Group 0 inode-bitmap block number.
     group0_inode_bitmap: u32,
-    /// 组0的 inode 表起始块号
+    /// Group 0 inode-table start block.
     group0_inode_table: u32,
-    /// 组0中元数据占用的块数
+    /// Number of metadata blocks consumed in group 0.
     group0_metadata_blocks: u32,
-    /// 预留块总数（按比例预留给 root）
+    /// Total reserved blocks kept for privileged users.
     reserved_blocks: u64,
 }
 
-/// block_group 布局信息，仅在 mkfs 阶段使用
+/// Per-group layout derived during mkfs.
 pub struct BlcokGroupLayout {
-    /// 块组起始块号（全局块号）
+    /// Absolute first block of the group.
     pub group_start_block: u64,
-    /// 块组内块位图所在的块号（全局块号）
+    /// Absolute block number of the block bitmap.
     pub group_blcok_bitmap_startblocks: u64,
-    /// 块组内 inode 位图所在的块号（全局块号）
+    /// Absolute block number of the inode bitmap.
     pub group_inode_bitmap_startblocks: u64,
-    /// 块组内 inode 表起始块号（全局块号）
+    /// Absolute start block of the inode table.
     pub group_inode_table_startblocks: u64,
-    /// 该块组中元数据占用的块数（引导/备份 super+GDT+位图+inode 表）
+    /// Number of blocks consumed by metadata inside the group.
     pub metadata_blocks_in_group: u32,
 }
 
 pub fn compute_fs_layout(inode_size: u16, total_blocks: u64) -> FsLayoutInfo {
     let block_size: u32 = 1024u32 << LOG_BLOCK_SIZE;
 
-    // 每组块数：8 * block_size（标准 ext4 默认）
+    // ext4 defaults to `8 * block_size` blocks per group.
     let blocks_per_group: u32 = 8 * block_size;
 
-    // 每组 inode 数：blocks_per_group / 4（简化策略）
+    // Use a simple density heuristic for inode count.
     let inodes_per_group: u32 = blocks_per_group / 4;
 
-    // 块组数：向上取整
+    // Round up so the last partial group is still represented.
     let groups: u32 = total_blocks.div_ceil(blocks_per_group as u64) as u32;
 
-    // 确定块组描述符大小，默认使用64位描述符大小，除非明确指定使用32位
+    // Prefer the 64-bit descriptor format unless the feature set explicitly
+    // falls back to the legacy 32-bit layout.
     let desc_size: u16 =
         if DEFAULT_FEATURE_INCOMPAT & Ext4Superblock::EXT4_FEATURE_INCOMPAT_64BIT != 0 {
             GROUP_DESC_SIZE
@@ -70,47 +73,48 @@ pub fn compute_fs_layout(inode_size: u16, total_blocks: u64) -> FsLayoutInfo {
             GROUP_DESC_SIZE_OLD
         };
 
-    // 每块能容纳的组描述符个数
+    // Descriptor packing determines how many GDT blocks are required.
     let descs_per_block: u32 = if desc_size == 0 {
         0
     } else {
         block_size / desc_size as u32
     };
 
-    // GDT 实际占用的块数
+    // Number of blocks used by the primary group descriptor table.
     let gdt_blocks: u32 = if descs_per_block == 0 {
         0
     } else {
         groups.div_ceil(descs_per_block)
     };
 
-    // 每组 inode 表占用的块数
+    // Each group stores a full inode table contiguous to its bitmaps.
     let inode_table_blocks: u32 = if block_size == 0 {
         0
     } else {
         (inodes_per_group * inode_size as u32).div_ceil(block_size)
     };
 
-    // 第一个数据块：块大小 > 1024 时为 0，否则为 1（参考 lwext4 create_fs_aux_info）
+    // ext4 uses `s_first_data_block = 0` for block sizes above 1 KiB, and `1`
+    // for 1 KiB filesystems.
     let first_data_block: u32 = if block_size > 1024 { 0 } else { 1 };
 
-    // 预留的 GDT 块数（与 ext4 标准一致）
+    // Reserve extra GDT space for potential future resize support.
     let reserved_gdt_blocks: u32 = RESERVED_GDT_BLOCKS;
 
-    // 组0布局：
-    // - 对于 4K：Primary superblock at 0, GDT at 1, Reserved GDT blocks at 2..(2+reserved_gdt_blocks-1)
-    // - 我们在预留 GDT 区域之后顺序放置 block_bitmap、inode_bitmap、inode_table
+    // Group 0 hosts the primary superblock and primary GDT, so its bitmaps and
+    // inode table start after the reserved GDT area.
     let group0_start: u32 = first_data_block;
-    let reserved_gdt_start: u32 = group0_start + 2; // 块0=引导/超级块，块1=GDT，块2.. 预留GDT
-    let group0_block_bitmap: u32 = reserved_gdt_start + reserved_gdt_blocks; // 2 + reserved
+    let reserved_gdt_start: u32 = group0_start + 2; // boot/super + primary GDT
+    let group0_block_bitmap: u32 = reserved_gdt_start + reserved_gdt_blocks;
     let group0_inode_bitmap: u32 = group0_block_bitmap + 1;
     let group0_inode_table: u32 = group0_inode_bitmap + 1;
     let group0_metadata_blocks: u32 = (group0_inode_table + inode_table_blocks) - group0_start;
 
-    // 预留块总数：约 5%（与 ext4 默认类似）
-    let reserved_blocks: u64 = total_blocks / 20; // 5%
+    // Reserve roughly 5% of blocks for privileged recovery space.
+    let reserved_blocks: u64 = total_blocks / 20;
 
     FsLayoutInfo {
+        total_blocks,
         block_size,
         blocks_per_group,
         inodes_per_group,
@@ -130,13 +134,43 @@ pub fn compute_fs_layout(inode_size: u16, total_blocks: u64) -> FsLayoutInfo {
     }
 }
 
+fn group_blocks_count(layout: &FsLayoutInfo, group_id: u32) -> u32 {
+    let group_start = u64::from(group_id) * u64::from(layout.blocks_per_group);
+    if group_start >= layout.total_blocks {
+        return 0;
+    }
+
+    let remaining = layout.total_blocks - group_start;
+    remaining.min(u64::from(layout.blocks_per_group)) as u32
+}
+
+fn group_free_blocks(layout: &FsLayoutInfo, group_id: u32, metadata_blocks: u32) -> u32 {
+    group_blocks_count(layout, group_id).saturating_sub(metadata_blocks)
+}
+
+fn mark_bitmap_range_allocated(bitmap: &mut [u8], start: u32, end: u32) {
+    let bits = (bitmap.len() * 8) as u32;
+    let end = end.min(bits);
+    for bit in start.min(bits)..end {
+        let byte_idx = (bit / 8) as usize;
+        let bit_idx = bit % 8;
+        bitmap[byte_idx] |= 1 << bit_idx;
+    }
+}
+
+fn mark_block_bitmap_padding(bitmap: &mut [u8], layout: &FsLayoutInfo, group_id: u32) {
+    let valid_blocks = group_blocks_count(layout, group_id);
+    mark_bitmap_range_allocated(bitmap, valid_blocks, layout.blocks_per_group);
+}
+
 pub fn mkfs<B: BlockDevice>(block_dev: &mut Jbd2Dev<B>) -> Ext4Result<()> {
     debug!("Start initializing Ext4 filesystem...");
-    // mkfs 阶段先强制关闭日志，避免还未初始化 journal superblock 时触发 JBD2 逻辑
+    // Disable journaling while laying out the initial filesystem image. The
+    // journal inode and journal superblock do not exist yet at this stage.
     block_dev.set_journal_use(false);
     let old_jouranl_use = block_dev.is_use_journal();
 
-    // 1. 计算布局参数
+    // Compute the full mkfs layout before any on-disk write happens.
     let total_blocks = block_dev.total_blocks();
     let layout = compute_fs_layout(DEFAULT_INODE_SIZE, total_blocks);
     let total_groups = layout.groups;
@@ -147,31 +181,30 @@ pub fn mkfs<B: BlockDevice>(block_dev: &mut Jbd2Dev<B>) -> Ext4Result<()> {
     debug!("  Blocks per group: {}", layout.blocks_per_group);
     debug!("  Inodes per group: {}", layout.inodes_per_group);
 
-    //构建并根据fearure写入到所有group超级块
+    // Write the primary superblock and any sparse backups first so every later
+    // descriptor/bitmap write can assume a valid superblock image exists.
     let superblock = build_superblock(total_blocks, &layout);
     write_superblock(block_dev, &superblock)?;
     debug!("Superblock written");
 
-    //写冗余备份 自动判断是否写
     write_superblock_redundant_backup(block_dev, &superblock, total_groups, &layout)?;
 
-    //注意顺序
     let mut descs: VecDeque<Ext4GroupDesc> = VecDeque::new();
-    //为superblock写入gdt（全部标记为UNINIT）
+    // Seed all group descriptors before initializing individual bitmaps.
     for group_id in 0..total_groups {
         let mut desc = build_uninit_group_desc(&superblock, group_id, &layout);
         write_group_desc(block_dev, group_id, &mut desc)?;
         descs.push_back(desc);
     }
-    //为其它块组选择性的写入冗余备份desc
     write_gdt_redundant_backup(block_dev, &descs, &superblock, total_groups, &layout)?;
     debug!("{total_groups} block group descriptors written");
 
-    //实际初始化块组0（用于根目录）
+    // Group 0 is initialized eagerly because mkfs immediately creates the root
+    // directory inside it.
     initialize_group_0(block_dev, &layout)?;
     debug!("Block group 0 initialized (for root directory)");
 
-    // 初始化其它块组的位图（全部视为空闲）
+    // Other groups start with only metadata blocks allocated.
     initialize_other_groups_bitmaps(block_dev, &layout, &superblock)?;
 
     let mut initialized_descs: VecDeque<Ext4GroupDesc> = VecDeque::new();
@@ -191,17 +224,17 @@ pub fn mkfs<B: BlockDevice>(block_dev: &mut Jbd2Dev<B>) -> Ext4Result<()> {
         &layout,
     )?;
 
-    //通过一次挂载/卸载流程，让根目录在 mkfs 阶段就被真正创建并写回磁盘
-    // 注意：此时日志仍然关闭，等真正挂载时再开启 JBD2
+    // Reuse the normal mount/bootstrap path to create root and lost+found so
+    // mkfs and mount share the same initialization logic.
     {
         let mut fs = Ext4FileSystem::mount(block_dev).expect("Mount Failed!");
         fs.umount(block_dev)?;
     }
 
-    //  验证：读回超级块检查魔数
+    // Final sanity check: read back the superblock and validate the magic.
     let verify_sb = read_superblock(block_dev)?;
 
-    // mkfs 结束前恢复日志开关（为后续真实挂载做准备）
+    // Restore the previous journal setting for the caller.
     block_dev.set_journal_use(old_jouranl_use);
 
     if verify_sb.s_magic == EXT4_SUPER_MAGIC {
@@ -216,7 +249,7 @@ pub fn mkfs<B: BlockDevice>(block_dev: &mut Jbd2Dev<B>) -> Ext4Result<()> {
     }
 }
 
-/// 构建超级块 不管字节序
+/// Builds the in-memory superblock used by mkfs.
 fn build_superblock(total_blocks: u64, layout: &FsLayoutInfo) -> Ext4Superblock {
     let mut sb = Ext4Superblock {
         s_magic: EXT4_SUPER_MAGIC,
@@ -236,16 +269,16 @@ fn build_superblock(total_blocks: u64, layout: &FsLayoutInfo) -> Ext4Superblock 
         ..Default::default()
     };
 
-    //设置hash种子
-    //需要生成UUID
+    // Seed the directory hash machinery and UUID fields up front so every
+    // later checksum uses the final superblock identity.
     let uuid = generate_uuid();
     sb.s_hash_seed = uuid.0;
 
-    //设置文件系统UUID
     let filesys_uuid = generate_uuid_8();
     sb.s_uuid = filesys_uuid;
 
-    // 空闲计数：总块数 - 组0元数据块数 - 预留块数（其余组初始全空闲）
+    // Initial free-block count equals total blocks minus reserved space and the
+    // metadata consumed by group 0.
     let metadata_blocks = layout.group0_metadata_blocks as u64;
     let mut free_blocks = total_blocks
         .saturating_sub(metadata_blocks)
@@ -259,25 +292,26 @@ fn build_superblock(total_blocks: u64, layout: &FsLayoutInfo) -> Ext4Superblock 
     sb.s_min_extra_isize = 32;
     sb.s_want_extra_isize = 32;
 
-    // 预留 inode（1-RESERVED_INODES）不可用
+    // Reserved inode numbers start out unavailable.
     sb.s_free_inodes_count = sb.s_inodes_count.saturating_sub(RESERVED_INODES);
 
-    // 文件系统状态与错误处理（参考 lwext4 fill_sb）
+    // Mark the freshly created filesystem clean and choose the default error
+    // policy used by this implementation.
     sb.s_state = Ext4Superblock::EXT4_VALID_FS;
     sb.s_errors = Ext4Superblock::EXT4_ERRORS_RO;
 
-    // 创建者 OS / 版本号
+    // Advertise Linux dynamic-revision semantics.
     sb.s_creator_os = Ext4Superblock::EXT4_OS_LINUX;
     sb.s_rev_level = Ext4Superblock::EXT4_DYNAMIC_REV;
 
-    // 特性标志
+    // Enable the default feature set chosen for this implementation.
     sb.s_feature_compat = DEFAULT_FEATURE_COMPAT;
     sb.s_feature_incompat = DEFAULT_FEATURE_INCOMPAT;
     sb.s_feature_ro_compat = DEFAULT_FEATURE_RO_COMPAT;
 
-    // 块组描述符大小
+    // Descriptor size and checksum type must be finalized before the
+    // superblock checksum is computed.
     sb.s_desc_size = layout.desc_size;
-    // 预留的 GDT 块数（仅 mkfs 默认值，挂载时应相信磁盘中的值）
     sb.s_reserved_gdt_blocks = layout.reserved_gdt_blocks as u16;
     sb.s_checksum_type = if ext4_superblock_has_metadata_csum(&sb) {
         1
@@ -289,7 +323,7 @@ fn build_superblock(total_blocks: u64, layout: &FsLayoutInfo) -> Ext4Superblock 
     sb
 }
 
-/// 构建未初始化的块组描述符 不管字节序
+/// Builds an initial group descriptor before per-group bitmaps are written.
 fn build_uninit_group_desc(
     sb: &Ext4Superblock,
     group_id: u32,
@@ -297,7 +331,8 @@ fn build_uninit_group_desc(
 ) -> Ext4GroupDesc {
     let mut desc = Ext4GroupDesc::default();
 
-    // 通过工具函数统一计算该块组的布局
+    // Derive the physical layout from the shared group-layout helper so mkfs
+    // and backup-writing logic stay consistent.
     let gl = cloc_group_layout(
         group_id,
         sb,
@@ -309,17 +344,18 @@ fn build_uninit_group_desc(
         layout.gdt_blocks,
     );
 
-    // 位图和 inode 表块号
+    // Persist the group-local metadata block locations.
     desc.bg_block_bitmap_lo = gl.group_blcok_bitmap_startblocks as u32;
     desc.bg_inode_bitmap_lo = gl.group_inode_bitmap_startblocks as u32;
     desc.bg_inode_table_lo = gl.group_inode_table_startblocks as u32;
 
-    // 理论空闲块数：整组减去元数据块
-    let used_meta = gl.metadata_blocks_in_group as u32;
-    let free_blocks = layout.blocks_per_group.saturating_sub(used_meta);
+    // Free-block count is based on the group's real capacity. The last block
+    // group is often partial, so blocks past s_blocks_count must never be
+    // reported as free.
+    let free_blocks = group_free_blocks(layout, group_id, gl.metadata_blocks_in_group);
 
     if group_id == 0 {
-        // 组0 还需要扣掉保留 inode
+        // Group 0 consumes the reserved inode range immediately.
         desc.bg_free_blocks_count_lo = free_blocks as u16;
         desc.bg_free_inodes_count_lo =
             layout.inodes_per_group.saturating_sub(RESERVED_INODES) as u16;
@@ -330,7 +366,8 @@ fn build_uninit_group_desc(
         desc.bg_itable_unused_lo = layout.inodes_per_group as u16;
     }
 
-    // 目前不使用高 16 位计数和 UNINIT 标志
+    // This implementation initializes descriptors directly and does not rely on
+    // deferred UNINIT accounting here.
     desc.bg_free_blocks_count_hi = 0;
     desc.bg_free_inodes_count_hi = 0;
     desc.bg_used_dirs_count_lo = 0;
@@ -340,15 +377,14 @@ fn build_uninit_group_desc(
     desc
 }
 
-///写备份超级块到所有组，从块组1开始
+/// Writes sparse-super superblock backups to eligible groups.
 fn write_superblock_redundant_backup<B: BlockDevice>(
     block_dev: &mut Jbd2Dev<B>,
     sb: &Ext4Superblock,
     groups_count: u32,
     fs_layout: &FsLayoutInfo,
 ) -> Ext4Result<()> {
-    //从1开始
-    // sparse_superbllock特性判断
+    // Group 0 already holds the primary copy, so backup writing starts from 1.
     let sprse_feature =
         sb.has_feature_ro_compat(Ext4Superblock::EXT4_FEATURE_RO_COMPAT_SPARSE_SUPER);
     if sprse_feature {
@@ -363,7 +399,6 @@ fn write_superblock_redundant_backup<B: BlockDevice>(
                 fs_layout.group0_inode_table,
                 fs_layout.gdt_blocks,
             );
-            //需要超级块备份
             if need_redundant_backup(gid) {
                 let super_blocks = group_layout.group_start_block;
                 block_dev
@@ -378,13 +413,14 @@ fn write_superblock_redundant_backup<B: BlockDevice>(
     Ok(())
 }
 
-/// 写入超级块到磁盘 管字节序 不写备份
+/// Writes the primary superblock to disk.
 pub(crate) fn write_superblock<B: BlockDevice>(
     block_dev: &mut Jbd2Dev<B>,
     sb: &Ext4Superblock,
 ) -> Ext4Result<()> {
-    // 超级块总是从分区偏移 1024 字节开始，占用 1024 字节
-    if BLOCK_SIZE == 1024 {
+    // The primary ext4 superblock always starts at byte offset 1024.
+    let block_size = 1024usize << sb.s_log_block_size;
+    if block_size == 1024 {
         block_dev.read_block(AbsoluteBN::from(1u32))?;
         let buffer = block_dev.buffer_mut();
         sb.to_disk_bytes(&mut buffer[0..SUPERBLOCK_SIZE]);
@@ -392,22 +428,24 @@ pub(crate) fn write_superblock<B: BlockDevice>(
     } else {
         block_dev.read_block(AbsoluteBN::from(0u32))?;
         let buffer = block_dev.buffer_mut();
-        let offset = Ext4Superblock::SUPERBLOCK_OFFSET as usize; // 1024
+        let offset = Ext4Superblock::SUPERBLOCK_OFFSET as usize;
         let end = offset + Ext4Superblock::SUPERBLOCK_SIZE;
         sb.to_disk_bytes(&mut buffer[offset..end]);
-        block_dev.write_block(AbsoluteBN::from(0u32), false)?; //由于目前日志回放在超级块读取后，目前为了快速修复防止读取到旧的超级块。直接让超级块落盘写回
+        // Force the write out immediately so later mount-time reads never see a
+        // stale primary superblock during crash recovery.
+        block_dev.write_block(AbsoluteBN::from(0u32), true)?;
     }
 
     Ok(())
 }
 
-/// 读取超级块 管字节序
+/// Reads the primary superblock from disk.
 pub(crate) fn read_superblock<B: BlockDevice>(
     block_dev: &mut Jbd2Dev<B>,
 ) -> Ext4Result<Ext4Superblock> {
-    // 超级块总是从分区偏移 1024 字节开始，占用 1024 字节
-    // 这里通过按 BLOCK_SIZE 读块，再在块内做 1024 字节切片来解析
-    if BLOCK_SIZE == 1024 {
+    // Read the containing filesystem block, then slice out the 1024-byte
+    // superblock payload.
+    if block_dev.block_size() as usize == 1024 {
         block_dev.read_block(AbsoluteBN::from(1u32))?;
         let buffer = block_dev.buffer();
         let sb = Ext4Superblock::from_disk_bytes(&buffer[0..SUPERBLOCK_SIZE]);
@@ -415,14 +453,14 @@ pub(crate) fn read_superblock<B: BlockDevice>(
     } else {
         block_dev.read_block(AbsoluteBN::from(0u32))?;
         let buffer = block_dev.buffer();
-        let offset = Ext4Superblock::SUPERBLOCK_OFFSET as usize; // 1024
+        let offset = Ext4Superblock::SUPERBLOCK_OFFSET as usize;
         let end = offset + Ext4Superblock::SUPERBLOCK_SIZE;
         let sb = Ext4Superblock::from_disk_bytes(&buffer[offset..end]);
         Ok(sb)
     }
 }
 
-///写入所有组的冗余备份中 自动判断特性
+/// Writes redundant GDT copies to sparse-super backup groups.
 fn write_gdt_redundant_backup<B: BlockDevice>(
     block_dev: &mut Jbd2Dev<B>,
     descs: &VecDeque<Ext4GroupDesc>,
@@ -430,7 +468,8 @@ fn write_gdt_redundant_backup<B: BlockDevice>(
     groups_count: u32,
     fs_layout: &FsLayoutInfo,
 ) -> Ext4Result<()> {
-    //参数合法性判断
+    // Validate that the reserved GDT area can hold the serialized descriptor
+    // table before any backup write starts.
     let desc_size = sb.get_desc_size();
     let desc_all_size = descs.len() * desc_size as usize;
     let can_recive_size = fs_layout.gdt_blocks * fs_layout.descs_per_block * desc_size as u32;
@@ -444,7 +483,6 @@ fn write_gdt_redundant_backup<B: BlockDevice>(
     let sprse_feature =
         sb.has_feature_ro_compat(Ext4Superblock::EXT4_FEATURE_RO_COMPAT_SPARSE_SUPER);
     if sprse_feature {
-        //为每个块组执行
         for gid in 1..groups_count {
             if need_redundant_backup(gid) {
                 let group_layout = cloc_group_layout(
@@ -457,14 +495,15 @@ fn write_gdt_redundant_backup<B: BlockDevice>(
                     fs_layout.group0_inode_table,
                     fs_layout.gdt_blocks,
                 );
-                let gdt_start = group_layout.group_start_block + 1; //跳过超级块
+                let gdt_start = group_layout.group_start_block + 1;
 
                 let mut desc_iter = descs.iter();
-                //循环写入desc
+                // Stream descriptor copies block by block into the reserved GDT
+                // area of this backup group.
                 for gdt_block_id in gdt_start..group_layout.group_blcok_bitmap_startblocks {
                     block_dev.read_block(AbsoluteBN::new(gdt_block_id))?;
                     let buffer = block_dev.buffer_mut();
-                    let mut current_offset = 0_usize; //descoffset循环记录
+                    let mut current_offset = 0_usize;
                     for _ in 0..fs_layout.descs_per_block {
                         if let Some(desc) = desc_iter.next() {
                             desc.to_disk_bytes(
@@ -473,7 +512,6 @@ fn write_gdt_redundant_backup<B: BlockDevice>(
                             current_offset += desc_size as usize;
                         }
                     }
-                    //写回磁盘
                     block_dev.write_block(AbsoluteBN::new(gdt_block_id), true)?;
                 }
             }
@@ -483,20 +521,22 @@ fn write_gdt_redundant_backup<B: BlockDevice>(
     Ok(())
 }
 
-/// 写入块组0的描述符 管字节序
+/// Writes one group descriptor into the primary GDT.
 fn write_group_desc<B: BlockDevice>(
     block_dev: &mut Jbd2Dev<B>,
     group_id: u32,
     desc: &mut Ext4GroupDesc,
 ) -> Ext4Result<()> {
-    // 读取超级块以确定块组描述符大小
+    // Resolve the descriptor size from the on-disk superblock so the write path
+    // matches the exact format chosen during mkfs.
     let superblock = read_superblock(block_dev)?;
     let desc_size = superblock.get_desc_size() as usize;
+    let block_size_u64 = (1024u64 << superblock.s_log_block_size) as u64;
 
-    // GDT 基地址统一为块号 1 的起始字节偏移：按字节偏移计算所在块和块内偏移
-    let gdt_base: u64 = BLOCK_SIZE as u64;
+    // Convert the descriptor's byte offset inside the GDT into a physical block
+    // number plus an offset within that block.
+    let gdt_base: u64 = block_size_u64;
     let byte_offset = gdt_base + group_id as u64 * desc_size as u64;
-    let block_size_u64 = BLOCK_SIZE as u64;
     let block_num = byte_offset / block_size_u64;
     let in_block = (byte_offset % block_size_u64) as usize;
     let end = in_block + desc_size;
@@ -525,12 +565,12 @@ fn write_group_desc<B: BlockDevice>(
     Ok(())
 }
 
-/// 初始化块组0
+/// Initializes group 0 bitmaps, inode table, and descriptor state.
 fn initialize_group_0<B: BlockDevice>(
     block_dev: &mut Jbd2Dev<B>,
     layout: &FsLayoutInfo,
 ) -> Ext4Result<()> {
-    // 计算块组0的布局
+    // Group 0 has a fixed layout derived during mkfs planning.
     let block_bitmap_blk = layout.group0_block_bitmap;
     let inode_bitmap_blk = layout.group0_inode_bitmap;
     let inode_table_blk = layout.group0_inode_table;
@@ -538,28 +578,25 @@ fn initialize_group_0<B: BlockDevice>(
     {
         let buffer = block_dev.buffer_mut();
         buffer.fill(0);
-        // 标记元数据块为已使用：块0(引导) + 块1(超级块) + GDT + 块位图 + inode位图 + inode表
-        let used_metadata_blocks = layout.group0_metadata_blocks as usize;
-        for i in 0..used_metadata_blocks {
-            let byte_idx = i / 8;
-            let bit_idx = i % 8;
-            buffer[byte_idx] |= 1 << bit_idx;
-        }
+        // Mark all group-0 metadata blocks and out-of-filesystem padding bits
+        // allocated in the block bitmap.
+        mark_bitmap_range_allocated(buffer, 0, layout.group0_metadata_blocks);
+        mark_block_bitmap_padding(buffer, layout, 0);
     }
     block_dev.write_block(block_bitmap_blk.into(), true)?;
 
     {
         let buffer = block_dev.buffer_mut();
         buffer.fill(0);
-        // 标记前 RESERVED_INODES 个inode为已使用（保留inode 1-10）
+        // Mark reserved inodes allocated.
         for i in 0..RESERVED_INODES {
             let byte_idx = (i / 8) as usize;
             let bit_idx = i % 8;
             buffer[byte_idx] |= 1 << bit_idx;
         }
 
-        // 2.5padding无效inode为1
-        let bits_per_group = BLOCK_SIZE_U32 * 8;
+        // Mark bitmap padding bits allocated so they are never handed out.
+        let bits_per_group = layout.block_size * 8;
         for i in layout.inodes_per_group..bits_per_group {
             let byte_idx: usize = (i / 8) as usize;
             let bit_idx = i % 8;
@@ -568,7 +605,7 @@ fn initialize_group_0<B: BlockDevice>(
     }
     block_dev.write_block(inode_bitmap_blk.into(), true)?;
 
-    //  清零inode表
+    // Zero the inode table before the filesystem is mounted for the first time.
     {
         let buffer = block_dev.buffer_mut();
         buffer.fill(0);
@@ -577,12 +614,10 @@ fn initialize_group_0<B: BlockDevice>(
         block_dev.write_block((inode_table_blk + i).into(), true)?;
     }
 
-    //  更新块组0的描述符（清除UNINIT标志）
+    // Persist the now-initialized descriptor for group 0.
     let mut desc = Ext4GroupDesc {
         bg_flags: Ext4GroupDesc::EXT4_BG_INODE_ZEROED,
-        bg_free_blocks_count_lo: layout
-            .blocks_per_group
-            .saturating_sub(layout.group0_metadata_blocks) as u16,
+        bg_free_blocks_count_lo: group_free_blocks(layout, 0, layout.group0_metadata_blocks) as u16,
         bg_free_inodes_count_lo: layout.inodes_per_group.saturating_sub(RESERVED_INODES) as u16,
         bg_itable_unused_lo: layout.inodes_per_group.saturating_sub(RESERVED_INODES) as u16,
         bg_block_bitmap_lo: block_bitmap_blk,
@@ -596,16 +631,17 @@ fn initialize_group_0<B: BlockDevice>(
     Ok(())
 }
 
-/// 初始化除块组0之外的所有块组的位图
-/// 对于未使用任何块/ inode 的块组，位图全部清零，free_counts 等于整组容量
+/// Initializes bitmaps for every group after group 0.
+///
+/// Fresh groups start with only their metadata blocks allocated.
 fn initialize_other_groups_bitmaps<B: BlockDevice>(
     block_dev: &mut Jbd2Dev<B>,
     layout: &FsLayoutInfo,
     sb: &Ext4Superblock,
 ) -> Ext4Result<()> {
-    // 从块组1开始，逐组初始化
+    // Group 0 has already been handled separately.
     for group_id in 1..layout.groups {
-        // 使用与 build_uninit_group_desc 相同的布局计算
+        // Reuse the same layout calculation as descriptor construction.
         let gl = cloc_group_layout(
             group_id,
             sb,
@@ -620,27 +656,21 @@ fn initialize_other_groups_bitmaps<B: BlockDevice>(
         let block_bitmap_blk = gl.group_blcok_bitmap_startblocks as u32;
         let inode_bitmap_blk = gl.group_inode_bitmap_startblocks as u32;
 
-        //  初始化块位图：全0 → 所有块空闲
+        // Start with a zeroed block bitmap, then mark metadata blocks used.
         {
             let buffer = block_dev.buffer_mut();
             buffer.fill(0);
-            // 标记元数据块已用（包括备份 superblock/GDT、位图和 inode 表）
-            let used_blocks = gl.metadata_blocks_in_group as usize;
-            for i in 0..used_blocks {
-                let byte_idx = i / 8;
-                let bit_idx = i % 8;
-                buffer[byte_idx] |= 1 << bit_idx;
-            }
+            mark_bitmap_range_allocated(buffer, 0, gl.metadata_blocks_in_group);
+            mark_block_bitmap_padding(buffer, layout, group_id);
         }
         block_dev.write_block(block_bitmap_blk.into(), true)?;
 
         {
-            //  初始化inode位图：全0 → 所有inode空闲
+            // Start with all inodes free, then mask the trailing padding bits.
             let buffer = block_dev.buffer_mut();
             buffer.fill(0);
 
-            // padding无效inode
-            let bits_per_group = BLOCK_SIZE_U32 * 8;
+            let bits_per_group = layout.block_size * 8;
             for i in layout.inodes_per_group..bits_per_group {
                 let byte_idx: usize = (i / 8) as usize;
                 let bit_idx = i % 8;

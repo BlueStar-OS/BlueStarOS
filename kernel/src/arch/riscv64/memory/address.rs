@@ -39,7 +39,7 @@ pub struct VirNumber(pub usize); //虚拟页号
 pub struct PhysiNumber(pub usize);
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct VirAddr(pub usize);
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord,Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default)]
 pub struct PhysiAddr(pub usize);
 
 impl From<PhysiNumber> for PhysiAddr {
@@ -185,7 +185,7 @@ impl PageTable {
     ///获取内核地址空间的页表视图 只能由内核调用
     pub fn get_kernel_table_layer() -> PageTable {
         let satp = satp::read().bits();
-        
+
         PageTable {
             root_ppn: PhysiNumber(satp & ((1usize << 44) - 1)),
             entries: Vec::new(),
@@ -208,6 +208,7 @@ impl PageTable {
         while start_addr < end_addr {
             // 获取当前地址所在的页
             let start_vpn = start_addr.floor_down();
+            // TODO(dirinkbottle): syscall 直访用户懒分配 mmap 页时，这里要重新审视 fault-in 流程。
             let source_slice = table
                 .get_mut_byte(start_vpn)
                 .expect("Get VPN to RealAddr failed");
@@ -251,7 +252,6 @@ impl PageTable {
 
     ///从给定的satp中创建临时新页表 临时使用物理ppn为粗略提取
     pub fn crate_table_from_satp(satp: usize) -> Self {
-        
         PageTable {
             root_ppn: PhysiNumber(satp & ((1usize << 44) - 1)),
             entries: Vec::new(),
@@ -261,7 +261,6 @@ impl PageTable {
     ///根据vpn获取该页的可变数组切片,获取从物理页开头的地址切片
     pub fn get_mut_byte(&mut self, vpn: VirNumber) -> Option<&'static mut [u8; PAGE_SIZE]> {
         //防止跨页
-
         let phydr = self
             .translate(vpn.into())
             .expect("Virtual Address translate to Physical Adress Failed!");
@@ -278,6 +277,7 @@ impl PageTable {
     pub fn translate(&mut self, VDDR: VirAddr) -> Option<PhysiAddr> {
         match self.find_pte_vpn(VDDR.into()) {
             Some(pte) => {
+                // TODO(dirinkbottle): 这里后面要重新审视“返回的 PTE 是否真的可用”。
                 let ppn = pte.ppn();
                 let addr = (ppn.0 * PAGE_SIZE) + VDDR.offset(); //不考虑是否对齐,使用者肯定
                 Some(PhysiAddr(addr))

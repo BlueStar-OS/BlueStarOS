@@ -1,19 +1,10 @@
 #![no_std]
 #![no_main]
 
-extern crate user_lib;
 extern crate alloc;
+extern crate user_lib;
 use user_lib::print;
-use user_lib::{
-    println,
-    sys_pipe,
-    sys_fork,
-    sys_read,
-    sys_write,
-    sys_close,
-    sys_wait,
-    sys_exit,
-};
+use user_lib::{println, sys_close, sys_exit, sys_fork, sys_pipe, sys_read, sys_wait, sys_write};
 
 #[no_mangle]
 pub fn main() -> usize {
@@ -35,7 +26,10 @@ pub fn main() -> usize {
     }
 
     if pid == 0 {
-        print!("I'm child proc:pipe fd: read:{} write:{} \n",fds[0],fds[1]);
+        print!(
+            "I'm child proc:pipe fd: read:{} write:{} \n",
+            fds[0], fds[1]
+        );
         let _ = sys_close(rfd);
 
         let msg: &[u8] = b"hello-pipe";
@@ -100,7 +94,10 @@ pub fn main() -> usize {
     let one: [u8; 1] = [b'x'];
     let nw = sys_write(w2, one.as_ptr() as usize, 1);
     if nw >= 0 {
-        println!("[pipe_test] expected write error when no reader, got nw={}", nw);
+        println!(
+            "[pipe_test] expected write error when no reader, got nw={}",
+            nw
+        );
         let _ = sys_close(w2);
         return 9;
     }

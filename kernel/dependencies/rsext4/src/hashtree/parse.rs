@@ -2,13 +2,14 @@
 
 use alloc::vec::Vec;
 
-use crate::endian::{read_u16_le, read_u32_le};
-use crate::entries::{
-    Ext4DirEntry2, Ext4DirEntryInfo, Ext4DxCountlimit, Ext4DxEntry, Ext4DxNode, Ext4DxRoot,
-    Ext4DxRootInfo,
-};
-
 use super::{HashTreeError, HashTreeManager, HashTreeNode};
+use crate::{
+    endian::{read_u16_le, read_u32_le},
+    entries::{
+        Ext4DirEntry2, Ext4DirEntryInfo, Ext4DxCountlimit, Ext4DxEntry, Ext4DxNode, Ext4DxRoot,
+        Ext4DxRootInfo,
+    },
+};
 
 impl HashTreeManager {
     pub(super) fn parse_root_node(&self, data: &[u8]) -> Result<HashTreeNode, HashTreeError> {
@@ -16,8 +17,8 @@ impl HashTreeManager {
             return Err(HashTreeError::BufferTooSmall);
         }
 
-        let dot =
-            Ext4DirEntryInfo::parse_from_bytes(&data[0..8]).ok_or(HashTreeError::CorruptedHashTree)?;
+        let dot = Ext4DirEntryInfo::parse_from_bytes(&data[0..8])
+            .ok_or(HashTreeError::CorruptedHashTree)?;
         let dotdot = Ext4DirEntryInfo::parse_from_bytes(&data[dot.inode as usize..])
             .ok_or(HashTreeError::CorruptedHashTree)?;
 

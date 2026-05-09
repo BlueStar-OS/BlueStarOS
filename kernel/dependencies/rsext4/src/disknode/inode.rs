@@ -1,69 +1,71 @@
 use super::*;
 
-/// Ext4 磁盘 Inode 结构
+/// On-disk ext4 inode layout.
 ///
-/// Inode 是文件系统中存储文件元数据的核心数据结构
-/// 每个文件和目录都有一个对应的 inode
+/// This is the packed metadata record stored in the inode table. Every file,
+/// directory, and symlink is described by one inode entry.
 #[repr(C)]
 #[derive(Debug, Clone, Copy, Default)]
 pub struct Ext4Inode {
-    // 0x00 - 基本文件属性
-    pub i_mode: u16,        // 文件模式（类型和权限）
-    pub i_uid: u16,         // 所有者用户ID（低16位）
-    pub i_size_lo: u32,     // 文件大小（低32位，字节）
-    pub i_atime: u32,       // 访问时间（秒）
-    pub i_ctime: u32,       // 状态改变时间（秒）
-    pub i_mtime: u32,       // 修改时间（秒）
-    pub i_dtime: u32,       // 删除时间（秒）
-    pub i_gid: u16,         // 所有者组ID（低16位）
-    pub i_links_count: u16, // 硬链接计数
-    pub i_blocks_lo: u32,   // 块计数（低32位）
-    pub i_flags: u32,       // 文件标志
+    // 0x00: core POSIX metadata and 32-bit time fields.
+    pub i_mode: u16,        // File type and permission bits.
+    pub i_uid: u16,         // Low 16 bits of the owner UID.
+    pub i_size_lo: u32,     // Low 32 bits of file size in bytes.
+    pub i_atime: u32,       // Access time in seconds.
+    pub i_ctime: u32,       // Status change time in seconds.
+    pub i_mtime: u32,       // Modification time in seconds.
+    pub i_dtime: u32,       // Deletion time in seconds.
+    pub i_gid: u16,         // Low 16 bits of the owner GID.
+    pub i_links_count: u16, // Hard-link count.
+    pub i_blocks_lo: u32,   // Low 32 bits of the block count.
+    pub i_flags: u32,       // ext4 inode flag bitset.
 
-    // 0x20 - 操作系统相关字段1
-    pub l_i_version: u32, // Linux：inode版本（用于NFS）
+    // 0x20: Linux-specific versioning state.
+    pub l_i_version: u32, // Linux inode version, used by NFS-style consumers.
 
-    // 0x24 - 数据块指针（60字节）
-    pub i_block: [u32; 15], // 块指针数组或extent树
+    // 0x24: 60-byte block map area, reused as an extent tree root when enabled.
+    pub i_block: [u32; 15], // Direct block words or embedded extent root.
 
-    // 0x64 - 文件版本和属性
-    pub i_generation: u32,  // 文件版本（用于NFS）
-    pub i_file_acl_lo: u32, // 扩展属性块（低32位）
-    pub i_size_high: u32,   // 文件大小（高32位）或目录ACL
-    pub i_obso_faddr: u32,  // 废弃的碎片地址
+    // 0x64: size/version/xattr continuation fields.
+    pub i_generation: u32,  // Inode generation, commonly used by NFS.
+    pub i_file_acl_lo: u32, // Low 32 bits of the xattr block pointer.
+    pub i_size_high: u32,   // High 32 bits of file size or directory ACL.
+    pub i_obso_faddr: u32,  // Obsolete fragment address field.
 
-    // 0x74 - 操作系统相关字段2（12字节）
-    pub l_i_blocks_high: u16,   // 块计数（高16位）
-    pub l_i_file_acl_high: u16, // 扩展属性块（高16位）
-    pub l_i_uid_high: u16,      // 所有者用户ID（高16位）
-    pub l_i_gid_high: u16,      // 所有者组ID（高16位）
-    pub l_i_checksum_lo: u16,   // inode校验和（低16位）
-    pub l_i_reserved: u16,      // 保留字段
+    // 0x74: Linux-specific high halves and checksum storage.
+    pub l_i_blocks_high: u16,   // High 16 bits of the block count.
+    pub l_i_file_acl_high: u16, // High 16 bits of the xattr block pointer.
+    pub l_i_uid_high: u16,      // High 16 bits of the owner UID.
+    pub l_i_gid_high: u16,      // High 16 bits of the owner GID.
+    pub l_i_checksum_lo: u16,   // Low 16 bits of the inode checksum.
+    pub l_i_reserved: u16,      // Reserved Linux field.
 
-    // 0x80 - 扩展字段（对于大inode）
-    pub i_extra_isize: u16,  // 额外inode大小
-    pub i_checksum_hi: u16,  // inode校验和（高16位）
-    pub i_ctime_extra: u32,  // 额外的状态改变时间（纳秒 + epoch高2位）
-    pub i_mtime_extra: u32,  // 额外的修改时间（纳秒 + epoch高2位）
-    pub i_atime_extra: u32,  // 额外的访问时间（纳秒 + epoch高2位）
-    pub i_crtime: u32,       // 创建时间（秒）
-    pub i_crtime_extra: u32, // 额外的创建时间（纳秒 + epoch高2位）
-    pub i_version_hi: u32,   // 版本号（高32位）
-    pub i_projid: u32,       // 项目ID
+    // 0x80: extra inode area present in large inodes.
+    pub i_extra_isize: u16, // Size of the extra inode payload beyond 128 bytes.
+    pub i_checksum_hi: u16, // High 16 bits of the inode checksum.
+    pub i_ctime_extra: u32, // ctime nanoseconds plus upper epoch bits.
+    pub i_mtime_extra: u32, // mtime nanoseconds plus upper epoch bits.
+    pub i_atime_extra: u32, // atime nanoseconds plus upper epoch bits.
+    pub i_crtime: u32,      // Creation time in seconds.
+    pub i_crtime_extra: u32, // crtime nanoseconds plus upper epoch bits.
+    pub i_version_hi: u32,  // High 32 bits of the inode version.
+    pub i_projid: u32,      // Project ID.
 }
 
 impl Ext4Inode {
-    /// 写入初始extend header便捷函数
+    /// Initializes `i_block` with an empty embedded extent header.
     pub fn write_extend_header(&mut self) {
         let per_extent_header_offset = Ext4ExtentHeader::disk_size();
         let current_offset = 0;
         let mut extent_buffer: [u8; 60] = [0; 60];
         let header = Ext4ExtentHeader::new();
-        //写入header
+        // Serialize the header into a temporary byte buffer first so the packed
+        // layout matches the on-disk representation exactly.
         header.to_disk_bytes(
             &mut extent_buffer[current_offset..current_offset + per_extent_header_offset],
         );
-        //转换写回
+        // Then reinterpret the buffer as the 15 little-endian words stored in
+        // `i_block`.
         let mut new_slice: [u32; 15] = [0; 15];
         for idx in 0..15 {
             new_slice[idx] = u32::from_le_bytes([
@@ -76,41 +78,52 @@ impl Ext4Inode {
         self.i_block.copy_from_slice(&new_slice);
     }
 
-    /// 标准inode大小（128字节）
+    /// Classic ext2/ext3 inode size in bytes.
     pub const GOOD_OLD_INODE_SIZE: u16 = 128;
 
-    /// 大inode默认大小（256字节）
+    /// Default large-inode size used by modern ext4.
     pub const LARGE_INODE_SIZE: u16 = 256;
 
+    /// Number of epoch-extension bits stored in `*_extra` timestamp fields.
     pub const EXT4_EPOCH_BITS: u32 = 2;
+    /// Mask for the epoch-extension bits in `*_extra`.
     pub const EXT4_EPOCH_MASK: u32 = 0x3;
+    /// Mask for the nanosecond payload in `*_extra`.
     pub const EXT4_NSEC_MASK: u32 = !Self::EXT4_EPOCH_MASK;
 
+    /// End offset required to access `i_checksum_hi`.
     pub const FIELD_END_I_CHECKSUM_HI: u16 = 132;
+    /// End offset required to access `i_ctime_extra`.
     pub const FIELD_END_I_CTIME_EXTRA: u16 = 136;
+    /// End offset required to access `i_mtime_extra`.
     pub const FIELD_END_I_MTIME_EXTRA: u16 = 140;
+    /// End offset required to access `i_atime_extra`.
     pub const FIELD_END_I_ATIME_EXTRA: u16 = 144;
+    /// End offset required to access `i_crtime`.
     pub const FIELD_END_I_CRTIME: u16 = 148;
+    /// End offset required to access `i_crtime_extra`.
     pub const FIELD_END_I_CRTIME_EXTRA: u16 = 152;
+    /// End offset required to access `i_version_hi`.
     pub const FIELD_END_I_VERSION_HI: u16 = 156;
+    /// End offset required to access `i_projid`.
     pub const FIELD_END_I_PROJID: u16 = 160;
 
-    /// 获取完整的文件大小（64位）
+    /// Returns the full 64-bit file size.
     pub fn size(&self) -> u64 {
         (self.i_size_high as u64) << 32 | self.i_size_lo as u64
     }
 
-    /// 获取完整的块数（48位）
+    /// Returns the full 48-bit block count.
     pub fn blocks_count(&self) -> u64 {
         (self.l_i_blocks_high as u64) << 32 | self.i_blocks_lo as u64
     }
 
-    /// 获取完整的UID（32位）
+    /// Returns the merged 32-bit UID.
     pub fn uid(&self) -> u32 {
         (self.l_i_uid_high as u32) << 16 | self.i_uid as u32
     }
 
-    /// 获取完整的GID（32位）
+    /// Returns the merged 32-bit GID.
     pub fn gid(&self) -> u32 {
         (self.l_i_gid_high as u32) << 16 | self.i_gid as u32
     }
@@ -125,22 +138,22 @@ impl Ext4Inode {
         self.l_i_gid_high = ((gid >> 16) & 0xFFFF) as u16;
     }
 
-    /// 获取完整的扩展属性块号（48位）
+    /// Returns the merged 48-bit extended-attribute block pointer.
     pub fn file_acl(&self) -> u64 {
         (self.l_i_file_acl_high as u64) << 32 | self.i_file_acl_lo as u64
     }
 
-    /// 检查是否是目录
+    /// Returns true when the inode type is directory.
     pub fn is_dir(&self) -> bool {
         self.i_mode & Self::S_IFMT == Self::S_IFDIR
     }
 
-    /// 检查是否是普通文件
+    /// Returns true when the inode type is regular file.
     pub fn is_file(&self) -> bool {
         self.i_mode & Self::S_IFMT == Self::S_IFREG
     }
 
-    /// 检查是否是符号链接
+    /// Returns true when the inode type is symbolic link.
     pub fn is_symlink(&self) -> bool {
         self.i_mode & Self::S_IFMT == Self::S_IFLNK
     }
@@ -172,12 +185,11 @@ impl Ext4Inode {
         self.i_mode &= !(Self::S_ISUID | Self::S_ISGID);
     }
 
-    /// 检查是否使用extent树
+    /// Returns true when `i_block` is interpreted as an extent tree root.
     fn is_extent(&self) -> bool {
         self.i_flags & Self::EXT4_EXTENTS_FL != 0
     }
-    ///检查是否有extend树的结构
-    /// 检查EXT4_EXTENTS_FL标志和标志extend头
+    /// Verifies both the extent flag and the embedded extent-header magic.
     pub fn have_extend_header_and_use_extend(&self) -> bool {
         if !Self::is_extent(self) {
             debug!("Inode not have extend flag!");
@@ -194,7 +206,7 @@ impl Ext4Inode {
         }
     }
 
-    //some metadata change support
+    // some metadata change support
     pub fn set_mtime(&mut self, mtime: u32) {
         self.i_mtime = mtime;
     }

@@ -6,8 +6,11 @@ extern crate user_lib;
 
 use alloc::string::String;
 use alloc::vec::Vec;
-use user_lib::{print, println, sys_close, sys_exec_args, sys_fork, sys_getdents64, sys_mkdir, sys_open, sys_read, sys_wait, sys_write, chdir};
 use user_lib::syscall::{O_CREAT, O_DIRECTORY, O_RDONLY, O_TRUNC, O_WRONLY};
+use user_lib::{
+    chdir, print, println, sys_close, sys_exec_args, sys_fork, sys_getdents64, sys_mkdir, sys_open,
+    sys_read, sys_wait, sys_write,
+};
 
 const DT_REG: u8 = 8;
 
@@ -118,7 +121,7 @@ fn run_one(bin_name: &str) {
         //println!("Fork suc will exec");
         let ret = sys_exec_args(&p, argv_ptrs.as_ptr());
         //println!("[consent_init] exec {} failed ret={}", path, ret);
-       // println!("[consent_init] exec {} failed ret={}", path, ret);
+        // println!("[consent_init] exec {} failed ret={}", path, ret);
         user_lib::syscall::sys_exit(127);
     }
     if pid < 0 {
@@ -130,14 +133,11 @@ fn run_one(bin_name: &str) {
     let mut code: isize = 0;
     let waited = sys_wait(&mut code as *mut isize);
     //println!("[consent_init] done {} waited={} code={}", path, waited, code);
-   // println!("[consent_init] done {} waited={} code={}", path, waited, code);
+    // println!("[consent_init] done {} waited={} code={}", path, waited, code);
 }
 
 #[no_mangle]
 pub fn main() -> usize {
-
-    
-
     copy_sd_root_to_ramfs_root();
 
     let _ = chdir("/");

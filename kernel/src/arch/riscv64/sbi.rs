@@ -1,7 +1,7 @@
 use core::arch::asm;
 
-use crate::root::ROOTFS;
 use crate::fs::vfs::VfsFs;
+use crate::root::ROOTFS;
 
 const SET_TIMER: usize = 0;
 const PUTC_CALLID: usize = 1;

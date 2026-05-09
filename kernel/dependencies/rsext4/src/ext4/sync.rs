@@ -1,7 +1,10 @@
-use super::mkfs::write_superblock;
-use super::*;
+use super::{mkfs::write_superblock, *};
 
 impl Ext4FileSystem {
+    fn clean_state(superblock: &Ext4Superblock) -> u16 {
+        (superblock.s_state & Ext4Superblock::EXT4_ERROR_FS) | Ext4Superblock::EXT4_VALID_FS
+    }
+
     /// Flushes all filesystem metadata and caches to the backing device.
     pub fn sync_filesystem<B: BlockDevice>(
         &mut self,
@@ -17,15 +20,22 @@ impl Ext4FileSystem {
         Ok(())
     }
 
-    /// 卸载文件系统 不写超级块备份
+    /// Unmounts the filesystem after flushing all in-memory metadata.
     pub fn umount<B: BlockDevice>(&mut self, block_dev: &mut Jbd2Dev<B>) -> Ext4Result<()> {
         if !self.mounted {
             return Ok(());
         }
 
         debug!("Unmounting Ext4 filesystem...");
+
+        // Mark clean in memory first so that sync_filesystem writes the
+        // superblock with s_state = EXT4_VALID_FS through the journal.
+        self.superblock.s_state = Self::clean_state(&self.superblock);
+
         self.sync_filesystem(block_dev)?;
 
+        // Commit the journal transaction so all queued metadata (including
+        // the superblock with s_state = VALID_FS) is checkpointed to disk.
         block_dev.umount_commit();
 
         self.mounted = false;
@@ -39,17 +49,20 @@ impl Ext4FileSystem {
     ) -> Ext4Result<()> {
         let total_desc_count = self.group_descs.len();
         let desc_size = self.superblock.get_desc_size() as usize;
-        let gdt_base: u64 = BLOCK_SIZE as u64;
-        let block_size_u64 = BLOCK_SIZE as u64;
+        let gdt_base = Self::primary_gdt_byte_offset(&self.superblock, self.block_size);
+        let block_size_u64 = self.block_size as u64;
 
         debug!(
-            "Writing back group descriptors: {total_desc_count} descriptors, desc_size = {desc_size} bytes"
+            "Writing back group descriptors: {total_desc_count} descriptors, desc_size = \
+             {desc_size} bytes"
         );
 
         let mut current_block: Option<AbsoluteBN> = None;
         let mut buffer_snapshot_block: Option<AbsoluteBN> = None;
 
         for (idx, desc) in self.group_descs.iter_mut().enumerate() {
+            // Stream descriptors back in block order so a GDT block is read and
+            // written at most once per contiguous chunk.
             let group_id = idx as u32;
             desc.update_checksum(&self.superblock, group_id, None, None);
             let byte_offset = gdt_base + idx as u64 * desc_size as u64;
@@ -61,7 +74,7 @@ impl Ext4FileSystem {
                 if let Some(prev_block) = current_block
                     && Some(prev_block) == buffer_snapshot_block
                 {
-                    block_dev.write_block(prev_block, false)?;
+                    block_dev.write_block(prev_block, true)?;
                 }
 
                 block_dev.read_block(block_num)?;
@@ -98,6 +111,8 @@ impl Ext4FileSystem {
         &mut self,
         block_dev: &mut Jbd2Dev<B>,
     ) -> Ext4Result<()> {
+        // Recompute free-space counters from group descriptors before writing
+        // the superblock so the persisted totals match the flushed metadata.
         let mut real_free_blocks: u64 = 0;
         let mut real_free_inodes: u64 = 0;
         for desc in &self.group_descs {
@@ -110,6 +125,15 @@ impl Ext4FileSystem {
 
         self.superblock.update_checksum();
         write_superblock(block_dev, &self.superblock)
+    }
+
+    /// Marks the filesystem clean and writes the superblock.
+    ///
+    /// Call this during a clean unmount so that Linux sees `s_state =
+    /// EXT4_VALID_FS` and skips fsck on the next boot.
+    pub fn mark_clean<B: BlockDevice>(&mut self, block_dev: &mut Jbd2Dev<B>) -> Ext4Result<()> {
+        self.superblock.s_state = Self::clean_state(&self.superblock);
+        self.sync_superblock(block_dev)
     }
 }
 

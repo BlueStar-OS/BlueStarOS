@@ -5,9 +5,11 @@
 
 use std::cell::Cell;
 
-use rsext4::bmalloc::AbsoluteBN;
-use rsext4::error::{Ext4Error, Ext4Result};
-use rsext4::*;
+use rsext4::{
+    bmalloc::AbsoluteBN,
+    error::{Ext4Error, Ext4Result},
+    *,
+};
 
 /// In-memory block device used by file operation tests.
 struct MockBlockDevice {
@@ -22,7 +24,7 @@ impl MockBlockDevice {
     fn new(size: usize) -> Self {
         Self {
             data: vec![0; size],
-            block_size: rsext4::BLOCK_SIZE as u32,
+            block_size: 1024u32 << rsext4::LOG_BLOCK_SIZE,
             fail_on_write: false,
             fail_on_read: false,
             now: Cell::new(1_700_000_000),

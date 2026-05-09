@@ -6,19 +6,25 @@
 //! File payload blocks themselves are not covered because this implementation
 //! does not currently expose a data-block CRC feature.
 
-use std::cell::{Cell, RefCell};
-use std::rc::Rc;
-
-use rsext4::bmalloc::AbsoluteBN;
-use rsext4::blockgroup_description::Ext4GroupDesc;
-use rsext4::checksum::{
-    ext4_block_bitmap_csum32, ext4_group_desc_csum16, ext4_inode_bitmap_csum32,
-    ext4_superblock_csum32,
+use std::{
+    cell::{Cell, RefCell},
+    rc::Rc,
 };
-use rsext4::endian::DiskFormat;
-use rsext4::error::{Errno, Ext4Error, Ext4Result};
-use rsext4::superblock::Ext4Superblock;
-use rsext4::*;
+
+use rsext4::{
+    blockgroup_description::Ext4GroupDesc,
+    bmalloc::AbsoluteBN,
+    checksum::{
+        ext4_block_bitmap_csum32, ext4_group_desc_csum16, ext4_inode_bitmap_csum32,
+        ext4_superblock_csum32,
+    },
+    endian::DiskFormat,
+    error::{Errno, Ext4Error, Ext4Result},
+    superblock::Ext4Superblock,
+    *,
+};
+
+const TEST_BLOCK_SIZE: usize = 1024usize << rsext4::LOG_BLOCK_SIZE;
 
 /// Shared in-memory block device so tests can remount the same disk image and
 /// corrupt raw metadata bytes between mounts without relying on private APIs.
@@ -33,7 +39,7 @@ impl SharedCrcDevice {
     fn new(size: usize) -> Self {
         Self {
             data: Rc::new(RefCell::new(vec![0; size])),
-            block_size: BLOCK_SIZE as u32,
+            block_size: TEST_BLOCK_SIZE as u32,
             now: Rc::new(Cell::new(1_700_000_000)),
         }
     }
@@ -47,11 +53,11 @@ impl SharedCrcDevice {
     }
 
     fn read_block_bytes(&self, block_id: u64) -> Vec<u8> {
-        self.read_bytes(block_id as usize * BLOCK_SIZE, BLOCK_SIZE)
+        self.read_bytes(block_id as usize * TEST_BLOCK_SIZE, TEST_BLOCK_SIZE)
     }
 
     fn write_block_bytes(&self, block_id: u64, bytes: &[u8]) {
-        self.write_bytes(block_id as usize * BLOCK_SIZE, bytes);
+        self.write_bytes(block_id as usize * TEST_BLOCK_SIZE, bytes);
     }
 }
 
@@ -136,7 +142,7 @@ fn write_superblock(device: &SharedCrcDevice, sb: &Ext4Superblock) {
 
 fn read_group_desc0(device: &SharedCrcDevice, sb: &Ext4Superblock) -> Ext4GroupDesc {
     let desc_size = sb.get_desc_size() as usize;
-    let bytes = device.read_bytes(BLOCK_SIZE, desc_size);
+    let bytes = device.read_bytes(TEST_BLOCK_SIZE, desc_size);
     Ext4GroupDesc::from_disk_bytes(&bytes)
 }
 
@@ -144,7 +150,7 @@ fn write_group_desc0(device: &SharedCrcDevice, sb: &Ext4Superblock, desc: &Ext4G
     let desc_size = sb.get_desc_size() as usize;
     let mut bytes = vec![0u8; Ext4GroupDesc::EXT4_DESC_SIZE_64BIT];
     desc.to_disk_bytes(&mut bytes);
-    device.write_bytes(BLOCK_SIZE, &bytes[..desc_size]);
+    device.write_bytes(TEST_BLOCK_SIZE, &bytes[..desc_size]);
 }
 
 #[test]
@@ -183,6 +189,57 @@ fn checksums_are_persisted_and_clean_remount_preserves_the_written_file() {
     let read_back = read_file(&mut remount_dev, &mut fs, "/crc.txt").expect("read_file failed");
     assert_eq!(read_back, payload);
     umount(fs, &mut remount_dev).expect("umount failed");
+}
+
+#[test]
+fn unclean_shutdown_mount_state_does_not_set_error_fs() {
+    // Test idea: a crash after mount should leave the filesystem unclean, but
+    // it must not be reported as EXT4_ERROR_FS on the next boot.
+    let device = SharedCrcDevice::new(100 * 1024 * 1024);
+    let mut jbd2_dev = new_jbd2_dev(device.clone());
+    mkfs(&mut jbd2_dev).expect("mkfs failed");
+
+    {
+        let mut fs = mount(&mut jbd2_dev).expect("mount failed");
+        fs.sync_superblock(&mut jbd2_dev)
+            .expect("persist dirty mount state");
+    }
+
+    let dirty_sb = read_superblock(&device);
+    assert_eq!(dirty_sb.s_state & Ext4Superblock::EXT4_VALID_FS, 0);
+    assert_eq!(dirty_sb.s_state & Ext4Superblock::EXT4_ERROR_FS, 0);
+
+    let mut remount_dev = new_jbd2_dev(device.clone());
+    let fs = mount(&mut remount_dev).expect("mount after unclean shutdown failed");
+    assert_eq!(fs.superblock.s_state & Ext4Superblock::EXT4_ERROR_FS, 0);
+    umount(fs, &mut remount_dev).expect("umount failed");
+
+    let clean_sb = read_superblock(&device);
+    assert_eq!(clean_sb.s_state, Ext4Superblock::EXT4_VALID_FS);
+}
+
+#[test]
+fn clean_unmount_preserves_real_error_fs_state() {
+    // Test idea: EXT4_ERROR_FS is an independent state bit. A clean unmount may
+    // mark the filesystem clean, but must not erase a recorded error.
+    let device = SharedCrcDevice::new(100 * 1024 * 1024);
+    let mut jbd2_dev = new_jbd2_dev(device.clone());
+    mkfs(&mut jbd2_dev).expect("mkfs failed");
+
+    let mut sb = read_superblock(&device);
+    sb.s_state = Ext4Superblock::EXT4_VALID_FS | Ext4Superblock::EXT4_ERROR_FS;
+    sb.s_error_count = 1;
+    sb.update_checksum();
+    write_superblock(&device, &sb);
+
+    let mut remount_dev = new_jbd2_dev(device.clone());
+    let fs = mount(&mut remount_dev).expect("mount with error state failed");
+    assert_ne!(fs.superblock.s_state & Ext4Superblock::EXT4_ERROR_FS, 0);
+    umount(fs, &mut remount_dev).expect("umount failed");
+
+    let clean_sb = read_superblock(&device);
+    assert_ne!(clean_sb.s_state & Ext4Superblock::EXT4_VALID_FS, 0);
+    assert_ne!(clean_sb.s_state & Ext4Superblock::EXT4_ERROR_FS, 0);
 }
 
 #[test]

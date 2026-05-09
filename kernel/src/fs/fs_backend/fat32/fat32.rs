@@ -793,11 +793,7 @@ impl Fat32Fs {
             if !ok {
                 continue;
             }
-            let up = if ch.is_ascii_lowercase() {
-                ch - 32
-            } else {
-                ch
-            };
+            let up = if ch.is_ascii_lowercase() { ch - 32 } else { ch };
             if in_ext {
                 if ext.len() < 3 {
                     ext.push(up);

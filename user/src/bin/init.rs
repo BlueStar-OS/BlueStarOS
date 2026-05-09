@@ -3,11 +3,10 @@
 
 use core::usize;
 extern crate alloc;
-use user_lib::{ECHILD, String, getchar, print, println, sys_waitpid};
 use crate::alloc::string::ToString;
 use user_lib::sys_wait;
+use user_lib::{getchar, print, println, sys_waitpid, String, ECHILD};
 extern crate user_lib;
-
 
 mod ui {
     use user_lib::{print, println};
@@ -25,7 +24,7 @@ mod ui {
 
 mod console {
     use alloc::{string::ToString, vec::Vec};
-    use user_lib::{String, getchar, print};
+    use user_lib::{getchar, print, String};
 
     static mut COMMAND_BUFFER: Option<Vec<String>> = None;
     static mut HISTORY_CURSOR: usize = 0;
@@ -187,8 +186,11 @@ mod console {
 }
 
 mod command {
-    use user_lib::{String, chdir, getcwd, print, println, sys_exec_args, sys_exit, sys_fork, sys_wait, sys_waitpid};
     use alloc::vec::Vec;
+    use user_lib::{
+        chdir, getcwd, print, println, sys_exec_args, sys_exit, sys_fork, sys_wait, sys_waitpid,
+        String,
+    };
     fn clear_screen() {
         // ANSI: clear screen + move cursor to home
         print!("\x1b[2J\x1b[H");
@@ -238,7 +240,7 @@ mod command {
         }
         let mut code: isize = 0;
         //println!("I will wait ");
-        let waited = sys_waitpid(&mut code as *mut isize,pid as i32,0);
+        let waited = sys_waitpid(&mut code as *mut isize, pid as i32, 0);
         //println!("wait after");
         if waited < 0 {
             println!("wait failed, ret={}", waited);
@@ -356,7 +358,6 @@ mod command {
     }
 }
 
-
 #[no_mangle]
 pub fn main() -> usize {
     let mut exit_code = -1;
@@ -365,12 +366,12 @@ pub fn main() -> usize {
         // 回收fork后的遗孤 不要再现4小时修复僵尸错位的时序Bug了😭
         loop {
             let re = sys_wait(&mut exit_code);
-            if re == -ECHILD{ // 如果程序返回-1，但是还是存在zombie就是自作自受了
+            if re == -ECHILD {
+                // 如果程序返回-1，但是还是存在zombie就是自作自受了
                 break;
             }
         }
-        
-        
+
         ui::prompt();
         let line = console::read_line();
         if console::take_tab_triggered() {

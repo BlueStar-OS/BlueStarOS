@@ -30,10 +30,12 @@ MKFS_VFAT := $(SUDO) /usr/sbin/mkfs.vfat
 MOUNT := $(SUDO) /usr/bin/mount
 UMOUNT := $(SUDO) /usr/bin/umount
 INSTALL := $(SUDO) /usr/bin/install
+CP := $(SUDO) /usr/bin/cp
+HOST_CP := /usr/bin/cp
 
 .ONESHELL:
 
-.PHONY: all build build-aarch64 img consent_img makeimg clean FORCE
+.PHONY: all build build-aarch64 build-doom img consent_img makeimg clean FORCE
 
 ifeq ($(ARCH),aarch64)
 IMG_BUILD_TARGET := build-aarch64
@@ -44,6 +46,15 @@ IMG_BUILD_TARGET := build
 IMG_BIN_DIR := $(BUILD_DIR)
 IMG_CTEST_OUT_DIR := $(CTEST_OUT_DIR)
 endif
+
+DOOM_DIR := /home/inkbottle/othersrc/doomgeneric/doomgeneric
+DOOM_MAKEFILE := $(DOOM_DIR)/Makefile.soso
+DOOM_OUTPUT := fbdoom
+DOOM_BINARY := $(DOOM_DIR)/$(DOOM_OUTPUT)
+DOOM_WAD := $(DOOM_DIR)/doom1.wad
+DOOM_STAGE_DIR := $(CURDIR)/mainfile
+DOOM_CFLAGS := --sysroot=$(MUSL_SYSROOT) -march=rv64gc -mabi=lp64d
+DOOM_LDFLAGS := --sysroot=$(MUSL_SYSROOT) -static -march=rv64gc -mabi=lp64d
 
 all: build build-aarch64
 
@@ -73,7 +84,25 @@ build-aarch64: FORCE
 		$(AARCH64_MUSL_GCC) -static -o $(AARCH64_CTEST_OUT_DIR)/$$t ctest/$$t.c; \
 	done
 
-img: $(IMG_BUILD_TARGET)
+# 交叉编译 Doomgeneric 的 BlueStarOS 版本，并把产物放进 `user/mainfile/`。
+# 这样 `make img` 时会自动把 `fbdoom` 与 `doom1.wad` 一起塞进 rootfs `/mainfile/`。
+build-doom: FORCE
+	@set -e
+	@test -n "$(RV_MUSL_GCC)" || { echo "error: no RISC-V musl C compiler found for doom build"; exit 127; }
+	@test -f "$(DOOM_MAKEFILE)" || { echo "error: doomgeneric makefile not found: $(DOOM_MAKEFILE)"; exit 1; }
+	@test -f "$(DOOM_WAD)" || { echo "error: doom wad not found: $(DOOM_WAD)"; exit 1; }
+	$(MAKE) -C $(DOOM_DIR) -f Makefile.soso clean
+	$(MAKE) -C $(DOOM_DIR) -f Makefile.soso \
+		CC="$(RV_MUSL_GCC)" \
+		LD="$(RV_MUSL_GCC)" \
+		OUTPUT="$(DOOM_OUTPUT)" \
+		CFLAGS="$(DOOM_CFLAGS)" \
+		LDFLAGS="$(DOOM_LDFLAGS)"
+	@mkdir -p "$(DOOM_STAGE_DIR)"
+	$(HOST_CP) "$(DOOM_BINARY)" "$(DOOM_STAGE_DIR)/$(DOOM_OUTPUT)"
+	$(HOST_CP) "$(DOOM_WAD)" "$(DOOM_STAGE_DIR)/doom1.wad"
+
+img: build-doom $(IMG_BUILD_TARGET)
 	@set -e
 	@echo "Creating $(KERNEL_IMG)..."
 	# 1) 创建一个 100MiB 的原始镜像文件：这里仅生成“裸磁盘”，不包含分区/文件系统
@@ -122,6 +151,13 @@ img: $(IMG_BUILD_TARGET)
 		echo "Copying $$b..."
 		$(INSTALL) -m 0755 $(IMG_BIN_DIR)/$$b $$TMPDIR/test/$$b
 	done
+	# 把 user/mainfile 目录中的全部内容放入 rootfs 的 /mainfile。
+	# 这里使用 `cp -a source/. dest/`，这样普通文件、子目录以及隐藏文件都会被保留。
+	if [ -d "$(CURDIR)/mainfile" ]; then
+		echo "Copying user/mainfile -> rootfs:/mainfile ..."
+		$(INSTALL) -d $$TMPDIR/mainfile
+		$(CP) -a "$(CURDIR)/mainfile/." "$$TMPDIR/mainfile/"
+	fi
 	if [ -d "$(IMG_CTEST_OUT_DIR)" ]; then
 		$(INSTALL) -d $$TMPDIR/musltest
 		for f in $(IMG_CTEST_OUT_DIR)/* ; do

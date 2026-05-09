@@ -4,9 +4,9 @@
 extern crate alloc;
 extern crate user_lib;
 
-use user_lib::{ECHILD, println, print, sys_wait, sys_yield};
 use user_lib::syscall::sys_clone;
 use user_lib::syscall::sys_exit;
+use user_lib::{print, println, sys_wait, sys_yield, ECHILD};
 
 const SIGCHLD: usize = 17;
 
@@ -48,7 +48,10 @@ pub fn main() -> usize {
         let mut st: isize = 0;
         let waited = sys_wait(&mut st as *mut isize);
         if waited < 0 {
-            println!("pc_rel: wait returned {} before reaping all children (reaped={}/{})", waited, reaped, N);
+            println!(
+                "pc_rel: wait returned {} before reaping all children (reaped={}/{})",
+                waited, reaped, N
+            );
             return 1;
         }
 
@@ -73,7 +76,14 @@ pub fn main() -> usize {
 
         let code = wexitstatus(st);
         if code != (idx & 0xff) {
-            println!("pc_rel: bad exit code for pid={} idx={} expect={} got={} raw_status={}", waited, idx, idx & 0xff, code, st);
+            println!(
+                "pc_rel: bad exit code for pid={} idx={} expect={} got={} raw_status={}",
+                waited,
+                idx,
+                idx & 0xff,
+                code,
+                st
+            );
             return 1;
         }
 
@@ -84,7 +94,10 @@ pub fn main() -> usize {
     let mut st: isize = 0;
     let waited = sys_wait(&mut st as *mut isize);
     if waited != -ECHILD {
-        println!("pc_rel: expected wait=-ECHILD after reaping all children, got waited={} status={}", waited, st);
+        println!(
+            "pc_rel: expected wait=-ECHILD after reaping all children, got waited={} status={}",
+            waited, st
+        );
         return 1;
     }
 

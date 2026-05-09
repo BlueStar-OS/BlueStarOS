@@ -3,7 +3,9 @@
 
 use core::usize;
 
-use user_lib::{StdinBuffer, String, getchar, print, println, readline, sys_exec, sys_fork, sys_wait, sys_yield};
+use user_lib::{
+    getchar, print, println, readline, sys_exec, sys_fork, sys_wait, sys_yield, StdinBuffer, String,
+};
 extern crate user_lib;
 
 #[no_mangle]
@@ -21,6 +23,6 @@ pub fn main() -> usize {
         let _ = sys_wait(&mut code as *mut isize);
         return 0;
     }
-    print!("return ??? your pid is :{}",pids);
+    print!("return ??? your pid is :{}", pids);
     2
 }

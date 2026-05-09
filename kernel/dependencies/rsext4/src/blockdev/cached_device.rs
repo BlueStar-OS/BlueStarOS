@@ -1,9 +1,10 @@
 //! Cached single-block block device wrapper.
 
-use crate::bmalloc::AbsoluteBN;
-use super::buffer::BlockBuffer;
-use super::traits::BlockDevice;
-use crate::error::{Ext4Error, Ext4Result};
+use super::{buffer::BlockBuffer, traits::BlockDevice};
+use crate::{
+    bmalloc::AbsoluteBN,
+    error::{Ext4Error, Ext4Result},
+};
 
 /// Cached block device wrapper used internally by the journal proxy.
 pub(super) struct BlockDev<B: BlockDevice> {
@@ -16,9 +17,10 @@ pub(super) struct BlockDev<B: BlockDevice> {
 impl<B: BlockDevice> BlockDev<B> {
     /// Creates a new cached block device wrapper.
     pub fn new(dev: B) -> Self {
+        let block_size = dev.block_size() as usize;
         Self {
             dev,
-            buffer: BlockBuffer::new(),
+            buffer: BlockBuffer::new(block_size),
             is_dirty: false,
             cached_block: None,
         }

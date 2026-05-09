@@ -2,10 +2,12 @@
 
 use core::fmt;
 
-use crate::bitmap::*;
-use crate::blockgroup_description::*;
-use crate::error::{Errno, Ext4Error, Ext4Result};
-use crate::superblock::*;
+use crate::{
+    bitmap::*,
+    blockgroup_description::*,
+    error::{Errno, Ext4Error, Ext4Result},
+    superblock::*,
+};
 
 mod block;
 mod error;
@@ -59,9 +61,8 @@ impl BGIndex {
         inode_in_group: RelativeInodeIndex,
         inodes_per_group: u32,
     ) -> Ext4Result<InodeNumber> {
-        let raw = u64::from(self.0) * u64::from(inodes_per_group)
-            + u64::from(inode_in_group.raw())
-            + 1;
+        let raw =
+            u64::from(self.0) * u64::from(inodes_per_group) + u64::from(inode_in_group.raw()) + 1;
         InodeNumber::from_u64(raw)
     }
 }
@@ -75,6 +76,73 @@ impl fmt::Display for BGIndex {
 /// Absolute physical block number in the filesystem.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct AbsoluteBN(u64);
+/// Logical block number in the file, i.e. the block offset from the start of the file.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct LogicalBN(u32);
+
+impl LogicalBN {
+    /// Creates a new logical block number.
+    pub const fn new(raw: u32) -> Self {
+        Self(raw)
+    }
+
+    /// Returns the underlying raw value.
+    pub const fn raw(self) -> u32 {
+        self.0
+    }
+
+    /// Converts this logical block number into `usize`.
+    pub fn as_usize(self) -> Ext4Result<usize> {
+        usize::try_from(self.0).map_err(|_| overflow_error())
+    }
+
+    /// Converts this logical block number into `u64`.
+    pub const fn as_u64(self) -> u64 {
+        self.0 as u64
+    }
+
+    /// Returns a logical block number offset by `delta` blocks.
+    pub fn checked_add(self, delta: u32) -> Ext4Result<Self> {
+        self.0
+            .checked_add(delta)
+            .map(Self)
+            .ok_or_else(overflow_error)
+    }
+
+    /// Returns a logical block number offset by `delta` blocks.
+    pub fn checked_add_usize(self, delta: usize) -> Ext4Result<Self> {
+        let delta = u32::try_from(delta).map_err(|_| overflow_error())?;
+        self.checked_add(delta)
+    }
+
+    /// Returns a logical block number decreased by `delta` blocks.
+    pub fn checked_sub(self, delta: u32) -> Ext4Result<Self> {
+        self.0
+            .checked_sub(delta)
+            .map(Self)
+            .ok_or_else(overflow_error)
+    }
+}
+
+impl From<u32> for LogicalBN {
+    fn from(value: u32) -> Self {
+        Self(value)
+    }
+}
+
+impl TryFrom<u64> for LogicalBN {
+    type Error = Ext4Error;
+
+    fn try_from(value: u64) -> Result<Self, Self::Error> {
+        u32::try_from(value).map(Self).map_err(|_| overflow_error())
+    }
+}
+
+impl fmt::Display for LogicalBN {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.0.fmt(f)
+    }
+}
 
 impl AbsoluteBN {
     /// Creates a new absolute block number.
@@ -108,7 +176,10 @@ impl AbsoluteBN {
     /// Returns a block number offset by `delta` blocks.
     pub fn checked_add_usize(self, delta: usize) -> Ext4Result<Self> {
         let delta = u64::try_from(delta).map_err(|_| overflow_error())?;
-        self.0.checked_add(delta).map(Self).ok_or_else(overflow_error)
+        self.0
+            .checked_add(delta)
+            .map(Self)
+            .ok_or_else(overflow_error)
     }
 
     /// Converts an absolute block number into `(group, block-in-group)`.
@@ -122,10 +193,10 @@ impl AbsoluteBN {
         }
 
         let rel = self.0 - u64::from(first_data_block);
-        let group_idx = u32::try_from(rel / u64::from(blocks_per_group))
-            .map_err(|_| overflow_error())?;
-        let block_in_group = u32::try_from(rel % u64::from(blocks_per_group))
-            .map_err(|_| overflow_error())?;
+        let group_idx =
+            u32::try_from(rel / u64::from(blocks_per_group)).map_err(|_| overflow_error())?;
+        let block_in_group =
+            u32::try_from(rel % u64::from(blocks_per_group)).map_err(|_| overflow_error())?;
         Ok((BGIndex(group_idx), RelativeBN(block_in_group)))
     }
 }

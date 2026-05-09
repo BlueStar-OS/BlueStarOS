@@ -77,9 +77,7 @@ impl RootFs {
         }
         warn!(
             "[vblock-scan] {}: read MBR(lba=0) done, sig={:#x}{:02x}",
-            dev_path,
-            mbr[511],
-            mbr[510]
+            dev_path, mbr[511], mbr[510]
         );
 
         let parts = parsing_mbr_partition(mbr);

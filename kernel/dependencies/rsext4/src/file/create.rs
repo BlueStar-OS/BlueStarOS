@@ -1,5 +1,29 @@
-use super::blocks::build_file_block_mapping;
 use super::*;
+
+fn discard_unpublished_inode_blocks<B: BlockDevice>(
+    fs: &mut Ext4FileSystem,
+    device: &mut Jbd2Dev<B>,
+    data_blocks: &[AbsoluteBN],
+) {
+    for &blk in data_blocks {
+        fs.datablock_cache.invalidate(blk);
+        if let Err(e) = fs.free_block(device, blk) {
+            warn!("discard unpublished file block failed block={blk} err={e:?} ({e})");
+        }
+    }
+}
+
+fn discard_unpublished_inode<B: BlockDevice>(
+    fs: &mut Ext4FileSystem,
+    device: &mut Jbd2Dev<B>,
+    inode_num: InodeNumber,
+    data_blocks: &[AbsoluteBN],
+) {
+    discard_unpublished_inode_blocks(fs, device, data_blocks);
+    if let Err(e) = fs.free_inode(device, inode_num) {
+        warn!("discard unpublished inode failed ino={inode_num} err={e:?} ({e})");
+    }
+}
 
 pub fn create_symbol_link<B: BlockDevice>(
     device: &mut Jbd2Dev<B>,
@@ -7,7 +31,7 @@ pub fn create_symbol_link<B: BlockDevice>(
     src_path: &str,
     dst_path: &str,
 ) -> Ext4Result<()> {
-    // 首先判断两个目标文件是否存在，被链接不存在报错，链接文件存在报错。
+    // Validate the source and destination before allocating the new symlink.
     let src_norm = split_paren_child_and_tranlatevalid(src_path);
     let dst_norm = split_paren_child_and_tranlatevalid(dst_path);
 
@@ -18,7 +42,7 @@ pub fn create_symbol_link<B: BlockDevice>(
         return Err(Ext4Error::invalid_input());
     }
 
-    // 拆 parent / child（父目录必须存在）
+    // Split the destination into parent directory and entry name.
     let (parent, child) = if let Some(pos) = dst_norm.rfind('/') {
         let p = if pos == 0 {
             "/".to_string()
@@ -40,7 +64,7 @@ pub fn create_symbol_link<B: BlockDevice>(
         return Err(Ext4Error::invalid_input());
     }
 
-    // 为新链接分配 inode
+    // Allocate and populate the new symlink inode.
     let new_ino = fs.alloc_inode(device)?;
 
     let target_bytes = src_path.as_bytes();
@@ -63,7 +87,7 @@ pub fn create_symbol_link<B: BlockDevice>(
         new_inode.l_i_blocks_high = 0;
         new_inode.i_block = [0; 15];
     } else if target_len <= 60 {
-        // fast symlink：目标路径直接写入 i_block
+        // Fast symlink: store the target directly inside `i_block`.
         let mut raw = [0u8; 60];
         raw[..target_len].copy_from_slice(target_bytes);
         for i in 0..15 {
@@ -73,25 +97,36 @@ pub fn create_symbol_link<B: BlockDevice>(
         new_inode.i_blocks_lo = 0;
         new_inode.l_i_blocks_high = 0;
     } else {
-        // 普通 symlink：用数据块存储目标路径
+        // Long symlink: spill the target path into data blocks.
         let mut data_blocks: Vec<AbsoluteBN> = Vec::new();
         let mut remaining = target_len;
         let mut src_off = 0usize;
 
         while remaining > 0 {
             if !fs.superblock.has_extents() && data_blocks.len() >= 12 {
+                discard_unpublished_inode(fs, device, new_ino, &data_blocks);
                 return Err(Ext4Error::unsupported());
             }
 
             let blk = fs.alloc_block(device)?;
-            let write_len = core::cmp::min(remaining, BLOCK_SIZE);
-            fs.datablock_cache.modify_new(device, blk, |data| {
+            let write_len = core::cmp::min(remaining, fs.block_size);
+            if let Err(e) = fs.datablock_cache.modify_new(device, blk, |data| {
                 for b in data.iter_mut() {
                     *b = 0;
                 }
                 let end = src_off + write_len;
                 data[..write_len].copy_from_slice(&target_bytes[src_off..end]);
-            })?;
+            }) {
+                fs.datablock_cache.invalidate(blk);
+                if let Err(free_err) = fs.free_block(device, blk) {
+                    warn!(
+                        "discard failed symlink block failed block={blk} err={free_err:?} \
+                         ({free_err})"
+                    );
+                }
+                discard_unpublished_inode(fs, device, new_ino, &data_blocks);
+                return Err(e);
+            }
 
             data_blocks.push(blk);
             remaining -= write_len;
@@ -99,11 +134,11 @@ pub fn create_symbol_link<B: BlockDevice>(
         }
 
         let used_datablocks = data_blocks.len() as u64;
-        let iblocks_used = used_datablocks.saturating_mul(BLOCK_SIZE as u64 / 512) as u32;
+        let iblocks_used = used_datablocks.saturating_mul(fs.block_size as u64 / 512) as u32;
         new_inode.i_blocks_lo = iblocks_used;
         new_inode.l_i_blocks_high = 0; // iblocks_used is u32, so high part is 0
 
-        build_file_block_mapping(fs, &mut new_inode, &data_blocks, device);
+        build_file_block_mapping_with_inode_num(fs, &mut new_inode, new_ino, &data_blocks, device);
     }
 
     let mut create_update = Ext4InodeMetadataUpdate::create(symlink_mode);
@@ -117,7 +152,7 @@ pub fn create_symbol_link<B: BlockDevice>(
 
     fs.finalize_inode_update(device, new_ino, &mut new_inode, create_update)?;
 
-    // 插入父目录目录项（symlink 类型）
+    // Publish the new symlink by inserting its directory entry.
     let mut parent_inode_copy = parent_inode;
     insert_dir_entry(
         fs,
@@ -140,18 +175,18 @@ pub fn mkfile<B: BlockDevice>(
     initial_data: Option<&[u8]>,
     file_type: Option<u8>,
 ) -> Ext4Result<Ext4Inode> {
-    // 规范化路径
+    // Normalize first so all later path splitting uses one canonical form.
     let norm_path = split_paren_child_and_tranlatevalid(path);
     if norm_path.is_empty() || norm_path == "/" {
         return Err(Ext4Error::invalid_input());
     }
 
-    // 如果目标已存在，直接报错
+    // Refuse to overwrite an existing entry.
     if get_file_inode(fs, device, &norm_path)?.is_some() {
         return Err(Ext4Error::already_exists());
     }
 
-    // 拆 parent / child
+    // Split the normalized path into parent directory and leaf name.
     let mut valid_path = norm_path;
     let split_point = match valid_path.rfind('/') {
         Some(v) => v,
@@ -167,17 +202,18 @@ pub fn mkfile<B: BlockDevice>(
         valid_path
     };
 
-    // 确保父目录存在
+    // Create missing parent directories before allocating the file inode.
     ensure_directory(device, fs, &parent)?;
 
-    // 重新获取父目录 inode 及其 inode 号
+    // Reload the parent inode after directory creation so we use the final
+    // parent metadata and inode number.
     let (parent_ino_num, parent_inode) =
         get_inode_with_num(fs, device, &parent)?.ok_or(Ext4Error::not_found())?;
 
-    //为新文件分配 inode（内部自动选择块组）
+    // Allocate the inode before writing any initial data blocks.
     let new_file_ino = fs.alloc_inode(device)?;
 
-    // 如有初始数据，为文件分配一个或多个数据块并写入
+    // Materialize the initial file payload block by block.
     let mut data_blocks: Vec<AbsoluteBN> = Vec::new();
     let mut total_written: usize = 0;
     if let Some(buf) = initial_data {
@@ -185,29 +221,41 @@ pub fn mkfile<B: BlockDevice>(
         let mut src_off = 0usize;
 
         while remaining > 0 {
-            // 如果未启用 extents，则最多只使用 12 个直接块
+            // Non-extent files only support the 12 direct pointers here.
             if !fs.superblock.has_extents() && data_blocks.len() >= 12 {
-                break;
+                discard_unpublished_inode(fs, device, new_file_ino, &data_blocks);
+                return Err(Ext4Error::unsupported());
             }
 
             let blk = match fs.alloc_block(device) {
                 Ok(b) => b,
                 Err(e) => {
                     error!("mkfile alloc_block failed path={path} err={e:?} ({e})");
-                    break;
+                    discard_unpublished_inode(fs, device, new_file_ino, &data_blocks);
+                    return Err(e);
                 }
             };
 
-            let write_len = core::cmp::min(remaining, BLOCK_SIZE);
+            let write_len = core::cmp::min(remaining, fs.block_size);
 
-            // 将数据写入新分配的数据块，其余部分填零
-            fs.datablock_cache.modify_new(device, blk, |data| {
+            // Zero-fill each new block and copy the live payload prefix into it.
+            if let Err(e) = fs.datablock_cache.modify_new(device, blk, |data| {
                 for b in data.iter_mut() {
                     *b = 0;
                 }
                 let end = src_off + write_len;
                 data[..write_len].copy_from_slice(&buf[src_off..end]);
-            })?;
+            }) {
+                fs.datablock_cache.invalidate(blk);
+                if let Err(free_err) = fs.free_block(device, blk) {
+                    warn!(
+                        "discard failed file block failed path={path} block={blk} \
+                         err={free_err:?} ({free_err})"
+                    );
+                }
+                discard_unpublished_inode(fs, device, new_file_ino, &data_blocks);
+                return Err(e);
+            }
 
             data_blocks.push(blk);
             total_written += write_len;
@@ -216,7 +264,8 @@ pub fn mkfile<B: BlockDevice>(
         }
     }
 
-    // 构造新文件 inode 的内存版本，然后通过 modify_inode 一次性写回
+    // Build the final inode image in memory, then persist it through the
+    // unified metadata finalization path.
     let mut new_inode = Ext4Inode::empty_for_reuse(fs.default_inode_extra_isize());
     let imode = if let Some(ft) = file_type {
         match ft {
@@ -236,7 +285,7 @@ pub fn mkfile<B: BlockDevice>(
     new_inode.i_flags =
         Ext4Inode::mask_flags_for_mode(imode, parent_inode.i_flags & Ext4Inode::EXT4_FL_INHERITED);
 
-    //extend是否开启
+    // Extent-enabled files start with an embedded extent root.
     if fs.superblock.has_extents() {
         new_inode.write_extend_header();
     }
@@ -247,18 +296,24 @@ pub fn mkfile<B: BlockDevice>(
     let size_hi = ((total_written as u64) >> 32) as u32;
 
     if !data_blocks.is_empty() {
-        // 有初始数据：多块或单块文件
+        // File starts with allocated data blocks.
         let used_databyte = data_blocks.len() as u64;
-        let iblocks_used = used_databyte.saturating_mul(BLOCK_SIZE as u64 / 512);
+        let iblocks_used = used_databyte.saturating_mul(fs.block_size as u64 / 512);
         let used_blocks_lo = iblocks_used as u32;
         new_inode.i_size_lo = size_lo;
         new_inode.i_size_high = size_hi;
         new_inode.i_blocks_lo = used_blocks_lo;
         new_inode.l_i_blocks_high = (iblocks_used >> 32) as u16;
 
-        build_file_block_mapping(fs, &mut new_inode, &data_blocks, device);
+        build_file_block_mapping_with_inode_num(
+            fs,
+            &mut new_inode,
+            new_file_ino,
+            &data_blocks,
+            device,
+        );
     } else {
-        //无初始数据：空文件
+        // Empty file starts with no data blocks.
         new_inode.i_size_lo = 0;
         new_inode.i_size_high = 0;
         new_inode.i_blocks_lo = 0;
@@ -282,8 +337,7 @@ pub fn mkfile<B: BlockDevice>(
 
     fs.finalize_inode_update(device, new_file_ino, &mut new_inode, create_update)?;
 
-    //在父目录中插入一个普通文件类型的目录项（必要时自动扩展目录块）
-
+    // Finally publish the file by linking it into the parent directory.
     let file_type = match file_type {
         Some(ft) => ft,
         None => Ext4DirEntry2::EXT4_FT_REG_FILE,
@@ -302,11 +356,11 @@ pub fn mkfile<B: BlockDevice>(
     .is_err()
     {
         error!(
-            "mkfile insert_dir_entry failed path={path} parent_ino={parent_ino_num} child={child} ino={new_file_ino}"
+            "mkfile insert_dir_entry failed path={path} parent_ino={parent_ino_num} child={child} \
+             ino={new_file_ino}"
         );
         return Err(Ext4Error::corrupted());
     }
 
-    // 返回新文件 inode
     fs.get_inode_by_num(device, new_file_ino)
 }

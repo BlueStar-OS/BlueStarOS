@@ -1,34 +1,34 @@
 use super::*;
 
 impl Ext4Inode {
-    pub const EXT4_SECRM_FL: u32 = 0x00000001; // 安全删除
-    pub const EXT4_UNRM_FL: u32 = 0x00000002; // 可恢复删除
-    pub const EXT4_COMPR_FL: u32 = 0x00000004; // 压缩文件
-    pub const EXT4_SYNC_FL: u32 = 0x00000008; // 同步更新
-    pub const EXT4_IMMUTABLE_FL: u32 = 0x00000010; // 不可修改
-    pub const EXT4_APPEND_FL: u32 = 0x00000020; // 只能追加
-    pub const EXT4_NODUMP_FL: u32 = 0x00000040; // 不转储
-    pub const EXT4_NOATIME_FL: u32 = 0x00000080; // 不更新访问时间
-    pub const EXT4_DIRTY_FL: u32 = 0x00000100; // 脏数据
-    pub const EXT4_COMPRBLK_FL: u32 = 0x00000200; // 一个或多个压缩簇
-    pub const EXT4_NOCOMPR_FL: u32 = 0x00000400; // 不压缩
-    pub const EXT4_ENCRYPT_FL: u32 = 0x00000800; // 加密文件
-    pub const EXT4_INDEX_FL: u32 = 0x00001000; // 哈希索引目录
-    pub const EXT4_IMAGIC_FL: u32 = 0x00002000; // AFS目录
-    pub const EXT4_JOURNAL_DATA_FL: u32 = 0x00004000; // 日志文件数据
-    pub const EXT4_NOTAIL_FL: u32 = 0x00008000; // 文件尾不合并
-    pub const EXT4_DIRSYNC_FL: u32 = 0x00010000; // 目录同步更新
-    pub const EXT4_TOPDIR_FL: u32 = 0x00020000; // 顶层目录
-    pub const EXT4_HUGE_FILE_FL: u32 = 0x00040000; // 巨大文件
-    pub const EXT4_EXTENTS_FL: u32 = 0x00080000; // 使用extent树
-    pub const EXT4_EA_INODE_FL: u32 = 0x00200000; // 扩展属性inode
-    pub const EXT4_EOFBLOCKS_FL: u32 = 0x00400000; // EOF后的块
-    pub const EXT4_SNAPFILE_FL: u32 = 0x01000000; // 快照文件
-    pub const EXT4_SNAPFILE_DELETED_FL: u32 = 0x04000000; // 快照被删除
-    pub const EXT4_SNAPFILE_SHRUNK_FL: u32 = 0x08000000; // 快照收缩
-    pub const EXT4_INLINE_DATA_FL: u32 = 0x10000000; // 内联数据
-    pub const EXT4_PROJINHERIT_FL: u32 = 0x20000000; // 创建时继承项目ID
-    pub const EXT4_RESERVED_FL: u32 = 0x80000000; // 保留
+    pub const EXT4_SECRM_FL: u32 = 0x00000001; // Secure deletion request.
+    pub const EXT4_UNRM_FL: u32 = 0x00000002; // Undelete support hint.
+    pub const EXT4_COMPR_FL: u32 = 0x00000004; // Compressed file.
+    pub const EXT4_SYNC_FL: u32 = 0x00000008; // Synchronous updates.
+    pub const EXT4_IMMUTABLE_FL: u32 = 0x00000010; // Immutable inode.
+    pub const EXT4_APPEND_FL: u32 = 0x00000020; // Append-only inode.
+    pub const EXT4_NODUMP_FL: u32 = 0x00000040; // Exclude from dump utilities.
+    pub const EXT4_NOATIME_FL: u32 = 0x00000080; // Do not update atime.
+    pub const EXT4_DIRTY_FL: u32 = 0x00000100; // Dirty compressed file.
+    pub const EXT4_COMPRBLK_FL: u32 = 0x00000200; // One or more compressed clusters.
+    pub const EXT4_NOCOMPR_FL: u32 = 0x00000400; // Compression disabled.
+    pub const EXT4_ENCRYPT_FL: u32 = 0x00000800; // Encrypted inode.
+    pub const EXT4_INDEX_FL: u32 = 0x00001000; // Hash-indexed directory.
+    pub const EXT4_IMAGIC_FL: u32 = 0x00002000; // AFS directory.
+    pub const EXT4_JOURNAL_DATA_FL: u32 = 0x00004000; // Data journaling enabled.
+    pub const EXT4_NOTAIL_FL: u32 = 0x00008000; // Do not merge tail blocks.
+    pub const EXT4_DIRSYNC_FL: u32 = 0x00010000; // Directory updates are synchronous.
+    pub const EXT4_TOPDIR_FL: u32 = 0x00020000; // Top-level directory hint.
+    pub const EXT4_HUGE_FILE_FL: u32 = 0x00040000; // Huge-file encoding in use.
+    pub const EXT4_EXTENTS_FL: u32 = 0x00080000; // `i_block` stores an extent tree.
+    pub const EXT4_EA_INODE_FL: u32 = 0x00200000; // Large xattr value inode.
+    pub const EXT4_EOFBLOCKS_FL: u32 = 0x00400000; // Blocks past EOF are allocated.
+    pub const EXT4_SNAPFILE_FL: u32 = 0x01000000; // Snapshot file.
+    pub const EXT4_SNAPFILE_DELETED_FL: u32 = 0x04000000; // Deleted snapshot.
+    pub const EXT4_SNAPFILE_SHRUNK_FL: u32 = 0x08000000; // Shrunk snapshot.
+    pub const EXT4_INLINE_DATA_FL: u32 = 0x10000000; // Inline data payload.
+    pub const EXT4_PROJINHERIT_FL: u32 = 0x20000000; // Inherit project ID on create.
+    pub const EXT4_RESERVED_FL: u32 = 0x80000000; // Reserved internal flag bit.
 
     pub const EXT4_FL_USER_MODIFIABLE: u32 = Self::EXT4_SYNC_FL
         | Self::EXT4_IMMUTABLE_FL

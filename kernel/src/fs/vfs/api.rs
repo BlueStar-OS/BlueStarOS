@@ -180,9 +180,11 @@ pub fn normalize_path(path: &str) -> Result<String, VfsFsError> {
 pub fn vfs_open(path: &str, flags: OpenFlags) -> Result<Arc<dyn File>, VfsFsError> {
     let (mnt, abs_path, sub_path) = resolve_mount(path)?;
     let mut guard = mnt.lock();
-    let file = guard.open(mnt.clone(), &sub_path, flags).inspect_err(|&e| {
-        error!("vfs_open failed: path={} err={:?}", abs_path, e);
-    })?;
+    let file = guard
+        .open(mnt.clone(), &sub_path, flags)
+        .inspect_err(|&e| {
+            error!("vfs_open failed: path={} err={:?}", abs_path, e);
+        })?;
     Ok(file)
 }
 

@@ -1,19 +1,24 @@
 #![no_std]
 #![no_main]
 
-use user_lib::println;
-use user_lib::print;
 use user_lib::error::*;
-use user_lib::syscall::{sys_close, sys_creat, sys_mmap, sys_open, sys_read, sys_write, MmapFlags, MmapProt, O_RDONLY, O_RDWR};
+use user_lib::print;
+use user_lib::println;
+use user_lib::syscall::{
+    sys_close, sys_creat, sys_mmap, sys_open, sys_read, sys_write, MmapFlags, MmapProt, O_RDONLY,
+    O_RDWR,
+};
 extern crate user_lib;
 
 #[no_mangle]
-pub fn main()->usize{
+pub fn main() -> usize {
     let mut pass: usize = 0;
     let mut fail: usize = 0;
 
     fn errname(ret: isize) -> &'static str {
-        if ret >= 0 { return "OK"; }
+        if ret >= 0 {
+            return "OK";
+        }
         match (-ret) as isize {
             EINVAL => "EINVAL",
             ENOMEM => "ENOMEM",
@@ -29,10 +34,20 @@ pub fn main()->usize{
         let verdict = ok == expect_ok;
         if verdict {
             *pass += 1;
-            println!("[PASS] {} | expect_ok={} actual_ok={} ret={:#x}", name, expect_ok, ok, ret as usize);
+            println!(
+                "[PASS] {} | expect_ok={} actual_ok={} ret={:#x}",
+                name, expect_ok, ok, ret as usize
+            );
         } else {
             *fail += 1;
-            println!("[FAIL] {} | expect_ok={} actual_ok={} ret={:#x} ({})", name, expect_ok, ok, ret as usize, errname(ret));
+            println!(
+                "[FAIL] {} | expect_ok={} actual_ok={} ret={:#x} ({})",
+                name,
+                expect_ok,
+                ok,
+                ret as usize,
+                errname(ret)
+            );
         }
     }
 
@@ -109,10 +124,16 @@ pub fn main()->usize{
         let r = touch_u8(mapped, 66);
         if r == 66 {
             pass += 1;
-            println!("[PASS] touch mapped memory | expect=66 actual={} addr={:#x}", r, mapped);
+            println!(
+                "[PASS] touch mapped memory | expect=66 actual={} addr={:#x}",
+                r, mapped
+            );
         } else {
             fail += 1;
-            println!("[FAIL] touch mapped memory | expect=66 actual={} addr={:#x}", r, mapped);
+            println!(
+                "[FAIL] touch mapped memory | expect=66 actual={} addr={:#x}",
+                r, mapped
+            );
         }
     }
 
@@ -136,7 +157,13 @@ pub fn main()->usize{
         -1,
         1,
     );
-    report(&mut pass, &mut fail, "offset not aligned must fail", false, ret3);
+    report(
+        &mut pass,
+        &mut fail,
+        "offset not aligned must fail",
+        false,
+        ret3,
+    );
 
     // 4) Missing SHARED/PRIVATE => EINVAL => should fail.
     let ret4 = sys_mmap(
@@ -147,7 +174,13 @@ pub fn main()->usize{
         -1,
         0,
     );
-    report(&mut pass, &mut fail, "flags missing private/shared must fail", false, ret4);
+    report(
+        &mut pass,
+        &mut fail,
+        "flags missing private/shared must fail",
+        false,
+        ret4,
+    );
 
     // 5) Both SHARED and PRIVATE => EINVAL => should fail.
     let ret5 = sys_mmap(
@@ -158,7 +191,13 @@ pub fn main()->usize{
         -1,
         0,
     );
-    report(&mut pass, &mut fail, "flags shared+private must fail", false, ret5);
+    report(
+        &mut pass,
+        &mut fail,
+        "flags shared+private must fail",
+        false,
+        ret5,
+    );
 
     // 6) Unknown prot bits => EINVAL => should fail.
     let ret6 = sys_mmap(
@@ -169,7 +208,13 @@ pub fn main()->usize{
         -1,
         0,
     );
-    report(&mut pass, &mut fail, "unknown prot bits must fail", false, ret6);
+    report(
+        &mut pass,
+        &mut fail,
+        "unknown prot bits must fail",
+        false,
+        ret6,
+    );
 
     // 7) Unknown flag bits => EINVAL => should fail.
     let ret7 = sys_mmap(
@@ -180,7 +225,13 @@ pub fn main()->usize{
         -1,
         0,
     );
-    report(&mut pass, &mut fail, "unknown flags bits must fail", false, ret7);
+    report(
+        &mut pass,
+        &mut fail,
+        "unknown flags bits must fail",
+        false,
+        ret7,
+    );
 
     // 8) MAP_FIXED requires page-aligned addr => EINVAL => should fail.
     let ret8 = sys_mmap(
@@ -191,7 +242,13 @@ pub fn main()->usize{
         -1,
         0,
     );
-    report(&mut pass, &mut fail, "MAP_FIXED unaligned addr must fail", false, ret8);
+    report(
+        &mut pass,
+        &mut fail,
+        "MAP_FIXED unaligned addr must fail",
+        false,
+        ret8,
+    );
 
     // 9) addr==0 (non-fixed): kernel chooses address. Linux expects success.
     // Your kernel implements find_free_range based on brk; should succeed.
@@ -209,10 +266,16 @@ pub fn main()->usize{
         let r = touch_u8(mapped, 77);
         if r == 77 {
             pass += 1;
-            println!("[PASS] touch addr==0 mapping | expect=77 actual={} addr={:#x}", r, mapped);
+            println!(
+                "[PASS] touch addr==0 mapping | expect=77 actual={} addr={:#x}",
+                r, mapped
+            );
         } else {
             fail += 1;
-            println!("[FAIL] touch addr==0 mapping | expect=77 actual={} addr={:#x}", r, mapped);
+            println!(
+                "[FAIL] touch addr==0 mapping | expect=77 actual={} addr={:#x}",
+                r, mapped
+            );
         }
     }
 
@@ -228,15 +291,27 @@ pub fn main()->usize{
         -1,
         0,
     );
-    report(&mut pass, &mut fail, "MAP_FIXED replace: initial map", true, ret10a);
+    report(
+        &mut pass,
+        &mut fail,
+        "MAP_FIXED replace: initial map",
+        true,
+        ret10a,
+    );
     if ret10a >= 0 {
         let v0 = touch_u8(addr10, 0x11);
         if v0 == 0x11 {
             pass += 1;
-            println!("[PASS] pre-replace write marker | expect=0x11 actual={:#x}", v0);
+            println!(
+                "[PASS] pre-replace write marker | expect=0x11 actual={:#x}",
+                v0
+            );
         } else {
             fail += 1;
-            println!("[FAIL] pre-replace write marker | expect=0x11 actual={:#x}", v0);
+            println!(
+                "[FAIL] pre-replace write marker | expect=0x11 actual={:#x}",
+                v0
+            );
         }
     }
     let ret10b = sys_mmap(
@@ -247,15 +322,27 @@ pub fn main()->usize{
         -1,
         0,
     );
-    report(&mut pass, &mut fail, "MAP_FIXED replace: second map must succeed", true, ret10b);
+    report(
+        &mut pass,
+        &mut fail,
+        "MAP_FIXED replace: second map must succeed",
+        true,
+        ret10b,
+    );
     if ret10b >= 0 {
         let v1 = touch_u8(addr10, 0x22);
         if v1 == 0x22 {
             pass += 1;
-            println!("[PASS] post-replace write marker | expect=0x22 actual={:#x}", v1);
+            println!(
+                "[PASS] post-replace write marker | expect=0x22 actual={:#x}",
+                v1
+            );
         } else {
             fail += 1;
-            println!("[FAIL] post-replace write marker | expect=0x22 actual={:#x}", v1);
+            println!(
+                "[FAIL] post-replace write marker | expect=0x22 actual={:#x}",
+                v1
+            );
         }
     }
 
@@ -265,13 +352,31 @@ pub fn main()->usize{
     let fd_create = sys_creat(path);
     report(&mut pass, &mut fail, "creat test file", true, fd_create);
     if fd_create >= 0 {
-        write_fill_4096(&mut pass, &mut fail, fd_create as usize, b'A', "write page0(4096)");
-        write_fill_4096(&mut pass, &mut fail, fd_create as usize, b'B', "write page1(4096)");
+        write_fill_4096(
+            &mut pass,
+            &mut fail,
+            fd_create as usize,
+            b'A',
+            "write page0(4096)",
+        );
+        write_fill_4096(
+            &mut pass,
+            &mut fail,
+            fd_create as usize,
+            b'B',
+            "write page1(4096)",
+        );
         let _ = sys_close(fd_create as usize);
     }
 
     let fd_ro = sys_open(path, O_RDONLY);
-    report(&mut pass, &mut fail, "open(O_RDONLY) test file", true, fd_ro);
+    report(
+        &mut pass,
+        &mut fail,
+        "open(O_RDONLY) test file",
+        true,
+        fd_ro,
+    );
     let ret11 = if fd_ro >= 0 {
         sys_mmap(
             addr1 + 0x80000,
@@ -284,11 +389,23 @@ pub fn main()->usize{
     } else {
         -1
     };
-    report(&mut pass, &mut fail, "file-backed MAP_PRIVATE read should succeed", true, ret11);
+    report(
+        &mut pass,
+        &mut fail,
+        "file-backed MAP_PRIVATE read should succeed",
+        true,
+        ret11,
+    );
     if ret11 >= 0 {
         let mapped = ret11 as usize;
         let v = unsafe { *(mapped as *const u8) };
-        report_bool(&mut pass, &mut fail, "file-backed MAP_PRIVATE first byte == 'A'", true, v == b'A');
+        report_bool(
+            &mut pass,
+            &mut fail,
+            "file-backed MAP_PRIVATE first byte == 'A'",
+            true,
+            v == b'A',
+        );
     }
     if fd_ro >= 0 {
         let _ = sys_close(fd_ro as usize);
@@ -303,7 +420,13 @@ pub fn main()->usize{
         -1,
         0,
     );
-    report(&mut pass, &mut fail, "anon shared rw (valid flags)", true, ret12);
+    report(
+        &mut pass,
+        &mut fail,
+        "anon shared rw (valid flags)",
+        true,
+        ret12,
+    );
     if ret12 >= 0 {
         let mapped = ret12 as usize;
         let r = touch_u8(mapped, 88);
@@ -319,12 +442,24 @@ pub fn main()->usize{
         0,
         0,
     );
-    report(&mut pass, &mut fail, "anon with fd>= 0 must fail", false, ret13);
+    report(
+        &mut pass,
+        &mut fail,
+        "anon with fd>= 0 must fail",
+        false,
+        ret13,
+    );
 
     // 14) file-backed MAP_SHARED + PROT_WRITE requires fd to be writable.
     // Open RO then request shared+writable: must fail.
     let fd_ro2 = sys_open(path, O_RDONLY);
-    report(&mut pass, &mut fail, "open(O_RDONLY) for shared+writable", true, fd_ro2);
+    report(
+        &mut pass,
+        &mut fail,
+        "open(O_RDONLY) for shared+writable",
+        true,
+        fd_ro2,
+    );
     let ret14 = if fd_ro2 >= 0 {
         sys_mmap(
             addr1 + 0xB0000,
@@ -337,7 +472,13 @@ pub fn main()->usize{
     } else {
         -1
     };
-    report(&mut pass, &mut fail, "file-backed MAP_SHARED+PROT_WRITE on O_RDONLY must fail", false, ret14);
+    report(
+        &mut pass,
+        &mut fail,
+        "file-backed MAP_SHARED+PROT_WRITE on O_RDONLY must fail",
+        false,
+        ret14,
+    );
     if fd_ro2 >= 0 {
         let _ = sys_close(fd_ro2 as usize);
     }
@@ -357,11 +498,23 @@ pub fn main()->usize{
     } else {
         -1
     };
-    report(&mut pass, &mut fail, "file-backed MAP_SHARED rw on O_RDWR should succeed", true, ret15_file);
+    report(
+        &mut pass,
+        &mut fail,
+        "file-backed MAP_SHARED rw on O_RDWR should succeed",
+        true,
+        ret15_file,
+    );
     if ret15_file >= 0 {
         let mapped = ret15_file as usize;
         let r = touch_u8(mapped, 0x5A);
-        report_bool(&mut pass, &mut fail, "file-backed MAP_SHARED touch writable", true, r == 0x5A);
+        report_bool(
+            &mut pass,
+            &mut fail,
+            "file-backed MAP_SHARED touch writable",
+            true,
+            r == 0x5A,
+        );
     }
     if fd_rw >= 0 {
         let _ = sys_close(fd_rw as usize);
@@ -370,13 +523,31 @@ pub fn main()->usize{
     // 15b) MAP_SHARED write should be written back to the file.
     let path2 = "/test/mmap_writeback_shared.bin";
     let fd2 = sys_creat(path2);
-    report(&mut pass, &mut fail, "creat writeback(shared) file", true, fd2);
+    report(
+        &mut pass,
+        &mut fail,
+        "creat writeback(shared) file",
+        true,
+        fd2,
+    );
     if fd2 >= 0 {
-        write_fill_4096(&mut pass, &mut fail, fd2 as usize, b'A', "init shared file page0");
+        write_fill_4096(
+            &mut pass,
+            &mut fail,
+            fd2 as usize,
+            b'A',
+            "init shared file page0",
+        );
         let _ = sys_close(fd2 as usize);
     }
     let fd2_rw = sys_open(path2, O_RDWR);
-    report(&mut pass, &mut fail, "open(O_RDWR) writeback(shared)", true, fd2_rw);
+    report(
+        &mut pass,
+        &mut fail,
+        "open(O_RDWR) writeback(shared)",
+        true,
+        fd2_rw,
+    );
     let ret15b = if fd2_rw >= 0 {
         sys_mmap(
             addr1 + 0xC4000,
@@ -389,28 +560,64 @@ pub fn main()->usize{
     } else {
         -1
     };
-    report(&mut pass, &mut fail, "file-backed MAP_SHARED writeback mmap", true, ret15b);
+    report(
+        &mut pass,
+        &mut fail,
+        "file-backed MAP_SHARED writeback mmap",
+        true,
+        ret15b,
+    );
     if ret15b >= 0 {
         let mapped = ret15b as usize;
         let r = touch_u8(mapped, b'S');
-        report_bool(&mut pass, &mut fail, "MAP_SHARED store to mapping", true, r == b'S');
+        report_bool(
+            &mut pass,
+            &mut fail,
+            "MAP_SHARED store to mapping",
+            true,
+            r == b'S',
+        );
     }
     if fd2_rw >= 0 {
         let _ = sys_close(fd2_rw as usize);
     }
     let wb = read_first_byte(path2);
-    report_bool(&mut pass, &mut fail, "MAP_SHARED writeback visible in file", true, wb == Some(b'S'));
+    report_bool(
+        &mut pass,
+        &mut fail,
+        "MAP_SHARED writeback visible in file",
+        true,
+        wb == Some(b'S'),
+    );
 
     // 15c) MAP_PRIVATE write must not be written back to the file.
     let path3 = "/test/mmap_writeback_private.bin";
     let fd3 = sys_creat(path3);
-    report(&mut pass, &mut fail, "creat writeback(private) file", true, fd3);
+    report(
+        &mut pass,
+        &mut fail,
+        "creat writeback(private) file",
+        true,
+        fd3,
+    );
     if fd3 >= 0 {
-        write_fill_4096(&mut pass, &mut fail, fd3 as usize, b'A', "init private file page0");
+        write_fill_4096(
+            &mut pass,
+            &mut fail,
+            fd3 as usize,
+            b'A',
+            "init private file page0",
+        );
         let _ = sys_close(fd3 as usize);
     }
     let fd3_rw = sys_open(path3, O_RDWR);
-    report(&mut pass, &mut fail, "open(O_RDWR) writeback(private)", true, fd3_rw);
+    report(
+        &mut pass,
+        &mut fail,
+        "open(O_RDWR) writeback(private)",
+        true,
+        fd3_rw,
+    );
     let ret15c = if fd3_rw >= 0 {
         sys_mmap(
             addr1 + 0xC8000,
@@ -423,21 +630,45 @@ pub fn main()->usize{
     } else {
         -1
     };
-    report(&mut pass, &mut fail, "file-backed MAP_PRIVATE writeback mmap", true, ret15c);
+    report(
+        &mut pass,
+        &mut fail,
+        "file-backed MAP_PRIVATE writeback mmap",
+        true,
+        ret15c,
+    );
     if ret15c >= 0 {
         let mapped = ret15c as usize;
         let r = touch_u8(mapped, b'P');
-        report_bool(&mut pass, &mut fail, "MAP_PRIVATE store to mapping", true, r == b'P');
+        report_bool(
+            &mut pass,
+            &mut fail,
+            "MAP_PRIVATE store to mapping",
+            true,
+            r == b'P',
+        );
     }
     if fd3_rw >= 0 {
         let _ = sys_close(fd3_rw as usize);
     }
     let wb2 = read_first_byte(path3);
-    report_bool(&mut pass, &mut fail, "MAP_PRIVATE store not visible in file", true, wb2 == Some(b'A'));
+    report_bool(
+        &mut pass,
+        &mut fail,
+        "MAP_PRIVATE store not visible in file",
+        true,
+        wb2 == Some(b'A'),
+    );
 
     // 16) close(fd) after mmap: mapping should remain usable (backing Arc held by kernel).
     let fd_ro3 = sys_open(path, O_RDONLY);
-    report(&mut pass, &mut fail, "open(O_RDONLY) for close-after-mmap", true, fd_ro3);
+    report(
+        &mut pass,
+        &mut fail,
+        "open(O_RDONLY) for close-after-mmap",
+        true,
+        fd_ro3,
+    );
     let ret16_file = if fd_ro3 >= 0 {
         sys_mmap(
             addr1 + 0xB8000,
@@ -450,19 +681,37 @@ pub fn main()->usize{
     } else {
         -1
     };
-    report(&mut pass, &mut fail, "file-backed MAP_PRIVATE then close(fd) should succeed", true, ret16_file);
+    report(
+        &mut pass,
+        &mut fail,
+        "file-backed MAP_PRIVATE then close(fd) should succeed",
+        true,
+        ret16_file,
+    );
     if fd_ro3 >= 0 {
         let _ = sys_close(fd_ro3 as usize);
     }
     if ret16_file >= 0 {
         let mapped = ret16_file as usize;
         let v = unsafe { *(mapped as *const u8) };
-        report_bool(&mut pass, &mut fail, "after close(fd), mapped first byte still == 'A'", true, v == b'A');
+        report_bool(
+            &mut pass,
+            &mut fail,
+            "after close(fd), mapped first byte still == 'A'",
+            true,
+            v == b'A',
+        );
     }
 
     // 17) file-backed offset: map second page (offset=4096), expect first byte == 'B'.
     let fd_ro4 = sys_open(path, O_RDONLY);
-    report(&mut pass, &mut fail, "open(O_RDONLY) for offset test", true, fd_ro4);
+    report(
+        &mut pass,
+        &mut fail,
+        "open(O_RDONLY) for offset test",
+        true,
+        fd_ro4,
+    );
     let ret17_file = if fd_ro4 >= 0 {
         sys_mmap(
             addr1 + 0xBC000,
@@ -475,11 +724,23 @@ pub fn main()->usize{
     } else {
         -1
     };
-    report(&mut pass, &mut fail, "file-backed MAP_PRIVATE offset=4096 should succeed", true, ret17_file);
+    report(
+        &mut pass,
+        &mut fail,
+        "file-backed MAP_PRIVATE offset=4096 should succeed",
+        true,
+        ret17_file,
+    );
     if ret17_file >= 0 {
         let mapped = ret17_file as usize;
         let v = unsafe { *(mapped as *const u8) };
-        report_bool(&mut pass, &mut fail, "offset=4096 mapped first byte == 'B'", true, v == b'B');
+        report_bool(
+            &mut pass,
+            &mut fail,
+            "offset=4096 mapped first byte == 'B'",
+            true,
+            v == b'B',
+        );
     }
     if fd_ro4 >= 0 {
         let _ = sys_close(fd_ro4 as usize);
@@ -494,7 +755,13 @@ pub fn main()->usize{
         -1,
         0,
     );
-    report(&mut pass, &mut fail, "file-backed fd==-1 must fail", false, ret18_file);
+    report(
+        &mut pass,
+        &mut fail,
+        "file-backed fd==-1 must fail",
+        false,
+        ret18_file,
+    );
 
     // 19) Non-MAP_FIXED hint conflict: mapping same hint twice should relocate.
     // POSIX: addr is hint, conflict should not overwrite; kernel picks another address.
@@ -507,7 +774,13 @@ pub fn main()->usize{
         -1,
         0,
     );
-    report(&mut pass, &mut fail, "hint conflict: first map", true, ret15a);
+    report(
+        &mut pass,
+        &mut fail,
+        "hint conflict: first map",
+        true,
+        ret15a,
+    );
     let ret15b = sys_mmap(
         hint15,
         4096,
@@ -516,9 +789,21 @@ pub fn main()->usize{
         -1,
         0,
     );
-    report(&mut pass, &mut fail, "hint conflict: second map should succeed", true, ret15b);
+    report(
+        &mut pass,
+        &mut fail,
+        "hint conflict: second map should succeed",
+        true,
+        ret15b,
+    );
     if ret15b >= 0 {
-        report_bool(&mut pass, &mut fail, "hint conflict: second addr != hint", true, (ret15b as usize) != hint15);
+        report_bool(
+            &mut pass,
+            &mut fail,
+            "hint conflict: second addr != hint",
+            true,
+            (ret15b as usize) != hint15,
+        );
     }
 
     // 20) MAP_FIXED with unaligned length should still be allowed (kernel rounds up).
@@ -531,10 +816,22 @@ pub fn main()->usize{
         -1,
         0,
     );
-    report(&mut pass, &mut fail, "MAP_FIXED len=1 (round up) should succeed", true, ret16);
+    report(
+        &mut pass,
+        &mut fail,
+        "MAP_FIXED len=1 (round up) should succeed",
+        true,
+        ret16,
+    );
     if ret16 >= 0 {
         let r = touch_u8(addr16, 0x33);
-        report_bool(&mut pass, &mut fail, "MAP_FIXED len=1 touch", true, r == 0x33);
+        report_bool(
+            &mut pass,
+            &mut fail,
+            "MAP_FIXED len=1 touch",
+            true,
+            r == 0x33,
+        );
     }
 
     // 21) MAP_FIXED overflow address (expect fail).
@@ -548,7 +845,13 @@ pub fn main()->usize{
         -1,
         0,
     );
-    report(&mut pass, &mut fail, "MAP_FIXED addr near MAX must fail", false, ret17);
+    report(
+        &mut pass,
+        &mut fail,
+        "MAP_FIXED addr near MAX must fail",
+        false,
+        ret17,
+    );
 
     // 22) len overflow (round-up overflow) should fail.
     let ret18 = sys_mmap(
@@ -570,7 +873,13 @@ pub fn main()->usize{
         -2,
         0,
     );
-    report(&mut pass, &mut fail, "file-backed fd<0 must fail", false, ret19);
+    report(
+        &mut pass,
+        &mut fail,
+        "file-backed fd<0 must fail",
+        false,
+        ret19,
+    );
 
     // 24) fd huge out of range with file-backed flags: should fail.
     let ret20 = sys_mmap(
@@ -581,8 +890,21 @@ pub fn main()->usize{
         0x7fff_ffff,
         0,
     );
-    report(&mut pass, &mut fail, "file-backed fd out of range must fail", false, ret20);
+    report(
+        &mut pass,
+        &mut fail,
+        "file-backed fd out of range must fail",
+        false,
+        ret20,
+    );
 
-    println!("==== mmap strict test done: pass={} fail={} ====", pass, fail);
-    if fail == 0 { 0 } else { 1 }
+    println!(
+        "==== mmap strict test done: pass={} fail={} ====",
+        pass, fail
+    );
+    if fail == 0 {
+        0
+    } else {
+        1
+    }
 }

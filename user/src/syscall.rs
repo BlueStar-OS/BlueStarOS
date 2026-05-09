@@ -1,9 +1,10 @@
-use crate::{UtsName, print};
+use crate::UtsName;
 use alloc::string::String;
 use bitflags::bitflags;
 
 // Linux riscv64 syscall numbers (subset)
 pub const SYS_GETCWD: usize = 17;
+pub const SYS_IOCTL: usize = 29;
 pub const SYS_UNLINKAT: usize = 35;
 pub const SYS_LINKAT: usize = 37;
 pub const SYS_UMOUNT2: usize = 39;
@@ -39,10 +40,8 @@ pub const SYS_DUP3: usize = 24;
 
 pub const AT_FDCWD: isize = -100;
 
-
 // Not Hang parent option
-pub const WNOHANG:i32 = 1;
-
+pub const WNOHANG: i32 = 1;
 
 /// syscall 封装：Linux ABI 版本（最多 6 个参数）
 #[cfg(target_arch = "riscv64")]
@@ -82,7 +81,6 @@ pub fn sys_call(id: usize, args: [usize; 6]) -> isize {
     }
     ret
 }
-
 
 pub fn sys_uname(buf: &mut UtsName) -> isize {
     sys_call(SYS_UNAME, [buf as *mut _ as usize, 0, 0, 0, 0, 0])
@@ -133,14 +131,18 @@ bitflags! {
     }
 }
 
-pub fn sys_mmap(addr: usize, len: usize, prot: usize, flags: usize, fd: isize, offset: usize) -> isize {
-    sys_call(
-        SYS_MMAP,
-        [addr, len, prot, flags, fd as usize, offset],
-    )
+pub fn sys_mmap(
+    addr: usize,
+    len: usize,
+    prot: usize,
+    flags: usize,
+    fd: isize,
+    offset: usize,
+) -> isize {
+    sys_call(SYS_MMAP, [addr, len, prot, flags, fd as usize, offset])
 }
 
-pub fn sys_map(startAddr:usize,len:usize)->isize{
+pub fn sys_map(startAddr: usize, len: usize) -> isize {
     // Keep compatibility with old tests: anonymous private RW mapping at fixed hint address.
     sys_mmap(
         startAddr,
@@ -152,16 +154,20 @@ pub fn sys_map(startAddr:usize,len:usize)->isize{
     )
 }
 
-pub fn sys_unmap(startAddr:usize,len:usize)->isize{
-    sys_call(SYS_MUNMAP,[startAddr,len,0,0,0,0])
+pub fn sys_unmap(startAddr: usize, len: usize) -> isize {
+    sys_call(SYS_MUNMAP, [startAddr, len, 0, 0, 0, 0])
 }
 
-pub fn sys_read(fd:usize,buffer_ptr:usize,buffer_len:usize)->isize{
-    sys_call(SYS_READ, [fd,buffer_ptr,buffer_len,0,0,0])
+pub fn sys_read(fd: usize, buffer_ptr: usize, buffer_len: usize) -> isize {
+    sys_call(SYS_READ, [fd, buffer_ptr, buffer_len, 0, 0, 0])
 }
 
-pub fn sys_write(fd:usize,buffer_ptr:usize,buffer_len:usize)->isize{
-    sys_call(SYS_WRITE, [fd,buffer_ptr,buffer_len,0,0,0])
+pub fn sys_ioctl(fd: usize, cmd: usize, arg: usize) -> isize {
+    sys_call(SYS_IOCTL, [fd, cmd, arg, 0, 0, 0])
+}
+
+pub fn sys_write(fd: usize, buffer_ptr: usize, buffer_len: usize) -> isize {
+    sys_call(SYS_WRITE, [fd, buffer_ptr, buffer_len, 0, 0, 0])
 }
 
 pub fn sys_dup(oldfd: usize) -> isize {
@@ -210,14 +216,7 @@ pub fn sys_open(path: &str, flags: usize) -> isize {
     st.push('\0');
     sys_call(
         SYS_OPENAT,
-        [
-            AT_FDCWD as usize,
-            st.as_ptr() as usize,
-            flags,
-            0,
-            0,
-            0,
-        ],
+        [AT_FDCWD as usize, st.as_ptr() as usize, flags, 0, 0, 0],
     )
 }
 
@@ -294,11 +293,10 @@ pub fn sys_stat(path: &str, stat_buf: *mut KStat) -> isize {
             0,
         ],
     )
-    
 }
 
-pub fn sys_brl(new_addr:usize) -> isize{
-    sys_call(SYS_BRK, [new_addr,0,0,0,0,0])
+pub fn sys_brl(new_addr: usize) -> isize {
+    sys_call(SYS_BRK, [new_addr, 0, 0, 0, 0, 0])
 }
 
 pub fn sys_fstat(fd: usize, stat_buf: *mut KStat) -> isize {
@@ -317,14 +315,14 @@ pub fn sys_lseek(fd: usize, offset: isize, whence: usize) -> isize {
     sys_call(SYS_LSEEK, [fd, offset as usize, whence, 0, 0, 0])
 }
 
-pub fn sys_fork()->isize{
+pub fn sys_fork() -> isize {
     sys_call(SYS_CLONE, [0, 0, 0, 0, 0, 0])
 }
 
 pub fn sys_clone(flags: usize, stack: usize, ptid: usize, tls: usize, ctid: usize) -> isize {
     sys_call(SYS_CLONE, [flags, stack, ptid, tls, ctid, 0])
 }
-pub fn sys_exec(path:&str)->isize{
+pub fn sys_exec(path: &str) -> isize {
     sys_execve(path, core::ptr::null(), core::ptr::null())
 }
 
@@ -333,7 +331,14 @@ pub fn sys_execve(path: &str, argv_ptrs: *const usize, envp_ptrs: *const usize) 
     st.push('\0');
     sys_call(
         SYS_EXECVE,
-        [st.as_ptr() as usize, argv_ptrs as usize, envp_ptrs as usize, 0, 0, 0],
+        [
+            st.as_ptr() as usize,
+            argv_ptrs as usize,
+            envp_ptrs as usize,
+            0,
+            0,
+            0,
+        ],
     )
 }
 
@@ -358,25 +363,27 @@ pub fn sys_getcwd(buf_ptr: usize, buf_len: usize) -> isize {
 
 ///wait任意子进程，返回回收的子进程pid，-1表示无子进程或错误
 ///exit_code_ptr: 若非空，内核会写回子进程退出码
-pub fn sys_wait(exit_code_ptr: *mut isize)->isize{
+pub fn sys_wait(exit_code_ptr: *mut isize) -> isize {
     // wait4(pid=-1, wstatus, options=0, rusage=NULL)
     sys_call(SYS_WAIT4, [usize::MAX, exit_code_ptr as usize, 0, 0, 0, 0])
 }
 
-pub fn sys_waitpid(exit_code_ptr: *mut isize,pid:i32,option:i32)->isize{
+pub fn sys_waitpid(exit_code_ptr: *mut isize, pid: i32, option: i32) -> isize {
     // wait4(pid=-1, wstatus, options=0, rusage=NULL)
-    sys_call(SYS_WAIT4, [pid as usize, exit_code_ptr as usize, 0, 0, 0, 0])
+    sys_call(
+        SYS_WAIT4,
+        [pid as usize, exit_code_ptr as usize, 0, 0, 0, 0],
+    )
 }
 
 ///永远不返回 里面有loop封装为！
-pub fn sys_exit(exit_code:usize)->!{//sys_exit 
-    sys_call(SYS_EXIT, [exit_code,0,0,0,0,0]);
-    loop {
-        
-    }
+pub fn sys_exit(exit_code: usize) -> ! {
+    //sys_exit
+    sys_call(SYS_EXIT, [exit_code, 0, 0, 0, 0, 0]);
+    loop {}
 }
 
 ///主动放弃一次cpu
-pub fn sys_yield(){
-    sys_call(SYS_SCHED_YIELD, [0,0,0,0,0,0]);
+pub fn sys_yield() {
+    sys_call(SYS_SCHED_YIELD, [0, 0, 0, 0, 0, 0]);
 }

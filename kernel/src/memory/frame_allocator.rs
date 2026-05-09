@@ -52,6 +52,27 @@ impl PageRange {
     }
 }
 
+/// 把一段物理页帧清零。
+///
+/// 为什么这里必须“每次分配都清零”，而不是只在首次 bump 分配时清零：
+/// 1. 用户态匿名页（`brk` / `mmap(MAP_ANON)`）语义要求新页内容全 0；
+/// 2. 回收池里的旧页可能残留上一个地址空间/对象的数据；
+/// 3. musl `mallocng` 会把匿名页直接当成全新 arena / group 来使用，若页头残留脏数据，
+///    `get_meta()` 的一致性断言就会触发。
+///
+/// 参考 Linux 5.4.29：
+/// - `mm/memory.c:3015-3019`：匿名缺页通过 `alloc_zeroed_user_highpage_movable()` 分配零页；
+/// - `include/linux/highmem.h:204-209`：`alloc_zeroed_user_highpage_movable()` 明确返回 zeroed page。
+fn zero_physical_page_range(start_ppn: usize, page_count: usize) {
+    unsafe {
+        core::slice::from_raw_parts_mut(
+            (start_ppn * PAGE_SIZE) as *mut u8,
+            PAGE_SIZE * page_count,
+        )
+        .fill(0);
+    }
+}
+
 /// 物理页分配器（支持多段不连续内存）
 pub struct FrameAlloctor {
     /// 所有可用的物理页范围
@@ -82,6 +103,7 @@ impl FrameAllocatorTrait for FrameAlloctor {
     fn alloc(&mut self) -> Option<FramTracker> {
         // 优先从回收池分配
         if let Some(ppn) = self.recycle.pop() {
+            // 回收池页帧同样必须清零，否则匿名页缺页会把旧内容重新暴露给新用户。
             return Some(FramTracker::new(PhysiNumber(ppn)));
         }
         // 遍历 ranges 找可用的
@@ -90,10 +112,6 @@ impl FrameAllocatorTrait for FrameAlloctor {
             if range.current < range.end {
                 let ppn = range.current;
                 range.current += 1;
-                unsafe {
-                    core::slice::from_raw_parts_mut((ppn * PAGE_SIZE) as *mut u8, PAGE_SIZE)
-                        .fill(0);
-                }
                 return Some(FramTracker::new(PhysiNumber(ppn)));
             }
             // 当前 range 耗尽，移到下一个
@@ -110,13 +128,6 @@ impl FrameAllocatorTrait for FrameAlloctor {
             if range.remaining() >= page_count {
                 let ppn = range.current;
                 range.current += page_count;
-                unsafe {
-                    core::slice::from_raw_parts_mut(
-                        (ppn * PAGE_SIZE) as *mut u8,
-                        PAGE_SIZE * page_count,
-                    )
-                    .fill(0);
-                }
                 let mut frame_vec: Vec<FramTracker> = Vec::with_capacity(page_count);
                 for i in 0..page_count {
                     frame_vec.push(FramTracker::new(PhysiNumber(ppn + i)));
@@ -231,10 +242,7 @@ pub struct FramTracker {
 }
 impl FramTracker {
     fn new(ppn: PhysiNumber) -> Self {
-        unsafe {
-            let addr: PhysiAddr = ppn.into();
-            core::slice::from_raw_parts_mut(addr.0 as *mut u8, PAGE_SIZE).fill(0);
-        }
+        zero_physical_page_range(ppn.0, 1);
         FramTracker { ppn }
     }
 }

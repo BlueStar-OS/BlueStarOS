@@ -1,23 +1,23 @@
-//! # 字节序转换辅助模块
+//! Endian conversion helpers for ext4 disk structures.
 //!
-//! Ext4 磁盘格式使用小端序（Little Endian）
-//! 本模块提供在内存表示和磁盘表示之间转换的辅助函数
+//! ext4 metadata is stored in little-endian byte order on disk. These helpers
+//! bridge the in-memory representation and the serialized on-disk layout.
 
 use core::mem::size_of;
 
-/// 从小端字节序读取 u16
+/// Reads a `u16` from little-endian bytes.
 #[inline]
 pub fn read_u16_le(bytes: &[u8]) -> u16 {
     u16::from_le_bytes([bytes[0], bytes[1]])
 }
 
-/// 从小端字节序读取 u32
+/// Reads a `u32` from little-endian bytes.
 #[inline]
 pub fn read_u32_le(bytes: &[u8]) -> u32 {
     u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]])
 }
 
-/// 从小端字节序读取 u64
+/// Reads a `u64` from little-endian bytes.
 #[inline]
 pub fn read_u64_le(bytes: &[u8]) -> u64 {
     u64::from_le_bytes([
@@ -25,7 +25,7 @@ pub fn read_u64_le(bytes: &[u8]) -> u64 {
     ])
 }
 
-/// 写入 u16 为小端字节序
+/// Writes a `u16` as little-endian bytes.
 #[inline]
 pub fn write_u16_le(value: u16, bytes: &mut [u8]) {
     let le_bytes = value.to_le_bytes();
@@ -33,29 +33,29 @@ pub fn write_u16_le(value: u16, bytes: &mut [u8]) {
     bytes[1] = le_bytes[1];
 }
 
-/// 写入 u32 为小端字节序
+/// Writes a `u32` as little-endian bytes.
 #[inline]
 pub fn write_u32_le(value: u32, bytes: &mut [u8]) {
     let le_bytes = value.to_le_bytes();
     bytes[0..4].copy_from_slice(&le_bytes);
 }
 
-/// 写入 u64 为小端字节序
+/// Writes a `u64` as little-endian bytes.
 #[inline]
 pub fn write_u64_le(value: u64, bytes: &mut [u8]) {
     let le_bytes = value.to_le_bytes();
     bytes[0..8].copy_from_slice(&le_bytes);
 }
 
-/// 可以从字节序列化/反序列化的 trait
+/// Trait for types that can be serialized to and from on-disk byte slices.
 pub trait DiskFormat: Sized {
-    /// 从磁盘字节（小端序）反序列化
+    /// Deserializes from on-disk bytes.
     fn from_disk_bytes(bytes: &[u8]) -> Self;
 
-    /// 序列化到磁盘字节（小端序）
+    /// Serializes into on-disk bytes.
     fn to_disk_bytes(&self, bytes: &mut [u8]);
 
-    /// 磁盘大小（字节）
+    /// Returns the serialized on-disk size in bytes.
     fn disk_size() -> usize {
         size_of::<Self>()
     }
@@ -71,7 +71,7 @@ mod tests {
         let mut bytes = [0u8; 2];
 
         write_u16_le(value, &mut bytes);
-        assert_eq!(bytes, [0x34, 0x12]); // 小端序：低字节在前
+        assert_eq!(bytes, [0x34, 0x12]); // little-endian: low byte first
 
         let read_value = read_u16_le(&bytes);
         assert_eq!(read_value, value);
@@ -83,7 +83,7 @@ mod tests {
         let mut bytes = [0u8; 4];
 
         write_u32_le(value, &mut bytes);
-        assert_eq!(bytes, [0x78, 0x56, 0x34, 0x12]); // 小端序
+        assert_eq!(bytes, [0x78, 0x56, 0x34, 0x12]); // little-endian
 
         let read_value = read_u32_le(&bytes);
         assert_eq!(read_value, value);

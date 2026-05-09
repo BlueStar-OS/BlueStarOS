@@ -185,6 +185,13 @@ impl crate::fs::vfs::BlockDevTrait for VirtBlk {
             .map_err(|_| crate::fs::vfs::VfsFsError::IO)
     }
 
+    /// 当前 virtio-blk 适配层没有单独维护写回缓存。
+    ///
+    /// TODO(dirinkbottle): 后续如果升级 virtio-blk 驱动，应该接入设备级 FLUSH feature。
+    fn flush(&mut self) -> Result<(), crate::fs::vfs::VfsFsError> {
+        Ok(())
+    }
+
     fn capacity_in_sectors(&self) -> u64 {
         self.1
     }

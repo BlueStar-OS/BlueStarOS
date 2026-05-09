@@ -94,7 +94,8 @@ pub fn kernel_info_debug() {
 
     warn!(
         "kernel_stack_protect start at {:#x} ,End at: {:#x}",
-        kernel_stack_protect_start as *const () as usize, kernel_stack_protect_end as *const () as usize
+        kernel_stack_protect_start as *const () as usize,
+        kernel_stack_protect_end as *const () as usize
     );
 
     warn!(
@@ -104,7 +105,8 @@ pub fn kernel_info_debug() {
 
     warn!(
         "kernel_trap_stack_protect start at {:#x} ,End at: {:#x}",
-        kernel_trap_stack_protect_start as *const () as usize, kernel_trap_stack_protect_end as *const () as usize
+        kernel_trap_stack_protect_start as *const () as usize,
+        kernel_trap_stack_protect_end as *const () as usize
     );
 
     warn!(

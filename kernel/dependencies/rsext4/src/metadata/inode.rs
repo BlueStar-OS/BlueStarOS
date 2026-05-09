@@ -1,12 +1,15 @@
 //! Inode-local metadata mutation helpers.
 
-use crate::blockdev::{BlockDevice, Jbd2Dev};
-use crate::disknode::{Ext4Inode, Ext4Timestamp};
-use crate::error::{Ext4Error, Ext4Result};
-use crate::ext4::Ext4FileSystem;
-
-use super::time::{get_now, resolve_time_spec};
-use super::{Ext4DtimeUpdate, Ext4InodeMetadataUpdate, Ext4ModeUpdate};
+use super::{
+    Ext4DtimeUpdate, Ext4InodeMetadataUpdate, Ext4ModeUpdate,
+    time::{get_now, resolve_time_spec},
+};
+use crate::{
+    blockdev::{BlockDevice, Jbd2Dev},
+    disknode::{Ext4Inode, Ext4Timestamp},
+    error::{Ext4Error, Ext4Result},
+    ext4::Ext4FileSystem,
+};
 
 impl Ext4FileSystem {
     pub(crate) fn inode_disk_size(&self) -> u16 {
@@ -56,6 +59,11 @@ impl Ext4FileSystem {
         }
     }
 
+    /// Applies a prepared metadata update to an already loaded inode image.
+    ///
+    /// The update order mirrors Linux-style setattr handling: grow extra inode
+    /// space for requested fields, apply identity and mode changes, resolve
+    /// timestamps lazily from the device clock, and finally maintain `i_dtime`.
     pub(crate) fn apply_loaded_inode_metadata<B: BlockDevice>(
         &self,
         device: &Jbd2Dev<B>,
@@ -64,6 +72,7 @@ impl Ext4FileSystem {
     ) -> Ext4Result<()> {
         let inode_size = self.inode_disk_size();
 
+        // Grow `i_extra_isize` only for fields that are actually requested by this update.
         if update.atime.is_some() {
             let _ =
                 self.try_expand_extra_isize_for_field(inode, Ext4Inode::FIELD_END_I_ATIME_EXTRA);
@@ -81,6 +90,7 @@ impl Ext4FileSystem {
                 self.try_expand_extra_isize_for_field(inode, Ext4Inode::FIELD_END_I_CRTIME_EXTRA);
         }
 
+        // Apply mode and ownership updates before timestamp maintenance.
         if let Some(mode) = update.mode {
             match mode {
                 Ext4ModeUpdate::Replace(mode) => inode.set_mode_full(mode),
@@ -107,6 +117,7 @@ impl Ext4FileSystem {
             inode.i_projid = projid;
         }
 
+        // Resolve `Now` only once even when multiple timestamps in the same update need it.
         let mut now_cache: Option<Ext4Timestamp> = None;
 
         if let Some(spec) = update.atime
@@ -133,6 +144,7 @@ impl Ext4FileSystem {
             inode.set_crtime_ts(inode_size, ts);
         }
 
+        // `i_dtime` is maintained separately because delete-time semantics do not match normal timestamps.
         match update.dtime {
             Ext4DtimeUpdate::Keep => {}
             Ext4DtimeUpdate::Clear => inode.i_dtime = 0,

@@ -1,8 +1,8 @@
 #![no_std]
 #![no_main]
+use user_lib::error::*;
 use user_lib::print;
 use user_lib::println;
-use user_lib::error::*;
 use user_lib::syscall::{
     sys_close, sys_creat, sys_exit, sys_fork, sys_mmap, sys_open, sys_read, sys_unmap, sys_wait,
     sys_write, MmapFlags, MmapProt, O_RDONLY, O_RDWR,
@@ -10,12 +10,14 @@ use user_lib::syscall::{
 extern crate user_lib;
 
 #[no_mangle]
-pub fn main()->usize{
+pub fn main() -> usize {
     let mut pass: usize = 0;
     let mut fail: usize = 0;
 
     fn errname(ret: isize) -> &'static str {
-        if ret >= 0 { return "OK"; }
+        if ret >= 0 {
+            return "OK";
+        }
         match (-ret) as isize {
             EINVAL => "EINVAL",
             ENOMEM => "ENOMEM",
@@ -28,10 +30,20 @@ pub fn main()->usize{
         let ok = ret >= 0;
         if ok == expect_ok {
             *pass += 1;
-            println!("[PASS] {} | expect_ok={} actual_ok={} ret={:#x}", name, expect_ok, ok, ret as usize);
+            println!(
+                "[PASS] {} | expect_ok={} actual_ok={} ret={:#x}",
+                name, expect_ok, ok, ret as usize
+            );
         } else {
             *fail += 1;
-            println!("[FAIL] {} | expect_ok={} actual_ok={} ret={:#x} ({})", name, expect_ok, ok, ret as usize, errname(ret));
+            println!(
+                "[FAIL] {} | expect_ok={} actual_ok={} ret={:#x} ({})",
+                name,
+                expect_ok,
+                ok,
+                ret as usize,
+                errname(ret)
+            );
         }
     }
 
@@ -101,7 +113,11 @@ pub fn main()->usize{
         let mut b = [0u8; 1];
         let nr = sys_read(fd as usize, b.as_mut_ptr() as usize, 1);
         let _ = sys_close(fd as usize);
-        if nr == 1 { Some(b[0]) } else { None }
+        if nr == 1 {
+            Some(b[0])
+        } else {
+            None
+        }
     }
 
     println!("==== munmap strict test (POSIX/Linux-oriented) ====");
@@ -116,11 +132,23 @@ pub fn main()->usize{
 
     // 2) munmap(unmapped range) must fail (EINVAL).
     let ret2 = sys_unmap(base + 0x20000, page);
-    report(&mut pass, &mut fail, "munmap unmapped range must fail", false, ret2);
+    report(
+        &mut pass,
+        &mut fail,
+        "munmap unmapped range must fail",
+        false,
+        ret2,
+    );
 
     // 3) munmap(addr not page-aligned) must fail on Linux (EINVAL).
     let ret3 = sys_unmap(base + 1, page);
-    report(&mut pass, &mut fail, "munmap unaligned addr must fail", false, ret3);
+    report(
+        &mut pass,
+        &mut fail,
+        "munmap unaligned addr must fail",
+        false,
+        ret3,
+    );
 
     // 4) Basic: map 1 page, touch, munmap, then accessing should fault.
     let ret4_map = sys_mmap(
@@ -131,14 +159,26 @@ pub fn main()->usize{
         -1,
         0,
     );
-    report(&mut pass, &mut fail, "mmap 1 page for munmap", true, ret4_map);
+    report(
+        &mut pass,
+        &mut fail,
+        "mmap 1 page for munmap",
+        true,
+        ret4_map,
+    );
     if ret4_map >= 0 {
         let mapped = ret4_map as usize;
         let v = touch_u8(mapped, 0x66);
         report_bool(&mut pass, &mut fail, "touch before munmap", true, v == 0x66);
 
         let ret4_un = sys_unmap(mapped, page);
-        report(&mut pass, &mut fail, "munmap full page should succeed", true, ret4_un);
+        report(
+            &mut pass,
+            &mut fail,
+            "munmap full page should succeed",
+            true,
+            ret4_un,
+        );
 
         let pid = sys_fork();
         if pid == 0 {
@@ -152,8 +192,20 @@ pub fn main()->usize{
         if pid > 0 {
             let mut code: isize = 0;
             let waited = sys_wait(&mut code as *mut isize);
-            report(&mut pass, &mut fail, "wait child after post-munmap access", true, waited);
-            report_bool(&mut pass, &mut fail, "post-munmap access should not exit(0)", true, code != 0);
+            report(
+                &mut pass,
+                &mut fail,
+                "wait child after post-munmap access",
+                true,
+                waited,
+            );
+            report_bool(
+                &mut pass,
+                &mut fail,
+                "post-munmap access should not exit(0)",
+                true,
+                code != 0,
+            );
         }
     }
 
@@ -168,26 +220,74 @@ pub fn main()->usize{
         -1,
         0,
     );
-    report(&mut pass, &mut fail, "mmap 3 pages for partial munmap", true, ret5_map);
+    report(
+        &mut pass,
+        &mut fail,
+        "mmap 3 pages for partial munmap",
+        true,
+        ret5_map,
+    );
     if ret5_map >= 0 {
         let a0 = base5;
         let a1 = base5 + page;
         let a2 = base5 + page * 2;
-        report_bool(&mut pass, &mut fail, "touch page0", true, touch_u8(a0, 0x10) == 0x10);
-        report_bool(&mut pass, &mut fail, "touch page1", true, touch_u8(a1, 0x11) == 0x11);
-        report_bool(&mut pass, &mut fail, "touch page2", true, touch_u8(a2, 0x12) == 0x12);
+        report_bool(
+            &mut pass,
+            &mut fail,
+            "touch page0",
+            true,
+            touch_u8(a0, 0x10) == 0x10,
+        );
+        report_bool(
+            &mut pass,
+            &mut fail,
+            "touch page1",
+            true,
+            touch_u8(a1, 0x11) == 0x11,
+        );
+        report_bool(
+            &mut pass,
+            &mut fail,
+            "touch page2",
+            true,
+            touch_u8(a2, 0x12) == 0x12,
+        );
 
         let ret5_un = sys_unmap(a1, page);
-        report(&mut pass, &mut fail, "munmap middle page should succeed", true, ret5_un);
+        report(
+            &mut pass,
+            &mut fail,
+            "munmap middle page should succeed",
+            true,
+            ret5_un,
+        );
 
         // page0 still ok
-        probe_read_u8(&mut pass, &mut fail, "page0 after partial munmap ok", a0, true);
+        probe_read_u8(
+            &mut pass,
+            &mut fail,
+            "page0 after partial munmap ok",
+            a0,
+            true,
+        );
 
         // page1 should fault
-        probe_read_u8(&mut pass, &mut fail, "page1 after partial munmap should fault", a1, false);
+        probe_read_u8(
+            &mut pass,
+            &mut fail,
+            "page1 after partial munmap should fault",
+            a1,
+            false,
+        );
 
         // page2 still ok
-        probe_read_u8(&mut pass, &mut fail, "page2 after partial munmap ok", a2, true);
+        probe_read_u8(
+            &mut pass,
+            &mut fail,
+            "page2 after partial munmap ok",
+            a2,
+            true,
+        );
     }
 
     // 6) munmap prefix: map 4 pages, unmap first 2 pages.
@@ -200,7 +300,13 @@ pub fn main()->usize{
         -1,
         0,
     );
-    report(&mut pass, &mut fail, "mmap 4 pages for prefix munmap", true, ret6_map);
+    report(
+        &mut pass,
+        &mut fail,
+        "mmap 4 pages for prefix munmap",
+        true,
+        ret6_map,
+    );
     if ret6_map >= 0 {
         let p0 = base6;
         let p1 = base6 + page;
@@ -211,7 +317,13 @@ pub fn main()->usize{
         let _ = touch_u8(p2, 0x32);
         let _ = touch_u8(p3, 0x33);
         let ret6_un = sys_unmap(base6, page * 2);
-        report(&mut pass, &mut fail, "munmap prefix(2 pages) should succeed", true, ret6_un);
+        report(
+            &mut pass,
+            &mut fail,
+            "munmap prefix(2 pages) should succeed",
+            true,
+            ret6_un,
+        );
         probe_read_u8(&mut pass, &mut fail, "prefix page0 should fault", p0, false);
         probe_read_u8(&mut pass, &mut fail, "prefix page1 should fault", p1, false);
         probe_read_u8(&mut pass, &mut fail, "prefix page2 should ok", p2, true);
@@ -228,7 +340,13 @@ pub fn main()->usize{
         -1,
         0,
     );
-    report(&mut pass, &mut fail, "mmap 4 pages for suffix munmap", true, ret7_map);
+    report(
+        &mut pass,
+        &mut fail,
+        "mmap 4 pages for suffix munmap",
+        true,
+        ret7_map,
+    );
     if ret7_map >= 0 {
         let p0 = base7;
         let p1 = base7 + page;
@@ -239,7 +357,13 @@ pub fn main()->usize{
         let _ = touch_u8(p2, 0x42);
         let _ = touch_u8(p3, 0x43);
         let ret7_un = sys_unmap(base7 + page * 2, page * 2);
-        report(&mut pass, &mut fail, "munmap suffix(2 pages) should succeed", true, ret7_un);
+        report(
+            &mut pass,
+            &mut fail,
+            "munmap suffix(2 pages) should succeed",
+            true,
+            ret7_un,
+        );
         probe_read_u8(&mut pass, &mut fail, "suffix page0 should ok", p0, true);
         probe_read_u8(&mut pass, &mut fail, "suffix page1 should ok", p1, true);
         probe_read_u8(&mut pass, &mut fail, "suffix page2 should fault", p2, false);
@@ -256,7 +380,13 @@ pub fn main()->usize{
         -1,
         0,
     );
-    report(&mut pass, &mut fail, "mmap 5 pages for 2-page hole munmap", true, ret8_map);
+    report(
+        &mut pass,
+        &mut fail,
+        "mmap 5 pages for 2-page hole munmap",
+        true,
+        ret8_map,
+    );
     if ret8_map >= 0 {
         let p0 = base8;
         let p1 = base8 + page;
@@ -269,7 +399,13 @@ pub fn main()->usize{
         let _ = touch_u8(p3, 0x53);
         let _ = touch_u8(p4, 0x54);
         let ret8_un = sys_unmap(base8 + page, page * 2);
-        report(&mut pass, &mut fail, "munmap hole(2 pages) should succeed", true, ret8_un);
+        report(
+            &mut pass,
+            &mut fail,
+            "munmap hole(2 pages) should succeed",
+            true,
+            ret8_un,
+        );
         probe_read_u8(&mut pass, &mut fail, "hole p0 ok", p0, true);
         probe_read_u8(&mut pass, &mut fail, "hole p1 fault", p1, false);
         probe_read_u8(&mut pass, &mut fail, "hole p2 fault", p2, false);
@@ -287,12 +423,30 @@ pub fn main()->usize{
         -1,
         0,
     );
-    report(&mut pass, &mut fail, "mmap 1 page for len=1 munmap", true, ret9_map);
+    report(
+        &mut pass,
+        &mut fail,
+        "mmap 1 page for len=1 munmap",
+        true,
+        ret9_map,
+    );
     if ret9_map >= 0 {
         let _ = touch_u8(base9, 0x60);
         let ret9_un = sys_unmap(base9, 1);
-        report(&mut pass, &mut fail, "munmap len=1 should succeed", true, ret9_un);
-        probe_read_u8(&mut pass, &mut fail, "after munmap len=1 should fault", base9, false);
+        report(
+            &mut pass,
+            &mut fail,
+            "munmap len=1 should succeed",
+            true,
+            ret9_un,
+        );
+        probe_read_u8(
+            &mut pass,
+            &mut fail,
+            "after munmap len=1 should fault",
+            base9,
+            false,
+        );
     }
 
     // 10) cross-area munmap: create two MAP_FIXED areas with a gap, unmap spanning tail/head.
@@ -305,7 +459,13 @@ pub fn main()->usize{
         -1,
         0,
     );
-    report(&mut pass, &mut fail, "MAP_FIXED area A (2 pages)", true, ret10_a);
+    report(
+        &mut pass,
+        &mut fail,
+        "MAP_FIXED area A (2 pages)",
+        true,
+        ret10_a,
+    );
     let ret10_b = sys_mmap(
         base10 + page * 3,
         page * 2,
@@ -314,7 +474,13 @@ pub fn main()->usize{
         -1,
         0,
     );
-    report(&mut pass, &mut fail, "MAP_FIXED area B (2 pages)", true, ret10_b);
+    report(
+        &mut pass,
+        &mut fail,
+        "MAP_FIXED area B (2 pages)",
+        true,
+        ret10_b,
+    );
     if ret10_a >= 0 && ret10_b >= 0 {
         let a0 = base10;
         let a1 = base10 + page;
@@ -326,7 +492,13 @@ pub fn main()->usize{
         let _ = touch_u8(b1, 0x73);
         // unmap a1 and b0 together
         let ret10_un = sys_unmap(a1, page * 3);
-        report(&mut pass, &mut fail, "cross-area munmap should succeed", true, ret10_un);
+        report(
+            &mut pass,
+            &mut fail,
+            "cross-area munmap should succeed",
+            true,
+            ret10_un,
+        );
         probe_read_u8(&mut pass, &mut fail, "cross-area a0 ok", a0, true);
         probe_read_u8(&mut pass, &mut fail, "cross-area a1 fault", a1, false);
         probe_read_u8(&mut pass, &mut fail, "cross-area b0 fault", b0, false);
@@ -339,11 +511,23 @@ pub fn main()->usize{
     let fd11 = sys_creat(path11);
     report(&mut pass, &mut fail, "creat drop(shared) file", true, fd11);
     if fd11 >= 0 {
-        write_fill_4096(&mut pass, &mut fail, fd11 as usize, b'A', "init drop(shared) file page0");
+        write_fill_4096(
+            &mut pass,
+            &mut fail,
+            fd11 as usize,
+            b'A',
+            "init drop(shared) file page0",
+        );
         let _ = sys_close(fd11 as usize);
     }
     let fd11_rw = sys_open(path11, O_RDWR);
-    report(&mut pass, &mut fail, "open(O_RDWR) drop(shared)", true, fd11_rw);
+    report(
+        &mut pass,
+        &mut fail,
+        "open(O_RDWR) drop(shared)",
+        true,
+        fd11_rw,
+    );
     let pid11 = if fd11_rw >= 0 { sys_fork() } else { -1 };
     if pid11 == 0 {
         let mapped = sys_mmap(
@@ -366,10 +550,28 @@ pub fn main()->usize{
         let _ = sys_close(fd11_rw as usize);
         let mut code: isize = 0;
         let waited = sys_wait(&mut code as *mut isize);
-        report(&mut pass, &mut fail, "wait child drop(shared)", true, waited);
-        report_bool(&mut pass, &mut fail, "child drop(shared) should exit(0)", true, code == 0);
+        report(
+            &mut pass,
+            &mut fail,
+            "wait child drop(shared)",
+            true,
+            waited,
+        );
+        report_bool(
+            &mut pass,
+            &mut fail,
+            "child drop(shared) should exit(0)",
+            true,
+            code == 0,
+        );
         let b = read_first_byte(path11);
-        report_bool(&mut pass, &mut fail, "drop(shared) should write back", true, b == Some(b'S'));
+        report_bool(
+            &mut pass,
+            &mut fail,
+            "drop(shared) should write back",
+            true,
+            b == Some(b'S'),
+        );
     }
 
     // 12) Drop(MapSet) cleanup: MAP_PRIVATE should not write back.
@@ -378,11 +580,23 @@ pub fn main()->usize{
     let fd12 = sys_creat(path12);
     report(&mut pass, &mut fail, "creat drop(private) file", true, fd12);
     if fd12 >= 0 {
-        write_fill_4096(&mut pass, &mut fail, fd12 as usize, b'A', "init drop(private) file page0");
+        write_fill_4096(
+            &mut pass,
+            &mut fail,
+            fd12 as usize,
+            b'A',
+            "init drop(private) file page0",
+        );
         let _ = sys_close(fd12 as usize);
     }
     let fd12_rw = sys_open(path12, O_RDWR);
-    report(&mut pass, &mut fail, "open(O_RDWR) drop(private)", true, fd12_rw);
+    report(
+        &mut pass,
+        &mut fail,
+        "open(O_RDWR) drop(private)",
+        true,
+        fd12_rw,
+    );
     let pid12 = if fd12_rw >= 0 { sys_fork() } else { -1 };
     if pid12 == 0 {
         let mapped = sys_mmap(
@@ -405,12 +619,37 @@ pub fn main()->usize{
         let _ = sys_close(fd12_rw as usize);
         let mut code: isize = 0;
         let waited = sys_wait(&mut code as *mut isize);
-        report(&mut pass, &mut fail, "wait child drop(private)", true, waited);
-        report_bool(&mut pass, &mut fail, "child drop(private) should exit(0)", true, code == 0);
+        report(
+            &mut pass,
+            &mut fail,
+            "wait child drop(private)",
+            true,
+            waited,
+        );
+        report_bool(
+            &mut pass,
+            &mut fail,
+            "child drop(private) should exit(0)",
+            true,
+            code == 0,
+        );
         let b = read_first_byte(path12);
-        report_bool(&mut pass, &mut fail, "drop(private) should not write back", true, b == Some(b'A'));
+        report_bool(
+            &mut pass,
+            &mut fail,
+            "drop(private) should not write back",
+            true,
+            b == Some(b'A'),
+        );
     }
 
-    println!("==== munmap strict test done: pass={} fail={} ====", pass, fail);
-    if fail == 0 { 0 } else { 1 }
+    println!(
+        "==== munmap strict test done: pass={} fail={} ====",
+        pass, fail
+    );
+    if fail == 0 {
+        0
+    } else {
+        1
+    }
 }

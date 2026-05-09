@@ -3,16 +3,7 @@
 
 extern crate user_lib;
 
-use user_lib::{
-    args,
-    print,
-    println,
-    sys_close,
-    sys_open,
-    sys_read,
-    sys_write,
-    O_RDONLY,
-};
+use user_lib::{args, print, println, sys_close, sys_open, sys_read, sys_write, O_RDONLY};
 
 #[no_mangle]
 pub fn main() -> usize {

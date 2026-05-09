@@ -2,10 +2,10 @@
 #![no_main]
 
 extern crate user_lib;
-use user_lib::print;
-use user_lib::{args, println};
 use user_lib::error::*;
+use user_lib::print;
 use user_lib::syscall::sys_umount2;
+use user_lib::{args, println};
 
 fn errname(ret: isize) -> &'static str {
     match (-ret) as isize {

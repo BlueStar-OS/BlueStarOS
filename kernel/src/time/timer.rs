@@ -31,7 +31,6 @@ pub fn get_time_tick() -> usize {
 /// tick → 毫秒转换。
 /// 先乘再除防止整数截断导致精度丢失。
 pub fn get_time_ms() -> usize {
-    
     (read_time() * MSEC) / CPU_CIRCLE
 }
 
@@ -42,7 +41,6 @@ pub fn get_time_us() -> usize {
 
 /// tick → 纳秒转换。
 pub fn get_time_ns() -> usize {
-    
     (read_time() * MNS) / CPU_CIRCLE
 }
 

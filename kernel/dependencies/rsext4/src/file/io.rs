@@ -1,5 +1,5 @@
 use super::*;
-
+use crate::bmalloc::LogicalBN;
 pub fn truncate<B: BlockDevice>(
     device: &mut Jbd2Dev<B>,
     fs: &mut Ext4FileSystem,
@@ -8,7 +8,7 @@ pub fn truncate<B: BlockDevice>(
 ) -> Ext4Result<()> {
     let norm_path = split_paren_child_and_tranlatevalid(path);
 
-    // 首先找到目标文件。
+    // Resolve the target inode once, then delegate to the inode-based helper.
     let (inode_num, _inode) = match get_inode_with_num(fs, device, &norm_path).ok().flatten() {
         Some(v) => v,
         None => return Err(Ext4Error::not_found()),
@@ -37,7 +37,7 @@ fn truncate_inode<B: BlockDevice>(
         return Ok(());
     }
 
-    let block_bytes = BLOCK_SIZE as u64;
+    let block_bytes = fs.block_size as u64;
     let old_blocks = if old_size == 0 {
         0u64
     } else {
@@ -49,19 +49,19 @@ fn truncate_inode<B: BlockDevice>(
         truncate_size.div_ceil(block_bytes)
     };
 
-    // extent 分支：支持 grow；shrink 仅支持 truncate 到 0（否则需要删/裁剪 extent）
+    // Extent-backed files handle sparse growth and extent-aware shrinking here.
     if fs.superblock.has_extents() && inode.have_extend_header_and_use_extend() {
         if truncate_size < old_size {
-            // shrink：删除逻辑范围尾部，但 hole 不应导致 double free。
-            // 通过 ExtentTree::remove_extend 让 extent tree 内部负责释放物理块。
+            // Delegate range removal to the extent tree so physical-block frees
+            // stay consistent even when holes exist.
             let del_start_lbn = new_blocks as u32;
 
             loop {
-                let blocks_map = resolve_inode_block_allextend(fs, device, &mut inode)?;
+                let blocks_map = resolve_inode_block_allextend(device, &mut inode)?;
                 let del_len = if truncate_size == 0 {
                     blocks_map.len() as u32
                 } else {
-                    blocks_map.range(del_start_lbn..).count() as u32
+                    blocks_map.range(LogicalBN::new(del_start_lbn)..).count() as u32
                 };
 
                 if del_len == 0 {
@@ -69,25 +69,26 @@ fn truncate_inode<B: BlockDevice>(
                 }
 
                 let start_lbn = if truncate_size == 0 {
-                    // Plan B: start from the first mapped LBN to avoid rescanning from 0 repeatedly.
+                    // Start from the first mapped logical block to avoid
+                    // rescanning from zero on sparse files.
                     let Some((&first_lbn, _)) = blocks_map.iter().next() else {
                         break;
                     };
                     first_lbn
                 } else {
-                    del_start_lbn
+                    LogicalBN::new(del_start_lbn)
                 };
 
-                let chunk = core::cmp::min(del_len, 0x7FFF);
+                let chunk = core::cmp::min(del_len, Ext4Extent::EXT_INIT_MAX_LEN as u32);
                 {
-                    let mut tree = ExtentTree::new(&mut inode);
+                    let mut tree = ExtentTree::with_checksum(&mut inode, &fs.superblock, inode_num);
                     tree.remove_extend(fs, Ext4Extent::new(start_lbn, 0, chunk as u16), device)?;
                 }
             }
         }
 
         if new_blocks > old_blocks {
-            let mut new_blocks_map: Vec<(u32, AbsoluteBN)> = Vec::new();
+            let mut new_blocks_map: Vec<(LogicalBN, AbsoluteBN)> = Vec::new();
             for lbn in old_blocks as u32..new_blocks as u32 {
                 let phys = fs.alloc_block(device)?;
                 fs.datablock_cache.modify_new(device, phys, |data| {
@@ -95,10 +96,10 @@ fn truncate_inode<B: BlockDevice>(
                         *b = 0;
                     }
                 })?;
-                new_blocks_map.push((lbn, phys));
+                new_blocks_map.push((LogicalBN::new(lbn), phys));
             }
 
-            let mut tree = ExtentTree::new(&mut inode);
+            let mut tree = ExtentTree::with_checksum(&mut inode, &fs.superblock, inode_num);
             if !new_blocks_map.is_empty() {
                 let mut idx = 0usize;
                 while idx < new_blocks_map.len() {
@@ -109,7 +110,7 @@ fn truncate_inode<B: BlockDevice>(
                     idx += 1;
                     while idx < new_blocks_map.len() {
                         let (cur_lbn, cur_phys) = new_blocks_map[idx];
-                        if cur_lbn == last_lbn + 1
+                        if cur_lbn == last_lbn.checked_add(1).unwrap_or(LogicalBN::new(0))
                             && last_phys.checked_add(1).ok() == Some(cur_phys)
                         {
                             run_len = run_len.saturating_add(1);
@@ -129,8 +130,12 @@ fn truncate_inode<B: BlockDevice>(
         inode.i_size_lo = (truncate_size & 0xffff_ffff) as u32;
         inode.i_size_high = (truncate_size >> 32) as u32;
         // i_blocks reflects number of allocated blocks, not logical length. Recompute after edits.
-        let alloc_blocks = resolve_inode_block_allextend(fs, device, &mut inode)?.len() as u64;
-        let iblocks_used = alloc_blocks.saturating_mul(BLOCK_SIZE as u64 / 512);
+        let alloc_blocks = resolve_inode_block_allextend(device, &mut inode)?.len() as u64;
+        let extent_tree_blocks = ExtentTree::with_checksum(&mut inode, &fs.superblock, inode_num)
+            .external_node_blocks(device)?
+            .len() as u64;
+        let iblocks_used =
+            alloc_blocks.saturating_add(extent_tree_blocks) * (fs.block_size as u64 / 512);
         inode.i_blocks_lo = (iblocks_used & 0xffff_ffff) as u32;
         inode.l_i_blocks_high = ((iblocks_used >> 32) & 0xffff) as u16;
 
@@ -143,13 +148,12 @@ fn truncate_inode<B: BlockDevice>(
         return Ok(());
     }
 
-    //todo:
-    // 非 extent：仅支持 12 个直接块（现有实现本来就不支持间接块）
+    // Non-extent files currently support only the 12 direct block pointers.
     if new_blocks > 12 {
         return Err(Ext4Error::unsupported());
     }
 
-    // grow：分配新块并填 0，写入 i_block
+    // Grow by allocating and zeroing new direct blocks.
     if new_blocks > old_blocks {
         for lbn in old_blocks as u32..new_blocks as u32 {
             let phys = fs.alloc_block(device)?;
@@ -162,7 +166,7 @@ fn truncate_inode<B: BlockDevice>(
         }
     }
 
-    // shrink：释放尾部块，并清空 i_block
+    // Shrink by freeing trailing direct blocks and clearing their pointers.
     if new_blocks < old_blocks {
         for lbn in new_blocks as u32..old_blocks as u32 {
             let phys = inode.i_block[lbn as usize];
@@ -176,7 +180,7 @@ fn truncate_inode<B: BlockDevice>(
 
     inode.i_size_lo = (truncate_size & 0xffff_ffff) as u32;
     inode.i_size_high = (truncate_size >> 32) as u32;
-    let iblocks_used = new_blocks.saturating_mul(BLOCK_SIZE as u64 / 512);
+    let iblocks_used = new_blocks.saturating_mul(fs.block_size as u64 / 512);
     inode.i_blocks_lo = (iblocks_used & 0xffff_ffff) as u32;
     inode.l_i_blocks_high = ((iblocks_used >> 32) & 0xffff) as u16;
 
@@ -208,12 +212,12 @@ fn read_symlink_target<B: BlockDevice>(
         return Ok(raw[..size].to_vec());
     }
 
-    let block_bytes = BLOCK_SIZE;
+    let block_bytes = fs.block_size;
     let total_blocks = size.div_ceil(block_bytes);
     let mut buf = Vec::with_capacity(size);
 
     if inode.have_extend_header_and_use_extend() {
-        let blocks = resolve_inode_block_allextend(fs, device, inode)?;
+        let blocks = resolve_inode_block_allextend(device, inode)?;
         for &phys in blocks.values() {
             let cached = fs.datablock_cache.get_or_load(device, phys)?;
             let data = &cached.data[..block_bytes];
@@ -300,13 +304,13 @@ fn read_file_follow<B: BlockDevice>(
         return Ok(Vec::new());
     }
 
-    let block_bytes = BLOCK_SIZE;
+    let block_bytes = fs.block_size;
     let total_blocks = size.div_ceil(block_bytes);
 
     let mut buf = Vec::with_capacity(size);
 
     if inode.have_extend_header_and_use_extend() {
-        let blocks = resolve_inode_block_allextend(fs, device, &mut inode)?;
+        let blocks = resolve_inode_block_allextend(device, &mut inode)?;
         for &phys in blocks.values() {
             let cached = fs.datablock_cache.get_or_load(device, phys)?;
             let data = &cached.data[..block_bytes];
@@ -355,7 +359,7 @@ pub fn write_file<B: BlockDevice>(
         return Ok(());
     }
 
-    // 获取 inode 及其 inode 号
+    // Resolve the inode once before switching to the inode-based writer.
     let info = match get_inode_with_num(fs, device, path).ok().flatten() {
         Some(v) => v,
         None => return Err(Ext4Error::not_found()),
@@ -379,11 +383,10 @@ fn write_inode_data<B: BlockDevice>(
     let mut inode = fs.get_inode_by_num(device, inode_num)?;
 
     let old_size = inode.size();
-    let block_bytes = BLOCK_SIZE as u64;
+    let block_bytes = fs.block_size as u64;
 
-    // If extents are supported, make sure the inode has a valid extent header
-    // before any extent-based operations. Some inodes may have EXTENTS flag set
-    // but the on-disk header is missing/invalid.
+    // Some older or partially initialized inodes may carry the extents flag
+    // without a valid embedded header. Repair that before extent operations.
     if fs.superblock.has_extents() && !inode.have_extend_header_and_use_extend() {
         inode.i_flags |= Ext4Inode::EXT4_EXTENTS_FL;
         inode.write_extend_header();
@@ -398,47 +401,39 @@ fn write_inode_data<B: BlockDevice>(
     let start_lbn = offset / block_bytes;
     let end_lbn = (end - 1) / block_bytes;
 
-    // Extent files may be sparse. For writes that cross holes, allocate blocks on-demand.
+    // Non-extent files cannot grow through sparse writes in this implementation.
     if end > old_size
         && (!fs.superblock.has_extents() || !inode.have_extend_header_and_use_extend())
     {
-        // 只在 extent 模式下支持扩展
         return Err(Ext4Error::unsupported());
     }
 
-    let mut blocks_map = if inode.have_extend_header_and_use_extend() {
-        Some(resolve_inode_block_allextend(fs, device, &mut inode)?)
-    } else {
-        None
-    };
-
     for lbn in start_lbn..=end_lbn {
         let phys = if inode.have_extend_header_and_use_extend() {
-            let map = blocks_map.as_mut().ok_or(Ext4Error::corrupted())?;
-            if let Some(&b) = map.get(&(lbn as u32)) {
-                b
-            } else {
-                // Hole: allocate a new block and insert an extent for this single LBN.
-                let new_phys = fs.alloc_block(device)?;
-                fs.datablock_cache.modify_new(device, new_phys, |blk| {
-                    for b in blk.iter_mut() {
-                        *b = 0;
+            match resolve_inode_block(device, &mut inode, lbn as u32)? {
+                Some(b) => b,
+                None => {
+                    let new_phys = fs.alloc_block(device)?;
+                    fs.datablock_cache.modify_new(device, new_phys, |blk| {
+                        for b in blk.iter_mut() {
+                            *b = 0;
+                        }
+                    })?;
+                    {
+                        let mut tree =
+                            ExtentTree::with_checksum(&mut inode, &fs.superblock, inode_num);
+                        let ext = Ext4Extent::new(LogicalBN::new(lbn as u32), new_phys.raw(), 1);
+                        tree.insert_extent(fs, ext, device)?;
                     }
-                })?;
-                {
-                    let mut tree = ExtentTree::new(&mut inode);
-                    let ext = Ext4Extent::new(lbn as u32, new_phys.raw(), 1);
-                    tree.insert_extent(fs, ext, device)?;
+
+                    let current_iblocks =
+                        ((inode.l_i_blocks_high as u64) << 32) | u64::from(inode.i_blocks_lo);
+                    let next_iblocks = current_iblocks.saturating_add(fs.block_size as u64 / 512);
+                    inode.i_blocks_lo = next_iblocks as u32;
+                    inode.l_i_blocks_high = (next_iblocks >> 32) as u16;
+
+                    new_phys
                 }
-                map.insert(lbn as u32, new_phys);
-
-                let add_iblocks = (BLOCK_SIZE / 512) as u32;
-                inode.i_blocks_lo = inode.i_blocks_lo.saturating_add(add_iblocks);
-                inode.l_i_blocks_high = inode
-                    .l_i_blocks_high
-                    .saturating_add(((add_iblocks as u64) >> 32) as u16);
-
-                new_phys
             }
         } else {
             match resolve_inode_block(device, &mut inode, lbn as u32)? {

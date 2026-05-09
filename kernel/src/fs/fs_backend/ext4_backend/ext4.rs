@@ -1,13 +1,13 @@
 use crate::fs::vfs::*;
 use alloc::string::ToString;
-use rsext4::api::{fs_mount, fs_umount, OpenFile};
+use rsext4::api::{fs_mount, fs_umount, OpenFile, SeekWhence};
 use rsext4::dir::get_inode_with_num;
 use rsext4::entries::DirEntryIterator;
 use rsext4::loopfile::resolve_inode_block_allextend;
 use rsext4::{
     lseek as ext4_lseek, mkdir as ext4_mkdir, mkfile as ext4_mkfile, mv as ext4_mv,
     open as ext4_open, read_at as ext4_read_at, rename as ext4_rename, truncate as ext4_truncate,
-    unlink as ext4_unlink, write_at as ext4_write_at, Ext4FileSystem, Jbd2Dev, BLOCK_SIZE,
+    unlink as ext4_unlink, write_at as ext4_write_at, Ext4FileSystem, Jbd2Dev,
 };
 
 use super::Ext4BlockDevice;
@@ -76,7 +76,14 @@ impl File for Ext4File {
             let mut of = self.of.lock();
             if self.flags.contains(OpenFlags::APPEND) {
                 let end = of.inode.size();
-                ext4_lseek(&mut of, end).map_err(|_| VfsFsError::IO)?;
+                ext4_lseek(
+                    &mut ext4.dev,
+                    fs_inner,
+                    &mut of,
+                    end as i64,
+                    SeekWhence::Set,
+                )
+                .map_err(|_| VfsFsError::IO)?;
             }
             ext4_write_at(&mut ext4.dev, fs_inner, &mut of, buf).map_err(|_| VfsFsError::IO)?;
             Ok(buf.len())
@@ -90,7 +97,14 @@ impl File for Ext4File {
         let data = self.with_ext4_mut(|ext4| {
             let fs_inner = ext4.fs.as_mut().ok_or(VfsFsError::IO)?;
             let mut of = self.of.lock();
-            ext4_lseek(&mut of, offset as u64).map_err(|_| VfsFsError::IO)?;
+            ext4_lseek(
+                &mut ext4.dev,
+                fs_inner,
+                &mut of,
+                offset as i64,
+                SeekWhence::Set,
+            )
+            .map_err(|_| VfsFsError::IO)?;
             ext4_read_at(&mut ext4.dev, fs_inner, &mut of, buf.len()).map_err(|_| VfsFsError::IO)
         })?;
         let n = core::cmp::min(buf.len(), data.len());
@@ -105,30 +119,37 @@ impl File for Ext4File {
         self.with_ext4_mut(|ext4| {
             let fs_inner = ext4.fs.as_mut().ok_or(VfsFsError::IO)?;
             let mut of = self.of.lock();
-            ext4_lseek(&mut of, offset as u64).map_err(|_| VfsFsError::IO)?;
+            ext4_lseek(
+                &mut ext4.dev,
+                fs_inner,
+                &mut of,
+                offset as i64,
+                SeekWhence::Set,
+            )
+            .map_err(|_| VfsFsError::IO)?;
             ext4_write_at(&mut ext4.dev, fs_inner, &mut of, buf).map_err(|_| VfsFsError::IO)?;
             Ok(buf.len())
         })
     }
 
     fn lseek(&self, offset: isize, whence: usize) -> Result<usize, VfsFsError> {
-        let mut of = self.of.lock();
-        let cur = of.offset as i64;
-        let off = offset as i64;
-        let new_off = match whence {
-            0 => off,
-            1 => cur.saturating_add(off),
-            2 => {
-                let end = of.inode.size() as i64;
-                end.saturating_add(off)
-            }
-            _ => return Err(VfsFsError::NotSupported),
+        let seek_whence = match whence {
+            0 => SeekWhence::Set,
+            1 => SeekWhence::Cur,
+            2 => SeekWhence::End,
+            3 => SeekWhence::Data,
+            4 => SeekWhence::Hole,
+            _ => return Err(VfsFsError::Invalid),
         };
-        if new_off < 0 {
-            return Err(VfsFsError::NotSupported);
-        }
-        ext4_lseek(&mut of, new_off as u64).map_err(|_| VfsFsError::IO)?;
-        Ok(of.offset as usize)
+
+        self.with_ext4_mut(|ext4| {
+            let fs_inner = ext4.fs.as_mut().ok_or(VfsFsError::IO)?;
+            let mut of = self.of.lock();
+            let new_offset =
+                ext4_lseek(&mut ext4.dev, fs_inner, &mut of, offset as i64, seek_whence)
+                    .map_err(|_| VfsFsError::IO)?;
+            Ok(new_offset as usize)
+        })
     }
 
     fn stat(&self) -> Result<VfsStat, VfsFsError> {
@@ -167,7 +188,7 @@ impl File for Ext4File {
             if !dir_inode.is_dir() {
                 return Err(VfsFsError::NotDir);
             }
-            let blocks = resolve_inode_block_allextend(fs_inner, &mut ext4.dev, &mut dir_inode)
+            let blocks = resolve_inode_block_allextend(&mut ext4.dev, &mut dir_inode)
                 .map_err(|_| VfsFsError::IO)?;
             Ok(blocks)
         })?;
@@ -179,11 +200,12 @@ impl File for Ext4File {
         for &phys in blocks.values() {
             let data: Vec<u8> = self.with_ext4_mut(|ext4| {
                 let fs_inner = ext4.fs.as_mut().ok_or(VfsFsError::IO)?;
+                let block_size = fs_inner.superblock.block_size() as usize;
                 let cached = fs_inner
                     .datablock_cache
                     .get_or_load(&mut ext4.dev, phys)
                     .map_err(|_| VfsFsError::IO)?;
-                Ok(cached.data[..BLOCK_SIZE].to_vec())
+                Ok(cached.data[..block_size].to_vec())
             })?;
             let data = &data[..];
             let iter = DirEntryIterator::new(data);
@@ -281,7 +303,14 @@ impl VfsFs for Ext4Fs {
         .map_err(|_| VfsFsError::IO)?;
         if flags.contains(OpenFlags::APPEND) {
             let end = of.inode.size() as u64;
-            ext4_lseek(&mut of, end).map_err(|_| VfsFsError::IO)?;
+            ext4_lseek(
+                &mut self.dev,
+                fs_inner,
+                &mut of,
+                end as i64,
+                SeekWhence::Set,
+            )
+            .map_err(|_| VfsFsError::IO)?;
         }
         if flags.contains(OpenFlags::TRUNC) {
             if flags.writable() {

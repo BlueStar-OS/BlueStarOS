@@ -41,7 +41,8 @@ fn log_user_fault_detail(tag: &str) {
 pub extern "C" fn app_entry_point() {
     set_kernel_trap_handler();
     let user_satp = TASK_MANAER.get_current_stap();
-    let restore_va = __kernel_refume as *const () as usize - __kernel_trap as *const () as usize + TRAP_BOTTOM_ADDR;
+    let restore_va = __kernel_refume as *const () as usize - __kernel_trap as *const () as usize
+        + TRAP_BOTTOM_ADDR;
     unsafe {
         asm!(
             "fence.i",

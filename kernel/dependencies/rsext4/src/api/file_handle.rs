@@ -1,7 +1,8 @@
-use crate::bmalloc::InodeNumber;
-use crate::disknode::Ext4Inode;
 use alloc::string::String;
 
+use crate::{
+    BlockDevice, Ext4FileSystem, Ext4Result, Jbd2Dev, bmalloc::InodeNumber, disknode::Ext4Inode,
+};
 /// Open file state tracked by the high-level API.
 pub struct OpenFile {
     /// Inode number of the opened file.
@@ -12,4 +13,18 @@ pub struct OpenFile {
     pub inode: Ext4Inode,
     /// Current file offset in bytes.
     pub offset: u64,
+}
+
+/// Refreshes the cached inode view using the inode number (fd-like behavior).
+///
+/// This avoids path-based relookup (which would diverge from Linux fd semantics
+/// after rename/unlink).
+pub fn refresh_open_file_inode_by_num<B: BlockDevice>(
+    dev: &mut Jbd2Dev<B>,
+    fs: &mut Ext4FileSystem,
+    file: &mut OpenFile,
+) -> Ext4Result<()> {
+    // flush memory inode shnapshot from inode table cache or disk
+    file.inode = fs.get_inode_by_num(dev, file.inode_num)?;
+    Ok(())
 }

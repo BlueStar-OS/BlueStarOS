@@ -195,6 +195,14 @@ pub trait File: Send + Sync + Any {
         Ok(())
     }
 
+    /// 设备控制接口。
+    ///
+    /// 普通文件默认不支持 `ioctl`；字符设备/块设备如需暴露额外控制命令，
+    /// 可以覆盖此方法。
+    fn ioctl(&self, _cmd: u32, _arg: usize) -> Result<usize, VfsFsError> {
+        Err(VfsFsError::NotSupported)
+    }
+
     /// 将 `&self` 转为 `&dyn Any`，用于向下转型到具体文件类型。
     ///
     /// 仅在 `Self: Sized` 时可用——即只能对具体类型调用，

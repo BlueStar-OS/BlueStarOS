@@ -2,12 +2,11 @@
 #[cfg(target_arch = "aarch64")]
 #[allow(dead_code)]
 use crate::crc32c::arm64::*;
-
 use crate::superblock::Ext4Superblock;
 
 const POLY: u32 = 0x82F63B78;
 
-// 编译时生成 CRC 表，无需硬编码巨大的数组
+// Build the CRC lookup table at compile time instead of embedding a large literal.
 const fn generate_table() -> [u32; 256] {
     let mut table = [0u32; 256];
     let mut i = 0;
@@ -30,7 +29,7 @@ const fn generate_table() -> [u32; 256] {
 
 static CRC32C_TABLE: [u32; 256] = generate_table();
 
-// 超级块是否开启 metadata_csum 特性，决定是否启用 checksum 验证
+// Metadata checksum verification is feature-gated by the superblock.
 #[inline]
 pub fn ext4_superblock_has_metadata_csum(sb: &Ext4Superblock) -> bool {
     sb.has_feature_ro_compat(Ext4Superblock::EXT4_FEATURE_RO_COMPAT_METADATA_CSUM)
@@ -43,7 +42,7 @@ fn crc32c_update(mut crc: u32, data: &[u8]) -> u32 {
     }
     crc
 }
-/// 初始化 CRC32C 校验和计算
+/// Returns the standard CRC32C initial accumulator.
 #[inline]
 pub fn crc32c_init() -> u32 {
     0xFFFF_FFFF
@@ -56,7 +55,7 @@ pub fn crc32c_finalize(crc: u32) -> u32 {
 
 #[inline]
 pub fn crc32c_append(crc: u32, data: &[u8]) -> u32 {
-    // aarch64 架构的crc32c硬件加速
+    // Use hardware acceleration on aarch64 when the CPU advertises CRC support.
     #[cfg(target_arch = "aarch64")]
     {
         if *HARDWARE_SUPPORT_CRC32 {
@@ -72,18 +71,15 @@ pub fn crc32c(data: &[u8]) -> u32 {
     crc32c_finalize(crc32c_append(crc32c_init(), data))
 }
 
-/// 获取 ext4 文件系统的 CRC32C 种子值.用于某些元数据结构的校验和计算.
+/// Returns the CRC32C seed used for ext4 metadata checksums.
 ///
-/// 内核逻辑：
-///   if (ext4_has_feature_csum_seed(sb))
-///       sbi->s_csum_seed = le32_to_cpu(es->s_checksum_seed);
-///   else if (ext4_has_metadata_csum(sb))
-///       sbi->s_csum_seed = ext4_chksum(~0, es->s_uuid, 16);
+/// Linux uses the stored checksum seed when `csum_seed` is enabled; otherwise
+/// it derives the seed from the filesystem UUID.
 pub fn ext4_crc32c_seed_from_superblock(sb: &Ext4Superblock) -> u32 {
     if sb.has_feature_incompat(Ext4Superblock::EXT4_FEATURE_INCOMPAT_CSUM_SEED) {
         sb.s_checksum_seed
     } else {
-        // 不 finalize，与内核 __crc32c_le(~0, uuid, 16) 对齐
+        // Do not finalize here; Linux uses the raw running CRC value.
         crc32c_append(crc32c_init(), &sb.s_uuid)
     }
 }

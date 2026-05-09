@@ -1,14 +1,14 @@
 use super::*;
 
-/// 内存中的 extent 树节点表示
+/// In-memory extent-tree node representation.
 #[derive(Clone)]
 pub enum ExtentNode {
-    /// 叶子节点：header.eh_depth == 0，后面跟 Ext4Extent
+    /// Leaf node with `eh_depth == 0` followed by `Ext4Extent` entries.
     Leaf {
         header: Ext4ExtentHeader,
         entries: Vec<Ext4Extent>,
     },
-    /// 内部节点：header.eh_depth > 0，后面跟 Ext4ExtentIdx
+    /// Internal node with `eh_depth > 0` followed by `Ext4ExtentIdx` entries.
     Index {
         header: Ext4ExtentHeader,
         entries: Vec<Ext4ExtentIdx>,
