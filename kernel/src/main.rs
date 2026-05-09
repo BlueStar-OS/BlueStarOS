@@ -72,7 +72,7 @@ pub fn blue_main() -> ! {
         "trap refume virtualaddr:{:#x}",
         __kernel_refume as *const () as usize - __kernel_trap as *const () as usize + TRAP_BOTTOM_ADDR
     );
-    // inital_gpu();
+    inital_gpu();
     warn!("initial file system");
     RootFs::init_rootfs();
 

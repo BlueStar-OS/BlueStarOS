@@ -3,7 +3,6 @@ ARCH  ?= riscv64
 MODE := release
 QEMU_MACHINE ?= virt
 QEMU_PLAT ?=
-QEMU_7.2 := /opt/qemu-7.2/bin/
 USER_DIR := ../user
 LOG ?= DEBUG
 
@@ -22,15 +21,17 @@ DRIVER_FEATURES ?= qemu_plat
 
 	
 QEMU_DEVICE_ARGS = \
-	-drive file=disk.img,format=raw,if=none,id=x0 \
-	-drive file=emmc.img,format=raw,if=none,id=x1 \
+	-drive file=disk.img,format=raw,if=none,id=nv0 \
+	-drive file=emmc.img,format=raw,if=none,id=nv1 \
 	-net none \
-	-device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0 \
-	-device virtio-blk-device,drive=x1,bus=virtio-mmio-bus.2 \
 	-device pcie-root-port,id=rp0,bus=pcie.0,chassis=1,slot=1 \
 	-device pcie-root-port,id=rp1,bus=pcie.0,chassis=1,slot=2 \
+	-device pcie-root-port,id=rp2,bus=pcie.0,chassis=1,slot=3 \
+	-device pcie-root-port,id=rp3,bus=pcie.0,chassis=1,slot=4 \
 	-device edu,bus=rp0 \
-	-device VGA,bus=rp1,id=video0
+	-device VGA,bus=rp1,id=video0 \
+	-device nvme,serial=bsosnvme0,drive=nv0,bus=rp2 \
+	-device nvme,serial=bsosnvme1,drive=nv1,bus=rp3
 else ifeq ($(ARCH), aarch64)
 TARGET := aarch64-unknown-none-softfloat
 KERNEL_ENTRY_PA := 0x40080000
@@ -128,7 +129,7 @@ run_consent: run-consent-inner
 
 # run-inner: 保留图形窗口，同时把 serial0 绑定到当前终端
 run-inner: build
-	@$(QEMU_PLAT)$(QEMU_7.2)qemu-system-$(ARCH) \
+	@$(QEMU_PLAT)qemu-system-$(ARCH) \
 		-machine $(QEMU_MACHINE) \
 		$(QEMU_CPU) \
 		-m 256m \

@@ -127,17 +127,6 @@ pub fn file_loader(file_path: &str) -> Vec<u8> {
     }
     debug!("Load app for {} success!", file_path);
 
-                // 逐个字节比较
-                let mut zero:u32=0 ;
-                 out.iter().for_each(|x| {
-                    if *x == 0 {
-                        zero+=1;        
-                    }
-                });
-                error!("the mkdir elf zero count is :{} {}",zero,file_path);
-
-
-
     out
 }
 

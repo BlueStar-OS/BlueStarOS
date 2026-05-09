@@ -39,7 +39,7 @@ pub struct VirNumber(pub usize); //虚拟页号
 pub struct PhysiNumber(pub usize);
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct VirAddr(pub usize);
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord,Default)]
 pub struct PhysiAddr(pub usize);
 
 impl From<PhysiNumber> for PhysiAddr {

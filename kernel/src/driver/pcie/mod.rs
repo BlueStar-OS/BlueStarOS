@@ -11,6 +11,7 @@ use crate::MapAreaFlags;
 use crate::VirNumRange;
 use alloc::vec::Vec;
 use core::fmt;
+use core::ptr::{read_volatile, write_volatile};
 use core::sync::atomic::{AtomicU8, Ordering};
 use lazy_static::lazy_static;
 use log::{error, warn};
@@ -18,6 +19,8 @@ use log::{error, warn};
 mod bar;
 mod pci_ids;
 mod pcie_helper;
+
+pub use pcie_helper::*;
 
 /// PCIe 设备筛选 trait。
 ///
@@ -56,6 +59,133 @@ pub struct PcieBarInfo {
     pub size: u64,
     /// memory BAR 是否可预取；I/O BAR 固定为 false。
     pub is_prefetchable: bool,
+}
+
+///左开右闭
+#[derive(Default)]
+pub struct BarSpace(PhysiAddr, PhysiAddr);
+
+impl BarSpace {
+    pub fn start_addr(&self) -> PhysiAddr {
+        self.0
+    }
+    pub fn end_addr(&self) -> PhysiAddr {
+        self.1
+    }
+    pub fn read_16(&self, offset: usize) -> u16 {
+        // 检查对齐
+        if offset & (0x1) != 0 {
+            error!("Unalign read!");
+            return 0;
+        }
+        let addr = self.0 .0 + offset;
+
+        // 检查范围
+        if addr >= self.1 .0 {
+            error!(" out of bar space ");
+            return 0;
+        }
+        unsafe {
+            let value = read_volatile(addr as *const u16);
+            return value;
+        }
+    }
+    pub fn write_16(&self, offset: usize, value: u16) {
+        // 检查对齐
+        if offset & (0x1) != 0 {
+            error!("Unalign write!");
+            return;
+        }
+        let addr = self.0 .0 + offset;
+
+        // 检查范围
+        if addr >= self.1 .0 {
+            error!(" out of bar space ");
+            return;
+        }
+        unsafe {
+            write_volatile(addr as *mut u16, value);
+        }
+    }
+    pub fn read_32(&self, offset: usize) -> u32 {
+        // 检查对齐
+        if offset & (0x3) != 0 {
+            error!("Unalign read!");
+            return 0;
+        }
+        let addr = self.0 .0 + offset;
+
+        // 检查范围
+        if addr >= self.1 .0 {
+            error!(" out of bar space ");
+            return 0;
+        }
+        unsafe {
+            let value = read_volatile(addr as *const u32);
+            return value;
+        }
+    }
+    pub fn write_32(&self, offset: usize, value: u32) {
+        // 检查对齐
+        if offset & (0x3) != 0 {
+            error!("Unalign write!");
+            return;
+        }
+        let addr = self.0 .0 + offset;
+
+        // 检查范围
+        if addr >= self.1 .0 {
+            error!(" out of bar space ");
+            return;
+        }
+        unsafe {
+            write_volatile(addr as *mut u32, value);
+        }
+    }
+    pub fn read_64(&self, offset: usize) -> u64 {
+        // 检查对齐
+        if offset & (0x7) != 0 {
+            error!("Unalign read!");
+            return 0;
+        }
+        let addr = self.0 .0 + offset;
+
+        // 检查范围
+        if addr >= self.1 .0 {
+            error!(" out of bar space ");
+            return 0;
+        }
+        unsafe {
+            let value = read_volatile(addr as *const u64);
+            return value;
+        }
+    }
+    pub fn write_64(&self, offset: usize, value: u64) {
+        // 检查对齐
+        if offset & (0x7) != 0 {
+            error!("Unalign write!");
+            return;
+        }
+        let addr = self.0 .0 + offset;
+
+        // 检查范围
+        if addr >= self.1 .0 {
+            error!(" out of bar space ");
+            return;
+        }
+        unsafe {
+            write_volatile(addr as *mut u64, value);
+        }
+    }
+}
+
+// 建立bar视图
+impl PcieBarInfo {
+    pub fn build_bar_space(&self) -> BarSpace {
+        let start = self.base_addr;
+        let end = self.base_addr + self.size;
+        BarSpace(PhysiAddr(start as usize), PhysiAddr(end as usize))
+    }
 }
 
 /// 一个 PCIe 功能（BDF）在扫描后的完整描述。
@@ -1064,6 +1194,16 @@ fn pci_probe_callback(node: &DeviceNode, _compatible: &str) -> Result<(), &'stat
     clear_pcie_devices();
     NEXT_ALLOC_BUSNO.store(1, Ordering::SeqCst);
     let _ = scan_bus_recursive(BusNo::ROOT);
+
+    // PCIe 扫描完成后再交给 NVMe 驱动消费 BDF 快照。
+    //
+    // 原因：
+    // 1. 这里已经完成了整棵 PCIe 总线扫描；
+    // 2. `PCIE_DEVICES` 此时包含了所有可消费的 BDF 快照；
+    // 3. NVMe 驱动应该消费这份快照，而不是重新直扫 ECAM；
+    // 4. TODO(dirinkbottle): NVMe probe 成功后直接 `register_global_block_device()`，
+    //    后面的 `RootFs::init_rootfs()` 就能无缝看到它。
+    let _ = crate::driver::nvme::probe_registered_pcie_nvme_devices();
     Ok(())
 }
 

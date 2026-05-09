@@ -516,7 +516,12 @@ pub fn sys_umount2(target_ptr: usize, _flags: usize) -> isize {
         .any(|task| {
             let tcwd = &task.lock().cwd;
             tcwd.starts_with(&key.0)
-        });
+        }) || 
+        // fix,嵌套挂载不允许卸载
+        rootfs.mount_poinr.iter().find(|mt|{
+            (*mt.0)!=key && (*mt.0.0).starts_with(&key.0)
+        }).is_some();
+        
 
     if mp_busy {
         error!("[sys_umount]: Vblock:{} busy!", &key.0);
