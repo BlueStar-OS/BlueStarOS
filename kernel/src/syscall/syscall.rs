@@ -799,22 +799,26 @@ pub fn sys_brk(new_brk: VirAddr) -> isize {
     let mut tcb = current_task.lock();
     let old_brk = tcb.memory_set.brk.0;
 
-    warn!(
-        "sys_brk: request new={:#x}, current={:#x}",
-        new_brkaddr, old_brk
-    );
-
     // Linux 语义：brk(0) 只查询当前 break。
     if new_brkaddr == 0 {
+        debug!(
+            "sys_brk: query, old_brk={:#x}",
+            old_brk,
+        );
         return old_brk as isize;
     }
 
     // shrink：先只更新 brk，不回收映射（最小实现，优先兼容测试）。
     if new_brkaddr <= old_brk {
         tcb.memory_set.brk = VirAddr(new_brkaddr);
+        debug!(
+            "sys_brk: shrink new={:#x} old={:#x} -> ret={:#x}",
+            new_brkaddr, old_brk, new_brkaddr,
+        );
         return new_brkaddr as isize;
     }
 
+    // 扩展堆：从 old_brk 向上查找第一个空洞，映射到 new_brkaddr
     // TODO(dirinkbottle): 这里后面要重新审视 brk 扩展和 mmap/prot-none 预留区的关系。
     let mut start_vpn: VirNumber = VirAddr(old_brk.saturating_sub(1)).floor_down();
     start_vpn.step();
@@ -846,7 +850,10 @@ pub fn sys_brk(new_brk: VirAddr) -> isize {
     }
 
     tcb.memory_set.brk = VirAddr(new_brkaddr);
-    warn!("sys_brk: success, returning {:#x}", new_brkaddr);
+    debug!(
+        "sys_brk: expand new={:#x} old={:#x} start_vpn={:#x} end_vpn={:#x} -> ret={:#x}",
+        new_brkaddr, old_brk, start_vpn.0, end_vpn.0, new_brkaddr,
+    );
 
     new_brkaddr as isize
 }

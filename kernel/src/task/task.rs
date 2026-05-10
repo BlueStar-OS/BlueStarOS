@@ -15,6 +15,7 @@ use crate::shutdown;
 use crate::task::file_loader;
 use crate::task::signal::OsSignal;
 use crate::task::Signal;
+use crate::time::get_time_ns;
 use alloc::collections::vec_deque::VecDeque;
 use alloc::string::String;
 use alloc::string::ToString;
@@ -235,10 +236,11 @@ impl TaskControlBlock {
     }
 
     ///
-    fn align_slice(sli: &mut Vec<u8>, aligns: usize, sp: &mut usize) {
-        while !(*sp).is_multiple_of(aligns) {
-            sli[*sp] = 0;
-            *sp += 1;
+    /// 把 buf 中 cursor 处对齐到 alignment 边界（填充 0 直至对齐）
+    fn align_slice(buf: &mut Vec<u8>, alignment: usize, cursor: &mut usize) {
+        while !(*cursor).is_multiple_of(alignment) {
+            buf[*cursor] = 0;
+            *cursor += 1;
         }
     }
 
@@ -247,126 +249,171 @@ impl TaskControlBlock {
         satp: usize,
         user_sp: usize,
         argv: &[String],
-        auxv: &[AuxEntry],
+        auxv: &mut [AuxEntry],
     ) -> usize {
-        ////////////////////////////////////////
-        //  argc
-        //  argv[]
-        //  NULL
-        //  envp end
-        //  auxv
-        //  AT_NULL
-        //  strings
-        //  align pad
-        // /////////////////////////////////////
+        // ── 用户初始栈布局（高地址 → 低地址）──
+        // 参考 Linux fs/binfmt_elf.c:create_elf_tables()
+        //
+        //  高地址 (初始 user_sp)
+        //  ┌─────────────────────────────┐
+        //  │ 字符串数据 （argv/envp/随机数）│ ← AT_RANDOM/AT_EXECFN 等指针指向这里
+        //  ├─────────────────────────────┤
+        //  │ 对齐填充 (16 bytes align)   │
+        //  ├─────────────────────────────┤
+        //  │ auxv[...]                  │ ← 辅助向量表，从后往前写
+        //  │ AT_NULL (终止符)            │
+        //  ├─────────────────────────────┤
+        //  │ NULL (envp 终止)            │
+        //  ├─────────────────────────────┤
+        //  │ argv[0..argc-1] (字符串指针) │ ← char *argv[]
+        //  ├─────────────────────────────┤
+        //  │ argc (参数个数)              │ ← 低地址（返回的 SP）
+        //  └─────────────────────────────┘
+        //  低地址 (new_sp = user_sp - total_size)
         let mut tb = PageTable::crate_table_from_satp(satp);
-        let mut base_line_size: usize = 0; // 基本元数据大小
-        let mut base_offset: usize = 0;
+        let mut total_size: usize = 0; // 栈 blob 总大小（元数据 + 字符串 + 对齐填充）
+        let mut cursor: usize = 0;     // 当前写入 stack_blob 的偏移
+        let atranom_size = size_of::<[u8;16]>();
         let usize_size = core::mem::size_of::<usize>();
-        base_line_size = base_line_size.saturating_add(usize_size); // argc
-        base_line_size = base_line_size.saturating_add(argv.len() * usize_size); // string ptr
-        base_line_size = base_line_size.saturating_add(usize_size * 2); // NULL  (envp NULL)
-        base_line_size = base_line_size.saturating_add(auxv.len() * AUX_ENTRY_SIZE); // auxv + AT_NULL
+        total_size = total_size.saturating_add(usize_size); // argc
+        total_size = total_size.saturating_add(argv.len() * usize_size); // string ptr
+        total_size = total_size.saturating_add(usize_size * 2); // NULL  (envp NULL)
+        total_size = total_size.saturating_add(auxv.len() * AUX_ENTRY_SIZE); // auxv + AT_NULL
 
-        let mut str_start_offset: usize = base_line_size;
+        let mut str_area_off: usize = total_size; // stack_blob 内字符串区起始偏移
+
+        // 在字符串结尾再写，所以先设置str_area_off
+        total_size = total_size.saturating_add(atranom_size); // AT_RANDOM
 
         for arg in argv.iter() {
             //string size
             let align_size = Self::align_up(arg.len() + 1, usize_size);
-            base_line_size = base_line_size.saturating_add(align_size);
+            total_size = total_size.saturating_add(align_size);
         }
 
         // 16 字节栈对齐（POSIX ABI 要求）
-        let align_pad = (16 - base_line_size % 16) % 16;
-        base_line_size = base_line_size.saturating_add(align_pad);
+        let align_pad = (16 - total_size % 16) % 16;
+        total_size = total_size.saturating_add(align_pad);
 
-        // TODO(dirinkbottle): 这里后面要把 16 字节随机块真正放上初始用户栈，并回填 AT_RANDOM。
-        let mut str_real_start_addr = user_sp - base_line_size + str_start_offset;
+        let mut str_usr_addr = user_sp - total_size + str_area_off; // 字符串区在用户栈的实际地址
 
-        let mut base_blob: Vec<u8> = vec![0u8; base_line_size];
+        let mut stack_blob: Vec<u8> = vec![0u8; total_size]; // 待拷贝到用户栈的完整数据块
         // write argc
-        base_offset += core::mem::size_of::<usize>();
-        base_blob[0..base_offset].copy_from_slice(&argv.len().to_le_bytes());
-        Self::align_slice(&mut base_blob, usize_size, &mut base_offset);
+        cursor += core::mem::size_of::<usize>();
+        stack_blob[0..cursor].copy_from_slice(&argv.len().to_le_bytes());
+        Self::align_slice(&mut stack_blob, usize_size, &mut cursor);
+        
+       
 
-        // write str pointer
+
+        
+
+        // write str pointer and str
         for arg in argv.iter() {
             let mut real_arg = arg.clone();
             real_arg.push(0 as char);
             let byte_len = arg.len() + 1;
             // pointer
-            base_blob[base_offset..base_offset + usize_size]
-                .copy_from_slice(&str_real_start_addr.to_le_bytes());
-            base_offset += usize_size;
+            stack_blob[cursor..cursor + usize_size]
+                .copy_from_slice(&str_usr_addr.to_le_bytes());
+            cursor += usize_size;
             // str
-            base_blob[str_start_offset..str_start_offset + byte_len]
+            stack_blob[str_area_off..str_area_off + byte_len]
                 .copy_from_slice(real_arg.as_bytes());
 
-            str_real_start_addr += Self::align_up(byte_len, usize_size); // next str pointer
-            str_start_offset += Self::align_up(byte_len, usize_size); // next str
+            str_usr_addr += Self::align_up(byte_len, usize_size); // next str pointer
+            str_area_off += Self::align_up(byte_len, usize_size); // next str
         }
         // argv end NULL + envp end NULL（缓冲区已零初始化，仅推进偏移）
-        base_offset += usize_size * 2;
+        cursor += usize_size * 2;
+
+
+        //写AT_RANDOM 16字节,必须在auxv数组前面
+        // 构造随机数，这里将时间拿来再加个魔法小数字就行了
+        let magic_number:usize = 1314;
+        let time = get_time_ns();
+        let last_random = time.saturating_sub(magic_number)/2+8; //随便写的算法
+        let at_random:[u8;16] = {
+            // 将 last_random 的 8 个字节各 +1，循环填充 16 字节
+            let src = last_random.to_ne_bytes(); // [u8; 8]
+            let mut buf = [0u8; 16];
+            let mut i = 0;
+            while i < 16 {
+                buf[i] = src[i % 8].wrapping_add(1);
+                i += 1;
+            }
+            buf
+        };
+        let at_random_start = str_area_off;//在字符串结尾写
+        let at_random_usr_adr = str_usr_addr; //AT_RANDOM在用户的地址
+        stack_blob[at_random_start..at_random_start+16].copy_from_slice(&at_random);
+
+        // 修正AT_RANDOM指针
+        auxv.iter_mut().find(|auxv|{
+            auxv.key.0==AT_RANDOM
+        }).iter_mut().for_each(|uv|{
+            (uv.value.0)=at_random_usr_adr;
+        });
+
+
         // write auxv：通过指针转换将 &[AuxEntry] 视为 &[u8]
         let auxv_raw: &[u8] = unsafe {
             core::slice::from_raw_parts(auxv.as_ptr() as *const u8, auxv.len() * AUX_ENTRY_SIZE)
         };
-        base_blob[base_offset..base_offset + auxv_raw.len()].copy_from_slice(auxv_raw);
-        base_offset += auxv_raw.len();
+        stack_blob[cursor..cursor + auxv_raw.len()].copy_from_slice(auxv_raw);
 
-        //copy to user
-        let need_how_page = base_blob.len() / PAGE_SIZE;
-        let user_stack_page = KERNEL_STACK_SIZE / PAGE_SIZE;
-        let mut page_vev: Vec<&mut [u8; PAGE_SIZE]> = Vec::new();
-        let user_sli = match tb.get_mut_byte(VirAddr(user_sp - base_line_size).into()) {
-            Some(li) => li,
+        // 将 stack_blob 拷贝到用户栈页面
+        let pages_needed = stack_blob.len() / PAGE_SIZE; // stack_blob 占用的页面数
+        let stack_pages_max = KERNEL_STACK_SIZE / PAGE_SIZE; // 栈可用的最大页面数
+        let mut page_list: Vec<&mut [u8; PAGE_SIZE]> = Vec::new(); // 收集到的用户栈页面列表
+        let first_page = match tb.get_mut_byte(VirAddr(user_sp - total_size).into()) {
+            Some(page) => page,
             None => {
                 return user_sp;
             }
         };
-        page_vev.push(user_sli);
-        if need_how_page > 1 {
+        page_list.push(first_page);
+        if pages_needed > 1 {
             // 跨页
-            if need_how_page > user_stack_page {
+            if pages_needed > stack_pages_max {
                 // stack over flow!
                 return user_sp;
             }
             // usersp是页对齐的
-            for i in 1..need_how_page {
+            for i in 1..pages_needed {
                 // 补齐剩余页面
-                let user_sli_extend = match tb
-                    .get_mut_byte(VirAddr(user_sp - base_line_size + PAGE_SIZE * i + 1).into())
+                let next_page = match tb
+                    .get_mut_byte(VirAddr(user_sp - total_size + PAGE_SIZE * i + 1).into())
                 {
-                    Some(li) => li,
+                    Some(page) => page,
                     None => {
                         return user_sp;
                     }
                 };
-                page_vev.push(user_sli_extend);
+                page_list.push(next_page);
             }
         }
 
-        // first page
-        let mut pag = 0;
-        for byt in base_blob.chunks(PAGE_SIZE) {
-            if byt.is_empty() {
+        let mut page_idx = 0; // 当前写入 page_list 的索引
+        for chunk in stack_blob.chunks(PAGE_SIZE) {
+            if chunk.is_empty() {
                 break;
             }
-            if byt.len() != PAGE_SIZE {
-                if pag == 0 {
-                    page_vev[pag][PAGE_SIZE - byt.len()..].copy_from_slice(byt);
+            if chunk.len() != PAGE_SIZE {
+                if page_idx == 0 {
+                    page_list[page_idx][PAGE_SIZE - chunk.len()..].copy_from_slice(chunk);
                     break;
                 } else {
-                    page_vev[pag][..byt.len()].copy_from_slice(byt);
+                    page_list[page_idx][..chunk.len()].copy_from_slice(chunk);
                     break;
                 }
             } else {
-                page_vev[pag].copy_from_slice(byt);
-                pag += 1;
+                page_list[page_idx].copy_from_slice(chunk);
+                page_idx += 1;
             }
         }
 
-        user_sp - base_line_size
+        user_sp - total_size
     }
 
     ///设置父亲进程引用
@@ -429,8 +476,8 @@ impl TaskControlBlock {
 
         // 运行时构造 auxv 并推入用户栈
         let _ = argc;
-        let auxv = build_auxv(elf_data, elf_entry);
-        let new_user_sp = Self::push_args_to_user_stack(user_satp, user_sp.0, &argv, &auxv);
+        let mut auxv = build_auxv(elf_data, elf_entry);
+        let new_user_sp = Self::push_args_to_user_stack(user_satp, user_sp.0, &argv, &mut auxv);
 
         self.memory_set = memset; //释放旧的全复制地址空间
 
@@ -479,8 +526,8 @@ impl TaskControlBlock {
         let argv = alloc::vec![alloc::string::String::from(app_path)];
 
         // 构造最小 auxv 并推入用户栈
-        let auxv = build_auxv(&elf_data, elf_entry);
-        let new_user_sp = Self::push_args_to_user_stack(user_satp, user_sp.0, &argv, &auxv);
+        let mut auxv = build_auxv(&elf_data, elf_entry);
+        let new_user_sp = Self::push_args_to_user_stack(user_satp, user_sp.0, &argv, &mut auxv);
 
         // 初始化文件描述符表：0=stdin, 1=stdout, 2=stderr
         let mut file_descriptor_table: Vec<Option<Arc<dyn File>>> = Vec::new();
@@ -1098,7 +1145,9 @@ impl TaskManager {
             let mut task = inner.task_queen[current_task].lock();
             task.memory_set.get_table().satp_token()
         };
+
         drop(inner);
+        
         stap
     }
 
@@ -1112,7 +1161,9 @@ impl TaskManager {
         };
         let origin_phyaddr = (task_trap_ppn * PAGE_SIZE) as *mut TrapContext;
         let trap_context = unsafe { &mut *origin_phyaddr };
+        
         drop(inner);
+        
         trap_context
     }
 

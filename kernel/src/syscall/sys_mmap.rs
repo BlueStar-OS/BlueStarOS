@@ -1,3 +1,5 @@
+use log::debug;
+
 use crate::syscall::VirAddr;
 use crate::task::TASK_MANAER;
 
@@ -36,6 +38,21 @@ pub fn sys_mmap(
     let inner = TASK_MANAER.task_que_inner.lock();
     let mut tcb = inner.task_queen[current].lock();
 
-    tcb.memory_set
-        .mmap(VirAddr(addr), len, prot, flags, fd, offset, fd_backing)
+    let result = tcb.memory_set
+        .mmap(VirAddr(addr), len, prot, flags, fd, offset, fd_backing);
+
+    // 记录 mmap 调试信息
+    if result < 0 {
+        debug!(
+            "sys_mmap FAILED: addr=0x{:x}, len=0x{:x}, prot=0x{:x}, flags=0x{:x}, fd={}, offset=0x{:x}, error={}",
+            addr, len, prot, flags, fd, offset, result
+        );
+    } else {
+        debug!(
+            "sys_mmap OK: addr=0x{:x}, len=0x{:x}, prot=0x{:x}, flags=0x{:x}, fd={}, offset=0x{:x}, ret=0x{:x}",
+            addr, len, prot, flags, fd, offset, result
+        );
+    }
+
+    result
 }

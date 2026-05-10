@@ -6,6 +6,7 @@ use riscv::register::scause::Scause;
 use riscv::register::scause::{Exception, Trap};
 
 /// 打印当前用户态寄存器现场，便于定位“用户态空指针/坏指针到底是谁传出来的”。
+/// 需要提前释放锁
 fn log_current_user_registers() {
     let trap_context = TASK_MANAER.get_current_trapcx();
     error!(
@@ -126,8 +127,8 @@ pub fn PageFaultHandler(faultVAddr: VirAddr, cause: Scause) {
     if will_kill {
         //没有area包含mmap的地址，杀掉
         error!("area not contain mmap addr kill!");
-        log_current_user_registers();
         drop(inner); //杀任务的话提前drop了
+        log_current_user_registers();
         TASK_MANAER.kail_current_task_and_run_next();
         return;
     }
