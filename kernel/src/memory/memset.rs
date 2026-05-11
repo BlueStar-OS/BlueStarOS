@@ -383,7 +383,7 @@ pub struct MapArea {
 pub struct MapSet {
     ///页表
     pub table: PageTable,
-    areas: Vec<MapArea>,
+    pub areas: Vec<MapArea>,
     pub brk: VirAddr, //进程brk点
     /// 该进程内核栈的虚拟页号范围
     pub kernel_stack_range: Option<VirNumRange>,
@@ -701,6 +701,12 @@ impl MapSet {
 
     ///查找这个vpn对应的area 给这个vpn的maparea分配物理帧，添加合法页表映射 前提是检查过确实有area包含vpn
     pub fn findarea_allocFrame_and_setPte(&mut self, vpn: VirNumber) {
+        if vpn.0 >= 0x602 && vpn.0 <= 0x604 {
+            error!(
+                "!!! findarea_allocFrame_and_setPte called for vpn={:#x}",
+                vpn.0,
+            );
+        }
         let index = self
             .areas
             .iter()
@@ -1377,9 +1383,12 @@ impl MapSet {
         memory_set.map_traper();
         //映射上下文
         memory_set.map_trapContext();
+
+
+
         //映射普通用户栈
-        let userstack_start_vpn = VirNumber(max_end_vpn.0 + 1); //留guradpage
-        let userstack_end_vpn = VirNumber(userstack_start_vpn.0 + 1);
+        let userstack_start_vpn = VirNumber(max_end_vpn.0+1); //留guardpage 
+        let userstack_end_vpn = VirNumber(userstack_start_vpn.0 + USER_STACK_SIZE);
         let user_sp: VirAddr = VirAddr(userstack_end_vpn.0 * PAGE_SIZE + PAGE_SIZE); //因为结尾不包含，属于下一个页面
 
         memory_set.add_area(

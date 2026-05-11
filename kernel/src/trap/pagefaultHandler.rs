@@ -58,6 +58,8 @@ fn log_current_user_registers() {
 ///faultVAddr发生fault时被操作的addr
 ///pagefault触发时的环境可能为内核，可能为用户态 内核态可能是在帮用户处理程序->合法,User态->合法
 pub fn PageFaultHandler(faultVAddr: VirAddr, cause: Scause) {
+    // TODO:处理用户栈溢出逻辑
+    
     debug!("Handle Fault Virtual Address:{:#x}", faultVAddr.0);
     let contain_vpn: VirNumber = faultVAddr.floor_down();
     let tsak_satp = TASK_MANAER.get_current_stap();

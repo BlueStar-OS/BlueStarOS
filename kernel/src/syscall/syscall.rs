@@ -17,7 +17,7 @@ use crate::root::ROOTFS;
 use crate::VfsFs;
 use crate::ARCHITECTURE;
 
-use crate::memory::{CloneFlags, MapSet};
+use crate::memory::{CloneFlags, MapSet, VirNumRange};
 use crate::sync::UPSafeCell;
 use crate::task::file_loader;
 use crate::task::ProcessId_ALLOCTOR;
@@ -27,11 +27,11 @@ use crate::TRAP_CONTEXT_ADDR;
 use crate::{
     config::PAGE_SIZE,
     task::TASK_MANAER,
-    time::{get_time_ms, TimeVal},
+    time::{get_time_ms, get_time_ns, TimeVal},
 };
 use alloc::string::String;
 use alloc::sync::Arc;
-use alloc::vec;
+use alloc::{format, vec};
 use alloc::vec::Vec;
 use core::mem::size_of;
 use core::usize;
@@ -259,6 +259,46 @@ pub fn sys_gettimeofday(tv_ptr: usize, _tz_ptr: usize) -> isize {
     }
     unsafe {
         *(phyaddr.unwrap().0 as *mut TimeVal) = time_val;
+    }
+    0
+}
+
+/// clock_gettime — 获取指定时钟的当前时间。
+/// 参考：linux-5.4.29/kernel/time/posix-stubs.c:90
+///
+/// 支持以下 clock_id：
+///   CLOCK_REALTIME (0) — 返回系统单调时间（暂[缺 RTC，与 MONOTONIC 相同）
+///   CLOCK_MONOTONIC (1) — 系统启动至今的纳秒数
+///   CLOCK_MONOTONIC_RAW (4), CLOCK_REALTIME_COARSE (5),
+///   CLOCK_MONOTONIC_COARSE (6), CLOCK_BOOTTIME (7) — 同上
+///   其余 clock_id 返回 -EINVAL
+pub fn sys_clock_gettime(clock_id: usize, tp_ptr: usize) -> isize {
+    if tp_ptr == 0 {
+        return BlueErr::EFAULT.as_isize();
+    }
+    // 参考 linux-5.4.29/include/uapi/linux/time.h:47
+    let ns = get_time_ns();
+    let (sec, nsec) = match clock_id {
+        // CLOCK_REALTIME | CLOCK_MONOTONIC | CLOCK_MONOTONIC_RAW
+        // | CLOCK_REALTIME_COARSE | CLOCK_MONOTONIC_COARSE | CLOCK_BOOTTIME
+        0 | 1 | 4 | 5 | 6 | 7 => (ns / 1_000_000_000, ns % 1_000_000_000),
+        _ => return BlueErr::EINVAL.as_isize(),
+    };
+
+    let timespec = Timespec {
+        tv_sec: sec as i64,
+        tv_nsec: nsec as i64,
+    };
+
+    let satp = TASK_MANAER.get_current_stap();
+    let mut tb = PageTable::crate_table_from_satp(satp);
+    let phyaddr = tb.translate(VirAddr(tp_ptr));
+    if phyaddr.is_none() {
+        error!("[sys_clock_gettime]: invalid addr!");
+        return BlueErr::EFAULT.as_isize();
+    }
+    unsafe {
+        *(phyaddr.unwrap().0 as *mut Timespec) = timespec;
     }
     0
 }
@@ -808,9 +848,17 @@ pub fn sys_brk(new_brk: VirAddr) -> isize {
         return old_brk as isize;
     }
 
-    // shrink：先只更新 brk，不回收映射（最小实现，优先兼容测试）。
+    // shrink：先只更新 brk，回收映射
     if new_brkaddr <= old_brk {
         tcb.memory_set.brk = VirAddr(new_brkaddr);
+        //(new_brkaddr_page,new_brkaddr_page]
+        //let recycle_range = VirNumRange(VirAddr(new_brkaddr).floor_up(),VirAddr(old_brk).floor_down());
+
+        let recycle_start_addr:VirAddr = VirAddr(new_brkaddr).floor_up().into();
+        if recycle_start_addr.0 < old_brk  {
+            tcb.memory_set.unmap_range(recycle_start_addr,old_brk-recycle_start_addr.0 );
+        }
+
         debug!(
             "sys_brk: shrink new={:#x} old={:#x} -> ret={:#x}",
             new_brkaddr, old_brk, new_brkaddr,
@@ -819,23 +867,26 @@ pub fn sys_brk(new_brk: VirAddr) -> isize {
     }
 
     // 扩展堆：从 old_brk 向上查找第一个空洞，映射到 new_brkaddr
-    // TODO(dirinkbottle): 这里后面要重新审视 brk 扩展和 mmap/prot-none 预留区的关系。
-    let mut start_vpn: VirNumber = VirAddr(old_brk.saturating_sub(1)).floor_down();
-    start_vpn.step();
-    loop {
-        let vp = tb.find_pte_vpn(start_vpn);
-        // sv39 2mb空洞
-        if vp.is_none() {
-            break;
-        }
-        if vp.unwrap().is_valid() {
-            start_vpn.step();
-        } else {
-            break;
-        }
+    let start_vpn: VirNumber = VirAddr(old_brk).floor_up();
+    let end_vpn: VirNumber = VirAddr(new_brkaddr.saturating_sub(1)).floor_down();
+    debug!("sys_brk: start_vpn = {:#x} end_vpn={:#x}",start_vpn.0,end_vpn.0);
+
+    // 监测 brk expand 是否覆盖目标 VPN
+    if (start_vpn.0 <= 0x602 && end_vpn.0 >= 0x602)
+        || (start_vpn.0 <= 0x603 && end_vpn.0 >= 0x603)
+        || (start_vpn.0 <= 0x604 && end_vpn.0 >= 0x604)
+    {
+        warn!(
+            "!!! BRK_EXPAND covers target vpns: start=0x{:x} end=0x{:x}",
+            start_vpn.0, end_vpn.0,
+        );
     }
 
-    let end_vpn: VirNumber = VirAddr(new_brkaddr - 1).floor_down();
+    // 中间有其他range区域
+    if tcb.memory_set.AallArea_Iscontain_thisVpn_plus(VirNumRange(start_vpn, end_vpn)){
+       return old_brk as isize; 
+    }
+
 
     if start_vpn.0 <= end_vpn.0 {
         tcb.memory_set.add_area(
@@ -1562,6 +1613,7 @@ pub fn sys_write(fd_target: usize, source_buffer: usize, buffer_len: usize) -> i
         }
     }
 }
+
 ///sysread调用 traphandler栈顶
 /// 使用文件描述符进行读取
 pub fn sys_read(fd_target: usize, source_buffer: usize, buffer_len: usize) -> isize {
@@ -1602,13 +1654,28 @@ pub fn sys_read(fd_target: usize, source_buffer: usize, buffer_len: usize) -> is
         slice[..n].copy_from_slice(&read_buffer[offset..offset + n]);
         offset += n;
     }
+
+    // 验证写入后的结果
     if read_len > 0 {
         let mut pt = PageTable::crate_table_from_satp(user_satp);
-        let _first = pt
-            .translate(VirAddr(source_buffer))
-            .map(|pa| unsafe { *(pa.0 as *const u8) });
+        match pt.translate(VirAddr(source_buffer)) {
+            Some(pa) => {
+                let val = unsafe { *(pa.0 as *const u8) };
+                debug!(
+                    "sys_read: verify first byte: virt=0x{:x} phys={:#x} val={}",
+                    source_buffer, pa.0, val,
+                );
+            }
+            None => {
+                error!(
+                    "sys_read: TRANSLATE FAILED after write! buf=0x{:x}",
+                    source_buffer,
+                );
+            }
+        }
     }
 
+    debug!("sys_read: DONE returning {}", read_len);
     read_len as isize
 }
 

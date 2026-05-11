@@ -1,6 +1,7 @@
 #include<stdio.h>
 #include<stdlib.h>
 int main() {
+    printf("I will call malloc \n");
     int *a = malloc(sizeof(int)*16);
     if (!a)
     {

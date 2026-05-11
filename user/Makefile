@@ -68,7 +68,8 @@ build: FORCE
 	@test -n "$(RV_MUSL_GCC)" || { echo "error: no RISC-V musl C compiler found. expected one of: /opt/riscv/bin/riscv64-unknown-linux-musl-gcc, /opt/riscv/bin/riscv64-linux-musl-gcc, or one on PATH"; exit 127; }
 	@for t in $(CTEST); do \
 		echo "[ctest] CC $$t"; \
-		$(RV_MUSL_GCC) $(MUSL_CFLAGS) -static -march=rv64gc -mabi=lp64d -o $(CTEST_OUT_DIR)/$$t ctest/$$t.c; \
+		$(RV_MUSL_GCC) $(MUSL_CFLAGS) -g -static -march=rv64gc -mabi=lp64d -o $(CTEST_OUT_DIR)/$$t ctest/$$t.c; \
+		cp $(CTEST_OUT_DIR)/$$t ctest/$$t; \
 	done
 
 build-aarch64: FORCE
@@ -81,7 +82,8 @@ build-aarch64: FORCE
 	@mkdir -p $(AARCH64_CTEST_OUT_DIR)
 	@for t in $(CTEST); do \
 		echo "[ctest-aarch64] CC $$t"; \
-		$(AARCH64_MUSL_GCC) -static -o $(AARCH64_CTEST_OUT_DIR)/$$t ctest/$$t.c; \
+		$(AARCH64_MUSL_GCC) -g -static -o $(AARCH64_CTEST_OUT_DIR)/$$t ctest/$$t.c; \
+		cp $(AARCH64_CTEST_OUT_DIR)/$$t ctest/$$t; \
 	done
 
 # 交叉编译 Doomgeneric 的 BlueStarOS 版本，并把产物放进 `user/mainfile/`。

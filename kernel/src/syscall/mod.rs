@@ -39,14 +39,24 @@ pub const SYS_EXECVE: usize = 221;
 pub const SYS_MMAP: usize = 222;
 pub const SYS_WAIT4: usize = 260;
 pub const SYS_SCHED_YIELD: usize = 124;
+pub const SYS_READV: usize = 65;
+pub const SYS_RT_SIGACTION: usize = 134;
+pub const SYS_RT_SIGPROCMASK: usize = 135;
+pub const SYS_CLOCK_GETTIME: usize = 113;
 pub const SYS_DUP: usize = 23;
 pub const SYS_DUP3: usize = 24;
 pub const SYS_MPROTECT: usize = 226;
 
 mod sys_mmap;
 mod sys_mprotect;
+mod sys_readv;
+mod sys_rt_sigaction;
+mod sys_rt_sigprocmask;
 use crate::syscall::sys_mmap::sys_mmap;
 use crate::syscall::sys_mprotect::sys_mprotect;
+use crate::syscall::sys_readv::sys_readv;
+use crate::syscall::sys_rt_sigaction::sys_rt_sigaction;
+use crate::syscall::sys_rt_sigprocmask::sys_rt_sigprocmask;
 #[inline]
 /// log x0-x31
 fn log_x_regs(stage: &str, id: usize, trap_cx: &[usize; 32]) {
@@ -138,6 +148,7 @@ pub fn syscall_handler(id: usize, arg: [usize; 6]) -> isize {
         SYS_WAIT4 => sys_wait4(arg[0] as i32, arg[1], arg[2] as i32),
 
         SYS_GETTIMEOFDAY => sys_gettimeofday(arg[0], arg[1]),
+        SYS_CLOCK_GETTIME => sys_clock_gettime(arg[0], arg[1]),
         SYS_TIMES => sys_times(arg[0]),
 
         // mkdirat(dirfd, pathname, mode)
@@ -161,8 +172,15 @@ pub fn syscall_handler(id: usize, arg: [usize; 6]) -> isize {
         SYS_MOUNT => sys_mount(arg[0], arg[1], arg[2], arg[3], arg[4]),
         SYS_UMOUNT2 => sys_umount2(arg[0], arg[1]),
         SYS_MPROTECT => sys_mprotect(arg[0], arg[1], arg[2]),
-        // Not implemented yet in this kernel:
-        // TODO(dirinkbottle): musl/doom 还会继续撞到 readv、clock_gettime、rt_sig*。
+
+        SYS_READV => sys_readv(arg[0] as i32, arg[1], arg[2]),
+        SYS_RT_SIGACTION => sys_rt_sigaction(
+            arg[0] as i32, arg[1], arg[2], arg[3],
+        ),
+        SYS_RT_SIGPROCMASK => sys_rt_sigprocmask(
+            arg[0] as i32, arg[1], arg[2], arg[3],
+        ),
+
         SYS_SETPRIORITY | SYS_LINKAT => {
             error!("Unimplemented syscall id={}", id);
             BlueErr::ENOSYS.as_isize()

@@ -95,6 +95,11 @@ impl Exception {
 }
 
 impl Scause {
+    /// 通过 exception code 构造 Scause（非中断，即最高位为 0）
+    pub fn from_code(code: usize) -> Self {
+        Scause { bits: code }
+    }
+
     /// Returns the contents of the register as raw bits
     #[inline]
     pub fn bits(&self) -> usize {
