@@ -28,7 +28,6 @@
 /// # 返回
 /// -  0 : 成功
 /// - <0 : 错误码（-EINVAL, -EFAULT）
-
 use crate::arch::memory::*;
 use crate::task::TASK_MANAER;
 use core::mem::size_of;
@@ -54,12 +53,7 @@ fn write_to_user(dst: usize, src: &[u8]) -> bool {
 ///
 /// 参数顺序符合 Linux riscv64 ABI：
 ///   a0 = how, a1 = nset, a2 = oset, a3 = sigsetsize
-pub fn sys_rt_sigprocmask(
-    how: i32,
-    nset: usize,
-    oset: usize,
-    sigsetsize: usize,
-) -> isize {
+pub fn sys_rt_sigprocmask(how: i32, nset: usize, oset: usize, sigsetsize: usize) -> isize {
     // sigsetsize 校验（Linux kernel/signal.c:3022-3023）
     if sigsetsize != size_of::<usize>() {
         return -crate::error::BlueErr::EINVAL.as_isize();
@@ -74,7 +68,10 @@ pub fn sys_rt_sigprocmask(
     if oset != 0 {
         let empty_mask: usize = 0;
         let slice = unsafe {
-            core::slice::from_raw_parts(&empty_mask as *const usize as *const u8, size_of::<usize>())
+            core::slice::from_raw_parts(
+                &empty_mask as *const usize as *const u8,
+                size_of::<usize>(),
+            )
         };
         if !write_to_user(oset, slice) {
             return -crate::error::BlueErr::EFAULT.as_isize();

@@ -23,15 +23,17 @@ DRIVER_FEATURES ?= qemu_plat
 QEMU_DEVICE_ARGS = \
 	-drive file=disk.img,format=raw,if=none,id=nv0 \
 	-drive file=emmc.img,format=raw,if=none,id=nv1 \
-	-net none \
+	-netdev tap,id=net0,ifname=tap0,script=no,downscript=no \
 	-device pcie-root-port,id=rp0,bus=pcie.0,chassis=1,slot=1 \
 	-device pcie-root-port,id=rp1,bus=pcie.0,chassis=1,slot=2 \
 	-device pcie-root-port,id=rp2,bus=pcie.0,chassis=1,slot=3 \
 	-device pcie-root-port,id=rp3,bus=pcie.0,chassis=1,slot=4 \
+	-device pcie-root-port,id=rp4,bus=pcie.0,chassis=1,slot=5 \
 	-device edu,bus=rp0 \
 	-device VGA,bus=rp1,id=video0 \
 	-device nvme,serial=bsosnvme0,drive=nv0,bus=rp2 \
-	-device nvme,serial=bsosnvme1,drive=nv1,bus=rp3
+	-device nvme,serial=bsosnvme1,drive=nv1,bus=rp3 \
+	-device e1000,bus=rp4,netdev=net0
 else ifeq ($(ARCH), aarch64)
 TARGET := aarch64-unknown-none-softfloat
 KERNEL_ENTRY_PA := 0x40080000
@@ -88,8 +90,16 @@ OBJCOPY := rust-objcopy --binary-architecture=$(ARCH)
 # Disassembly
 DISASM ?= -x
 
-# 总是重新构建：每次 build 都跑 cargo build 和 objcopy
-build: user-makeimg
+# 代码风格检查：要求所有 Rust 文件已经过 rustfmt 格式化
+fmt-check:
+	@cargo fmt --all --check
+
+# 严格静态检查：任何 warning 都视为错误
+clippy-check:
+	@LOG=$(LOG) cargo clippy --target $(TARGET) $(MODE_ARG) $(FEATURES_ARG) --all-targets -- -D warnings
+
+# 总是重新构建：每次 build 都先通过格式化与 clippy 检查，再跑 cargo build 和 objcopy
+build: fmt-check clippy-check user-makeimg
 	@cargo clean
 	@rm -f $(KERNEL_ELF) $(KERNEL_BIN) src/BlueStarOS.elf src/BlueStarOS.bin
 	@LOG=$(LOG) cargo build --target $(TARGET) $(MODE_ARG) $(FEATURES_ARG)
@@ -171,4 +181,4 @@ gdbserver: build
 gdbclient:
 	@$(ARCH)-unknown-elf-gdb -ex 'file $(KERNEL_ELF)' $(GDB_SET_ARCH) -ex 'target remote localhost:1234'
 
-.PHONY: build env kernel clean user user-apps disasm disasm-vim run-inner run-consent-inner run_consent gdbserver gdbclient list-apps regen-asm
+.PHONY: build fmt-check clippy-check env kernel clean user user-apps disasm disasm-vim run-inner run-consent-inner run_consent gdbserver gdbclient list-apps regen-asm

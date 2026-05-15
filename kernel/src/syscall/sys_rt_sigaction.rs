@@ -24,7 +24,6 @@
 /// # 返回
 /// -  0 : 成功
 /// - <0 : 错误码（-EINVAL, -EFAULT）
-
 use crate::arch::memory::*;
 use crate::task::TASK_MANAER;
 use core::mem::size_of;
@@ -40,9 +39,9 @@ use log::warn;
 /// 内核态看到的 sigaction 结构就是这三个字段。
 #[repr(C)]
 struct SigAction {
-    sa_handler: usize,   // +0: 信号处理函数指针 (__sighandler_t, 8 字节)
-    sa_flags: usize,     // +8: 标志位 (8 字节)
-    sa_mask: usize,      // +16: 信号掩码 (riscv64: _NSIG_WORDS=1, 8 字节)
+    sa_handler: usize, // +0: 信号处理函数指针 (__sighandler_t, 8 字节)
+    sa_flags: usize,   // +8: 标志位 (8 字节)
+    sa_mask: usize,    // +16: 信号掩码 (riscv64: _NSIG_WORDS=1, 8 字节)
 }
 
 /// 将字节切片写入用户态内存（当前任务页表）
@@ -65,12 +64,7 @@ fn write_to_user(dst: usize, src: &[u8]) -> bool {
 ///
 /// 参数顺序符合 Linux riscv64 ABI：
 ///   a0 = sig, a1 = act, a2 = oact, a3 = sigsetsize
-pub fn sys_rt_sigaction(
-    sig: i32,
-    act: usize,
-    oact: usize,
-    sigsetsize: usize,
-) -> isize {
+pub fn sys_rt_sigaction(sig: i32, act: usize, oact: usize, sigsetsize: usize) -> isize {
     // sigsetsize 校验（Linux kernel/signal.c:4242-4243）
     if sigsetsize != size_of::<usize>() {
         return -crate::error::BlueErr::EINVAL.as_isize();

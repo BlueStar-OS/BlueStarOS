@@ -38,7 +38,8 @@ pub fn sys_mmap(
     let inner = TASK_MANAER.task_que_inner.lock();
     let mut tcb = inner.task_queen[current].lock();
 
-    let result = tcb.memory_set
+    let result = tcb
+        .memory_set
         .mmap(VirAddr(addr), len, prot, flags, fd, offset, fd_backing);
 
     // 记录 mmap 调试信息

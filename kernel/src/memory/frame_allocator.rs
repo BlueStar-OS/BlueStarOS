@@ -65,11 +65,8 @@ impl PageRange {
 /// - `include/linux/highmem.h:204-209`：`alloc_zeroed_user_highpage_movable()` 明确返回 zeroed page。
 fn zero_physical_page_range(start_ppn: usize, page_count: usize) {
     unsafe {
-        core::slice::from_raw_parts_mut(
-            (start_ppn * PAGE_SIZE) as *mut u8,
-            PAGE_SIZE * page_count,
-        )
-        .fill(0);
+        core::slice::from_raw_parts_mut((start_ppn * PAGE_SIZE) as *mut u8, PAGE_SIZE * page_count)
+            .fill(0);
     }
 }
 

@@ -1,5 +1,5 @@
 use crate::arch::driver;
-use crate::arch::driver::keyboard;
+use crate::arch::enable_irq;
 use crate::arch::memory::VirAddr;
 use crate::arch::set_kernel_trap;
 use crate::arch::set_kernel_trap_handler;
@@ -11,7 +11,7 @@ use crate::time::set_next_timeInterupt;
 use crate::trap::pagefaultHandler::PageFaultHandler;
 use crate::trap::recycle_pending_kstacks;
 use core::arch::asm;
-use log::{error, warn};
+use log::error;
 use riscv::register::satp;
 use riscv::register::scause::Interrupt;
 use riscv::register::{
@@ -39,7 +39,9 @@ fn log_user_fault_detail(tag: &str) {
 
 #[no_mangle]
 pub extern "C" fn app_entry_point() {
+    //  在这里切换回用户trap,因为用户上下文已经就绪,在arch init里面会暂时设置为 kernel_trap入口，防止上下文准备好之前中断导致无法处理
     set_kernel_trap_handler();
+
     let user_satp = TASK_MANAER.get_current_stap();
     let restore_va = __kernel_refume as *const () as usize - __kernel_trap as *const () as usize
         + TRAP_BOTTOM_ADDR;
@@ -110,15 +112,8 @@ pub extern "C" fn kernel_trap_handler() {
             TASK_MANAER.suspend_and_run_task();
         }
         Trap::Interrupt(Interrupt::SupervisorExternal) => {
-            let irq = driver::plic::plic_claim();
-            if irq == driver::plic::UART0_IRQ {
-                keyboard::keyboard_interrupt_handler();
-            } else if irq != 0 {
-                warn!("未知外部中断 IRQ={}", irq);
-            }
-            if irq != 0 {
-                driver::plic::plic_complete(irq);
-            }
+            error!("用户态外部中断");
+            driver::plic::dispatch_irq();
         }
         _ => {
             panic!("Unknown trap from user: {:?}", scauses.cause())

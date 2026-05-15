@@ -14,10 +14,10 @@ use core::fmt;
 use core::ptr::{read_volatile, write_volatile};
 use core::sync::atomic::{AtomicU8, Ordering};
 use lazy_static::lazy_static;
-use log::{error, warn};
+use log::{debug, error, info, warn};
 
 mod bar;
-mod pci_ids;
+pub mod pci_ids;
 mod pcie_helper;
 
 pub use pcie_helper::*;
@@ -365,6 +365,18 @@ pub const PCI_COMMAND_MEMORY: u16 = 0x2;
 /// 使能总线主控（DMA）
 pub const PCI_COMMAND_MASTER: u16 = 0x4;
 
+// ─── PCI 中断相关 ────────────────────────────────────────────────────
+
+/// PCI Interrupt Pin 寄存器偏移 (byte at offset 0x3D)
+/// 1=INTA, 2=INTB, 3=INTC, 4=INTD
+pub const PCI_INTERRUPT_PIN: u16 = 0x3D;
+
+/// QEMU riscv64 virt: PCIE IRQ 基地址 (PCIE_IRQ = 0x20, IRQ 32-35)
+/// 参考 QEMU include/hw/riscv/virt.h:72
+pub const PCIE_IRQ_BASE: u32 = 32;
+/// QEMU riscv64 virt: PCIE IRQ 数量 (GPEX_NUM_IRQS = 4)
+pub const PCIE_IRQ_COUNT: u32 = 4;
+
 // ─── PCI 特殊值 ──────────────────────────────────────────────────────
 
 /// 无效厂商 ID：该槽位无设备
@@ -378,6 +390,9 @@ const PCI_CLASS_CODE_SHIFT: u32 = 8;
 const PCI_MULTIFUNCTION_BIT: u8 = 0x80;
 /// 布局代码掩码（bits[6:0]）
 const PCI_HEADER_TYPE_MASK: u8 = 0x7F;
+
+/// PCI 头类型寄存器 16 位对齐掩码（清除 bit0，确保 16 位对齐读取）
+const PCI_HEADER_TYPE_ALIGN: u16 = !0x1;
 
 /// 布局代码：标准端点（Type 0）
 const PCI_HEADER_TYPE_ENDPOINT: u8 = 0x00;
@@ -804,6 +819,14 @@ fn align_up(value: u64, align: u64) -> u64 {
     (value + align - 1) & !(align - 1)
 }
 
+/// PCI 普通 memory window base/limit 地址掩码 (bits [15:4], bits [3:0] 保留)
+///
+/// 参考 PCI-to-PCI Bridge Architecture Spec:
+/// `PCI_MEMORY_BASE` 和 `PCI_MEMORY_LIMIT` 寄存器编码 addr[31:20] 于 bits[15:4]，
+/// bits[3:0] 保留应填 0。
+/// 参考 Linux 5.4.29 `include/uapi/linux/pci_regs.h`: PCI_MEMORY_RANGE_MASK
+pub const PCI_MEMORY_WINDOW_ADDR_MASK: u16 = 0xFFF0;
+
 /// 当前阶段使用的 Type 1 bridge 普通 memory window。
 ///
 /// 设计边界：
@@ -844,12 +867,12 @@ impl BridgeMemoryWindow32 {
 
     /// 编码 `PCI_MEMORY_BASE` 低 16 位字段。
     fn encoded_base_field(self) -> u16 {
-        ((self.start_addr >> 16) as u16) & 0xFFF0
+        ((self.start_addr >> 16) as u16) & PCI_MEMORY_WINDOW_ADDR_MASK
     }
 
     /// 编码 `PCI_MEMORY_LIMIT` 高 16 位字段。
     fn encoded_limit_field(self) -> u16 {
-        ((self.end_addr_inclusive >> 16) as u16) & 0xFFF0
+        ((self.end_addr_inclusive >> 16) as u16) & PCI_MEMORY_WINDOW_ADDR_MASK
     }
 
     /// 编码为 `cfg_write32(..., PCI_MEMORY_BASE, value)` 需要写入的 32 位值。
@@ -1103,7 +1126,7 @@ fn scan_bus_recursive(bus: BusNo) -> Result<BusNo, BlueErr> {
             let class_16 = (class_code >> 8) as u16;
             // 这里必须对齐读
             let header = HeaderType::from_raw(unsafe {
-                cfg_read16(bus.0, dev, func, PCI_HEADER_TYPE & !0x1) as u8
+                cfg_read16(bus.0, dev, func, PCI_HEADER_TYPE & PCI_HEADER_TYPE_ALIGN) as u8
             });
 
             pcie_log!(
@@ -1204,6 +1227,10 @@ fn pci_probe_callback(node: &DeviceNode, _compatible: &str) -> Result<(), &'stat
     // 4. TODO(dirinkbottle): NVMe probe 成功后直接 `register_global_block_device()`，
     //    后面的 `RootFs::init_rootfs()` 就能无缝看到它。
     let _ = crate::driver::nvme::probe_registered_pcie_nvme_devices();
+
+    // e1000探测
+    let _ = crate::driver::network::e1000::probe_registered_e1000();
+
     Ok(())
 }
 

@@ -1,4 +1,5 @@
 use crate::arch::memory::*;
+use crate::arch::set_kernel_trap_handler;
 use crate::arch::task::*;
 use crate::arch::trap::TrapContext;
 use crate::config::*;
@@ -272,8 +273,8 @@ impl TaskControlBlock {
         //  低地址 (new_sp = user_sp - total_size)
         let mut tb = PageTable::crate_table_from_satp(satp);
         let mut total_size: usize = 0; // 栈 blob 总大小（元数据 + 字符串 + 对齐填充）
-        let mut cursor: usize = 0;     // 当前写入 stack_blob 的偏移
-        let atranom_size = size_of::<[u8;16]>();
+        let mut cursor: usize = 0; // 当前写入 stack_blob 的偏移
+        let atranom_size = size_of::<[u8; 16]>();
         let usize_size = core::mem::size_of::<usize>();
         total_size = total_size.saturating_add(usize_size); // argc
         total_size = total_size.saturating_add(argv.len() * usize_size); // string ptr
@@ -298,15 +299,10 @@ impl TaskControlBlock {
         let mut str_usr_addr = user_sp - total_size + str_area_off; // 字符串区在用户栈的实际地址
 
         let mut stack_blob: Vec<u8> = vec![0u8; total_size]; // 待拷贝到用户栈的完整数据块
-        // write argc
+                                                             // write argc
         cursor += core::mem::size_of::<usize>();
         stack_blob[0..cursor].copy_from_slice(&argv.len().to_le_bytes());
         Self::align_slice(&mut stack_blob, usize_size, &mut cursor);
-        
-       
-
-
-        
 
         // write str pointer and str
         for arg in argv.iter() {
@@ -314,12 +310,10 @@ impl TaskControlBlock {
             real_arg.push(0 as char);
             let byte_len = arg.len() + 1;
             // pointer
-            stack_blob[cursor..cursor + usize_size]
-                .copy_from_slice(&str_usr_addr.to_le_bytes());
+            stack_blob[cursor..cursor + usize_size].copy_from_slice(&str_usr_addr.to_le_bytes());
             cursor += usize_size;
             // str
-            stack_blob[str_area_off..str_area_off + byte_len]
-                .copy_from_slice(real_arg.as_bytes());
+            stack_blob[str_area_off..str_area_off + byte_len].copy_from_slice(real_arg.as_bytes());
 
             str_usr_addr += Self::align_up(byte_len, usize_size); // next str pointer
             str_area_off += Self::align_up(byte_len, usize_size); // next str
@@ -327,13 +321,12 @@ impl TaskControlBlock {
         // argv end NULL + envp end NULL（缓冲区已零初始化，仅推进偏移）
         cursor += usize_size * 2;
 
-
         //写AT_RANDOM 16字节,必须在auxv数组前面
         // 构造随机数，这里将时间拿来再加个魔法小数字就行了
-        let magic_number:usize = 1314;
+        let magic_number: usize = 1314;
         let time = get_time_ns();
-        let last_random = time.saturating_sub(magic_number)/2+8; //随便写的算法
-        let at_random:[u8;16] = {
+        let last_random = time.saturating_sub(magic_number) / 2 + 8; //随便写的算法
+        let at_random: [u8; 16] = {
             // 将 last_random 的 8 个字节各 +1，循环填充 16 字节
             let src = last_random.to_ne_bytes(); // [u8; 8]
             let mut buf = [0u8; 16];
@@ -344,17 +337,17 @@ impl TaskControlBlock {
             }
             buf
         };
-        let at_random_start = str_area_off;//在字符串结尾写
+        let at_random_start = str_area_off; //在字符串结尾写
         let at_random_usr_adr = str_usr_addr; //AT_RANDOM在用户的地址
-        stack_blob[at_random_start..at_random_start+16].copy_from_slice(&at_random);
+        stack_blob[at_random_start..at_random_start + 16].copy_from_slice(&at_random);
 
         // 修正AT_RANDOM指针
-        auxv.iter_mut().find(|auxv|{
-            auxv.key.0==AT_RANDOM
-        }).iter_mut().for_each(|uv|{
-            (uv.value.0)=at_random_usr_adr;
-        });
-
+        auxv.iter_mut()
+            .find(|auxv| auxv.key.0 == AT_RANDOM)
+            .iter_mut()
+            .for_each(|uv| {
+                (uv.value.0) = at_random_usr_adr;
+            });
 
         // write auxv：通过指针转换将 &[AuxEntry] 视为 &[u8]
         let auxv_raw: &[u8] = unsafe {
@@ -1147,7 +1140,7 @@ impl TaskManager {
         };
 
         drop(inner);
-        
+
         stap
     }
 
@@ -1161,9 +1154,9 @@ impl TaskManager {
         };
         let origin_phyaddr = (task_trap_ppn * PAGE_SIZE) as *mut TrapContext;
         let trap_context = unsafe { &mut *origin_phyaddr };
-        
+
         drop(inner);
-        
+
         trap_context
     }
 

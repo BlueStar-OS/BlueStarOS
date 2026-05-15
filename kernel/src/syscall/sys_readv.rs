@@ -20,7 +20,6 @@
 /// - >0 : 成功，读取的总字节数
 /// -  0 : 读到 EOF
 /// - <0 : 错误码（-EBADF, -EFAULT, -EINVAL 等）
-
 use crate::arch::memory::*;
 use crate::task::TASK_MANAER;
 use core::mem::size_of;
@@ -31,8 +30,8 @@ use log::debug;
 /// RISC-V 64：iov_base=8 字节, iov_len=8 字节, 共 16 字节
 #[repr(C, packed)]
 struct IoVec {
-    iov_base: usize,  // 用户态缓冲区地址（void __user *）
-    iov_len: usize,   // 缓冲区长度（size_t）
+    iov_base: usize, // 用户态缓冲区地址（void __user *）
+    iov_len: usize,  // 缓冲区长度（size_t）
 }
 
 /// readv 实现：逐 iovec 调用内核内部 read 逻辑
@@ -59,10 +58,8 @@ pub fn sys_readv(fd: i32, vec: usize, vlen: usize) -> isize {
         let entry_addr = vec + i * iovec_size;
 
         // 从用户态读取 iov_base（前 usize 字节）
-        let user_base = match tb.read_bytes_from_userspace(
-            VirAddr(entry_addr),
-            size_of::<usize>(),
-        ) {
+        let user_base = match tb.read_bytes_from_userspace(VirAddr(entry_addr), size_of::<usize>())
+        {
             Some(bytes) => usize::from_le_bytes(bytes.try_into().unwrap()),
             None => {
                 if total_read > 0 {
@@ -71,13 +68,11 @@ pub fn sys_readv(fd: i32, vec: usize, vlen: usize) -> isize {
                 return -crate::error::BlueErr::EFAULT.as_isize();
             }
         };
-        
 
         // 从用户态读取 iov_len（后 usize 字节）
-        let user_len = match tb.read_bytes_from_userspace(
-            VirAddr(entry_addr + size_of::<usize>()),
-            size_of::<usize>(),
-        ) {
+        let user_len = match tb
+            .read_bytes_from_userspace(VirAddr(entry_addr + size_of::<usize>()), size_of::<usize>())
+        {
             Some(bytes) => usize::from_le_bytes(bytes.try_into().unwrap()),
             None => {
                 if total_read > 0 {
@@ -96,7 +91,7 @@ pub fn sys_readv(fd: i32, vec: usize, vlen: usize) -> isize {
         if user_len == 0 {
             continue;
         }
-        
+
         // 调用内核内部读逻辑（支持跨页）
         let n = crate::syscall::syscall::sys_read(fd as usize, user_base, user_len);
         if n < 0 {

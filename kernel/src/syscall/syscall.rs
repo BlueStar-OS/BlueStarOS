@@ -31,8 +31,8 @@ use crate::{
 };
 use alloc::string::String;
 use alloc::sync::Arc;
-use alloc::{format, vec};
 use alloc::vec::Vec;
+use alloc::{format, vec};
 use core::mem::size_of;
 use core::usize;
 use log::{debug, error, warn};
@@ -841,10 +841,7 @@ pub fn sys_brk(new_brk: VirAddr) -> isize {
 
     // Linux 语义：brk(0) 只查询当前 break。
     if new_brkaddr == 0 {
-        debug!(
-            "sys_brk: query, old_brk={:#x}",
-            old_brk,
-        );
+        debug!("sys_brk: query, old_brk={:#x}", old_brk,);
         return old_brk as isize;
     }
 
@@ -854,9 +851,10 @@ pub fn sys_brk(new_brk: VirAddr) -> isize {
         //(new_brkaddr_page,new_brkaddr_page]
         //let recycle_range = VirNumRange(VirAddr(new_brkaddr).floor_up(),VirAddr(old_brk).floor_down());
 
-        let recycle_start_addr:VirAddr = VirAddr(new_brkaddr).floor_up().into();
-        if recycle_start_addr.0 < old_brk  {
-            tcb.memory_set.unmap_range(recycle_start_addr,old_brk-recycle_start_addr.0 );
+        let recycle_start_addr: VirAddr = VirAddr(new_brkaddr).floor_up().into();
+        if recycle_start_addr.0 < old_brk {
+            tcb.memory_set
+                .unmap_range(recycle_start_addr, old_brk - recycle_start_addr.0);
         }
 
         debug!(
@@ -869,7 +867,10 @@ pub fn sys_brk(new_brk: VirAddr) -> isize {
     // 扩展堆：从 old_brk 向上查找第一个空洞，映射到 new_brkaddr
     let start_vpn: VirNumber = VirAddr(old_brk).floor_up();
     let end_vpn: VirNumber = VirAddr(new_brkaddr.saturating_sub(1)).floor_down();
-    debug!("sys_brk: start_vpn = {:#x} end_vpn={:#x}",start_vpn.0,end_vpn.0);
+    debug!(
+        "sys_brk: start_vpn = {:#x} end_vpn={:#x}",
+        start_vpn.0, end_vpn.0
+    );
 
     // 监测 brk expand 是否覆盖目标 VPN
     if (start_vpn.0 <= 0x602 && end_vpn.0 >= 0x602)
@@ -883,10 +884,12 @@ pub fn sys_brk(new_brk: VirAddr) -> isize {
     }
 
     // 中间有其他range区域
-    if tcb.memory_set.AallArea_Iscontain_thisVpn_plus(VirNumRange(start_vpn, end_vpn)){
-       return old_brk as isize; 
+    if tcb
+        .memory_set
+        .AallArea_Iscontain_thisVpn_plus(VirNumRange(start_vpn, end_vpn))
+    {
+        return old_brk as isize;
     }
-
 
     if start_vpn.0 <= end_vpn.0 {
         tcb.memory_set.add_area(
@@ -1661,10 +1664,6 @@ pub fn sys_read(fd_target: usize, source_buffer: usize, buffer_len: usize) -> is
         match pt.translate(VirAddr(source_buffer)) {
             Some(pa) => {
                 let val = unsafe { *(pa.0 as *const u8) };
-                debug!(
-                    "sys_read: verify first byte: virt=0x{:x} phys={:#x} val={}",
-                    source_buffer, pa.0, val,
-                );
             }
             None => {
                 error!(
@@ -1675,7 +1674,6 @@ pub fn sys_read(fd_target: usize, source_buffer: usize, buffer_len: usize) -> is
         }
     }
 
-    debug!("sys_read: DONE returning {}", read_len);
     read_len as isize
 }
 

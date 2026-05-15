@@ -56,7 +56,11 @@ pub fn arch_init() {
     kprintln!("Welcome to BlueStarOS!");
     debug!("Kernel init success!");
 
-    set_kernel_trap_handler();
+    // 目前在内核就先设置内核trap,在进入用户态前再切换回usertrap
+    set_kernel_trap();
+    // 开启内核中断
+    enable_irq();
+
     KERNEL_SPACE.lock().activate();
 
     rather_global_interrupt();

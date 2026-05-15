@@ -1,13 +1,12 @@
-use crate::arch::driver;
-use crate::arch::driver::keyboard;
+use crate::arch::{driver, enable_irq};
 use crate::time::set_next_timeInterupt;
-use log::error;
-use riscv::register::scause::{Exception, Interrupt};
+use log::{debug, error};
 use riscv::register::scause::{self, Trap};
+use riscv::register::scause::{Exception, Interrupt};
 use riscv::register::{sepc, stval};
 
-use crate::trap::pagefaultHandler::PageFaultHandler;
 use crate::arch::memory::VirAddr;
+use crate::trap::pagefaultHandler::PageFaultHandler;
 
 /// 用户空间地址上限（SV39 下用户空间为 [0, 0x80000000)）
 const USER_SPACE_END: usize = 0x8000_0000;
@@ -18,13 +17,8 @@ pub extern "C" fn kernel_mode_trap_handler() {
 
     match scauses.cause() {
         Trap::Interrupt(Interrupt::SupervisorExternal) => {
-            let irq = driver::plic::plic_claim();
-            if irq == driver::plic::UART0_IRQ {
-                keyboard::keyboard_interrupt_handler();
-            }
-            if irq != 0 {
-                driver::plic::plic_complete(irq);
-            }
+            error!("内核态外部中断");
+            driver::plic::dispatch_irq();
         }
         Trap::Interrupt(Interrupt::SupervisorTimer) => {
             set_next_timeInterupt();

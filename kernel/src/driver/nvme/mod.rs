@@ -57,6 +57,7 @@ use crate::driver::nvme::cst::nvme_regs::{
     NVME_REG_ACQ, NVME_REG_AQA, NVME_REG_ASQ, NVME_REG_CAP, NVME_REG_CC, NVME_REG_CSTS,
     NVME_REG_DOORBELL_BASE, NVME_REG_VS,
 };
+use crate::driver::nvme::cst::{aqa, cap, cqe_status, nvme_identify_cns, NVME_QUEUE_PHYS_CONTIG};
 use crate::driver::pcie::{
     cfg_read16, cfg_write16, collect_pcie_devices_by_target, BarSpace, PcieBarSpace,
     PcieDeviceInfo, PcieDeviceTarget, PCI_COMMAND, PCI_COMMAND_MASTER, PCI_COMMAND_MEMORY,
@@ -189,7 +190,7 @@ pub struct NvmeDoorbellStride {
 impl NvmeDoorbellStride {
     /// 从 CAP 寄存器提取 DSTRD。
     pub fn from_capability(capability: u64) -> Self {
-        let dstrd = ((capability >> 32) & 0x0f) as u32;
+        let dstrd = cap::stride(capability) as u32;
         Self { bytes: 4 << dstrd }
     }
 
@@ -401,7 +402,7 @@ unsafe fn poll_admin_cqe(
     let mut cqe = unsafe { read_volatile(target) };
     let mut spin_count = 0usize;
 
-    while (cqe.status & 1) != expected_phase {
+    while (cqe.status & cqe_status::PHASE_TAG) != expected_phase {
         spin_count += 1;
         if spin_count % 1_000_000 == 0 {
             debug!(
@@ -417,7 +418,7 @@ unsafe fn poll_admin_cqe(
         cqe = unsafe { read_volatile(target) };
     }
 
-    let nvme_status = cqe.status >> 1;
+    let nvme_status = cqe.status >> cqe_status::STATUS_CODE_SHIFT;
     if nvme_status == 0 {
         info!("NVMe admin {} success: cqe={:?}", operation_name, cqe);
     } else {
@@ -466,7 +467,7 @@ unsafe fn poll_io_cqe(
     let mut cqe = unsafe { read_volatile(target) };
     let mut spin_count = 0usize;
 
-    while (cqe.status & 1) != expected_phase {
+    while (cqe.status & cqe_status::PHASE_TAG) != expected_phase {
         spin_count += 1;
         if spin_count % 1_000_000 == 0 {
             debug!(
@@ -482,7 +483,7 @@ unsafe fn poll_io_cqe(
         cqe = unsafe { read_volatile(target) };
     }
 
-    let nvme_status = cqe.status >> 1;
+    let nvme_status = cqe.status >> cqe_status::STATUS_CODE_SHIFT;
     if nvme_status == 0 {
         // info!("NVMe IO {} success: cqe={:?}", operation_name, cqe);
     } else {
@@ -1080,7 +1081,7 @@ impl NvmeController {
         let admin_cq_frames = alloc_contiguous_frames(1).ok_or(BlueErr::ENOMEM)?;
         let admin_sq_dma_addr: PhysiAddr = admin_sq_frames[0].ppn.into();
         let admin_cq_dma_addr: PhysiAddr = admin_cq_frames[0].ppn.into();
-        let max_queue_entries_zero_based = (capability & 0xffff) as u16;
+        let max_queue_entries_zero_based = cap::mqes(capability);
         let admin_queue_depth_zero_based =
             max_queue_entries_zero_based.min(NVME_ADMIN_QUEUE_DEPTH - 1);
 
@@ -1096,8 +1097,8 @@ impl NvmeController {
             doorbell_stride: self.doorbell_stride,
         };
 
-        let admin_queue_attributes = ((admin_queue_depth_zero_based & 0x0fff) as u32) << 16
-            | (admin_queue_depth_zero_based & 0x0fff) as u32;
+        let admin_queue_attributes = ((admin_queue_depth_zero_based as u32) << aqa::ACQS_SHIFT)
+            | (admin_queue_depth_zero_based as u32) & aqa::ASQS_MASK;
         bar0_space.write_32(NVME_REG_AQA, admin_queue_attributes);
         bar0_space.write_64(NVME_REG_ASQ, admin_sq_dma_addr.0 as u64);
         bar0_space.write_64(NVME_REG_ACQ, admin_cq_dma_addr.0 as u64);
@@ -1222,7 +1223,7 @@ impl NvmeController {
     pub fn enable_controller(&mut self) -> Result<(), BlueErr> {
         let bar0_space = self.bar0_space()?;
         let capability = bar0_space.read_64(NVME_REG_CAP);
-        let min_page_shift = (((capability >> 48) & 0x0f) as u32) + 12;
+        let min_page_shift = cap::mpsmin(capability) as u32 + 12;
 
         if min_page_shift > 12 {
             error!(
@@ -1260,12 +1261,12 @@ impl NvmeController {
                 prp1: identify_dma_addr.0 as u64,
                 prp2: 0,
             },
-            controller_or_namespace_structure: 0x01,
+            controller_or_namespace_structure: nvme_identify_cns::CTRL,
             ..Default::default()
         };
 
         let cqe = self.submit_admin_sqe_polling(&identify_command, "identify-controller")?;
-        if (cqe.status >> 1) != 0 {
+        if (cqe.status >> cqe_status::STATUS_CODE_SHIFT) != 0 {
             return Err(BlueErr::EIO);
         }
 
@@ -1297,12 +1298,12 @@ impl NvmeController {
                 prp1: identify_dma_addr.0 as u64,
                 prp2: 0,
             },
-            controller_or_namespace_structure: 0x00,
+            controller_or_namespace_structure: nvme_identify_cns::NS,
             ..Default::default()
         };
 
         let cqe = self.submit_admin_sqe_polling(&identify_command, "identify-namespace")?;
-        if (cqe.status >> 1) != 0 {
+        if (cqe.status >> cqe_status::STATUS_CODE_SHIFT) != 0 {
             return Err(BlueErr::EIO);
         }
 
@@ -1339,7 +1340,7 @@ impl NvmeController {
             completion_queue_id: queue_id.0,
             queue_size_zero_based: queue_depth - 1,
             // bit0=Physically Contiguous；第一版 polling，不打开 IRQ bit1。
-            completion_queue_flags: 0x0001,
+            completion_queue_flags: NVME_QUEUE_PHYS_CONTIG,
             interrupt_vector: 0,
             ..Default::default()
         };
@@ -1350,18 +1351,18 @@ impl NvmeController {
             submission_queue_id: queue_id.0,
             queue_size_zero_based: queue_depth - 1,
             // bit0=Physically Contiguous，priority=0。
-            submission_queue_flags: 0x0001,
+            submission_queue_flags: NVME_QUEUE_PHYS_CONTIG,
             completion_queue_id: queue_id.0,
             ..Default::default()
         };
 
         let create_cq_cqe = self.submit_admin_sqe_polling(&create_cq_command, "create-io-cq")?;
-        if (create_cq_cqe.status >> 1) != 0 {
+        if (create_cq_cqe.status >> cqe_status::STATUS_CODE_SHIFT) != 0 {
             return Err(BlueErr::EIO);
         }
 
         let create_sq_cqe = self.submit_admin_sqe_polling(&create_sq_command, "create-io-sq")?;
-        if (create_sq_cqe.status >> 1) != 0 {
+        if (create_sq_cqe.status >> cqe_status::STATUS_CODE_SHIFT) != 0 {
             return Err(BlueErr::EIO);
         }
 
@@ -1440,7 +1441,7 @@ impl NvmeController {
         unsafe {
             let cqe =
                 submit_io_sqe_polling(&bar0_space, &mut self.io_queue, &command, "flush-namespace");
-            if (cqe.status >> 1) != 0 {
+            if (cqe.status >> cqe_status::STATUS_CODE_SHIFT) != 0 {
                 return Err(BlueErr::EIO);
             }
             asm!("fence iorw, iorw");
@@ -1531,7 +1532,7 @@ impl NvmeController {
         unsafe {
             let cqe =
                 submit_io_sqe_polling(&bar0_space, &mut self.io_queue, &command, operation_name);
-            if (cqe.status >> 1) != 0 {
+            if (cqe.status >> cqe_status::STATUS_CODE_SHIFT) != 0 {
                 return Err(BlueErr::EIO);
             }
             asm!("fence iorw, iorw");

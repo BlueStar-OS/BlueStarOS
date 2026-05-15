@@ -910,13 +910,14 @@ impl MapSet {
             }
             map_start = addr.0;
             if !self.range_is_free(map_start, map_len)
-                && self.unmap_range(VirAddr(map_start), map_len) != 0 {
-                    warn!(
+                && self.unmap_range(VirAddr(map_start), map_len) != 0
+            {
+                warn!(
                         "memset::mmap: FAIL MAP_FIXED overlap unmap failed: map_start=0x{:x}, map_len=0x{:x}",
                         map_start, map_len
                     );
-                    return BlueErr::EINVAL.as_isize();
-                }
+                return BlueErr::EINVAL.as_isize();
+            }
         } else {
             // Non-MAP_FIXED: addr is only a hint.
             if addr.0 != 0 {
@@ -1384,10 +1385,8 @@ impl MapSet {
         //映射上下文
         memory_set.map_trapContext();
 
-
-
         //映射普通用户栈
-        let userstack_start_vpn = VirNumber(max_end_vpn.0+1); //留guardpage 
+        let userstack_start_vpn = VirNumber(max_end_vpn.0 + 1); //留guardpage
         let userstack_end_vpn = VirNumber(userstack_start_vpn.0 + USER_STACK_SIZE);
         let user_sp: VirAddr = VirAddr(userstack_end_vpn.0 * PAGE_SIZE + PAGE_SIZE); //因为结尾不包含，属于下一个页面
 
@@ -1639,7 +1638,10 @@ impl MapSet {
         }
 
         //映射代码段
-        let text_range = VirNumRange::new(VirAddr(stext as *const () as usize), VirAddr(etext as *const () as usize)); //range封装过
+        let text_range = VirNumRange::new(
+            VirAddr(stext as *const () as usize),
+            VirAddr(etext as *const () as usize),
+        ); //range封装过
         mem_set.add_area(
             text_range,
             MapType::Indentical,
@@ -1653,7 +1655,10 @@ impl MapSet {
         );
 
         //映射rodata段
-        let rodata_range = VirNumRange::new(VirAddr(srodata as *const () as usize), VirAddr(erodata as *const () as usize)); //range封装过
+        let rodata_range = VirNumRange::new(
+            VirAddr(srodata as *const () as usize),
+            VirAddr(erodata as *const () as usize),
+        ); //range封装过
         mem_set.add_area(
             rodata_range,
             MapType::Indentical,
@@ -1667,7 +1672,10 @@ impl MapSet {
         );
 
         // 映射内核数据段
-        let data_range = VirNumRange::new(VirAddr(sdata as *const () as usize), VirAddr(edata as *const () as usize - 1)); //range封装过
+        let data_range = VirNumRange::new(
+            VirAddr(sdata as *const () as usize),
+            VirAddr(edata as *const () as usize - 1),
+        ); //range封装过
         mem_set.add_area(
             data_range,
             MapType::Indentical,
@@ -1694,7 +1702,8 @@ impl MapSet {
         );
         debug!(
             "[MEMMAP] Stack Guard: {:#x}-{:#x}, flags: V (guard page)",
-            kernel_stack_protect_start as *const () as usize, kernel_stack_protect_end as *const () as usize
+            kernel_stack_protect_start as *const () as usize,
+            kernel_stack_protect_end as *const () as usize
         );
 
         //映射内核启动栈
@@ -1728,7 +1737,8 @@ impl MapSet {
         );
         debug!(
             "[MEMMAP] Trap Stack Guard: {:#x}-{:#x}, flags: V (guard page)",
-            kernel_trap_stack_protect_start as *const () as usize, kernel_trap_stack_protect_end as *const () as usize
+            kernel_trap_stack_protect_start as *const () as usize,
+            kernel_trap_stack_protect_end as *const () as usize
         );
 
         // 映射内核trap/正常运行 栈
@@ -1745,7 +1755,8 @@ impl MapSet {
         );
         debug!(
             "[MEMMAP] Trap Stack: {:#x}-{:#x}, flags: V|R|W|A|G",
-            kernel_trap_stack_bottom as *const () as usize, kernel_trap_stack_top as *const () as usize
+            kernel_trap_stack_bottom as *const () as usize,
+            kernel_trap_stack_top as *const () as usize
         );
 
         // 映射内核selftrap栈
@@ -1762,11 +1773,15 @@ impl MapSet {
         );
         debug!(
             "[MEMMAP] Kernel Trap Stack: {:#x}-{:#x}, flags: V|R|W|A|G",
-            kernel_kernel_trap_bottom as *const () as usize, kernel_kernel_trap_top as *const () as usize
+            kernel_kernel_trap_bottom as *const () as usize,
+            kernel_kernel_trap_top as *const () as usize
         );
 
         // 除了stack之外的其它bss内容
-        let out_bss = VirNumRange::new(VirAddr(estack as *const () as usize), VirAddr(ekernel as *const () as usize - 1));
+        let out_bss = VirNumRange::new(
+            VirAddr(estack as *const () as usize),
+            VirAddr(ekernel as *const () as usize - 1),
+        );
         mem_set.add_area(
             out_bss,
             MapType::Indentical,

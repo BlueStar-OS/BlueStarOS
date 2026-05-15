@@ -3,7 +3,9 @@
 static mut UART0_BASE: usize = 0x10000000;
 #[cfg(target_arch = "aarch64")]
 static mut UART0_BASE: usize = 0x09000000;
-
+/// UART0 中断号
+pub const UART0_IRQ: u32 = 10;
+use crate::arch::driver;
 use crate::kprintln;
 
 /// 发送一个字符
@@ -81,6 +83,9 @@ fn uart_16550_probe(node: &DeviceNode, _compatible: &str) -> Result<(), &'static
             | MapAreaFlags::DEV;
         register_kernel_mmio(mmio_range, flags);
     }
+
+    //  向plic注册中断
+    driver::plic::register_irq(UART0_IRQ, driver::keyboard::keyboard_interrupt_handler, 1);
 
     Ok(())
 }

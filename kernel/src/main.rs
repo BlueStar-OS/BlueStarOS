@@ -6,7 +6,7 @@
 #![no_std]
 #![no_main]
 #![feature(panic_internals, panic_info_message, const_trait_impl, error_in_core)]
-
+#![deny(clippy::cast_ptr_alignment)]
 extern crate alloc;
 
 // 导出 paste crate 供宏使用
@@ -33,6 +33,11 @@ use crate::arch::*;
 use crate::config::*;
 use crate::driver::dtb;
 use crate::driver::gpu::inital_gpu;
+use crate::driver::network::e1000::agreenment::Ipv4Addr;
+use crate::driver::network::e1000::arp::arp_receive;
+use crate::driver::network::e1000::arp::raw_ethdat_recivea;
+use crate::driver::network::e1000::arp::send_arp_packet;
+use crate::driver::network::e1000::rx_ringbuffer::e1000_poll_rx;
 use crate::fs::vfs::*;
 use crate::logger::*;
 use crate::memory::*;
@@ -74,9 +79,22 @@ pub fn blue_main() -> ! {
         __kernel_refume as *const () as usize - __kernel_trap as *const () as usize
             + TRAP_BOTTOM_ADDR
     );
+    unsafe {
+        loop {
+            let data = e1000_poll_rx();
+            if let Some(dt) = data {
+                debug!("Revice network packet!,data:{:?}", dt.data_slice());
+                let split_eth = raw_ethdat_recivea(dt).expect("a");
+                arp_receive(split_eth);
+            }
+        }
+    }
+
     inital_gpu();
     warn!("initial file system");
+
     RootFs::init_rootfs();
+
     run_first_task();
 
     warn!("All right,kernel Will end\n");

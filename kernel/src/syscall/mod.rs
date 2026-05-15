@@ -174,12 +174,8 @@ pub fn syscall_handler(id: usize, arg: [usize; 6]) -> isize {
         SYS_MPROTECT => sys_mprotect(arg[0], arg[1], arg[2]),
 
         SYS_READV => sys_readv(arg[0] as i32, arg[1], arg[2]),
-        SYS_RT_SIGACTION => sys_rt_sigaction(
-            arg[0] as i32, arg[1], arg[2], arg[3],
-        ),
-        SYS_RT_SIGPROCMASK => sys_rt_sigprocmask(
-            arg[0] as i32, arg[1], arg[2], arg[3],
-        ),
+        SYS_RT_SIGACTION => sys_rt_sigaction(arg[0] as i32, arg[1], arg[2], arg[3]),
+        SYS_RT_SIGPROCMASK => sys_rt_sigprocmask(arg[0] as i32, arg[1], arg[2], arg[3]),
 
         SYS_SETPRIORITY | SYS_LINKAT => {
             error!("Unimplemented syscall id={}", id);

@@ -11,10 +11,7 @@ fn log_current_user_registers() {
     let trap_context = TASK_MANAER.get_current_trapcx();
     error!(
         "[user-regs] ra={:#x} sp={:#x} gp={:#x} tp={:#x}",
-        trap_context.x[1],
-        trap_context.x[2],
-        trap_context.x[3],
-        trap_context.x[4]
+        trap_context.x[1], trap_context.x[2], trap_context.x[3], trap_context.x[4]
     );
     error!(
         "[user-regs] a0={:#x} a1={:#x} a2={:#x} a3={:#x} a4={:#x} a5={:#x} a6={:#x} a7={:#x}",
@@ -59,7 +56,7 @@ fn log_current_user_registers() {
 ///pagefault触发时的环境可能为内核，可能为用户态 内核态可能是在帮用户处理程序->合法,User态->合法
 pub fn PageFaultHandler(faultVAddr: VirAddr, cause: Scause) {
     // TODO:处理用户栈溢出逻辑
-    
+
     debug!("Handle Fault Virtual Address:{:#x}", faultVAddr.0);
     let contain_vpn: VirNumber = faultVAddr.floor_down();
     let tsak_satp = TASK_MANAER.get_current_stap();

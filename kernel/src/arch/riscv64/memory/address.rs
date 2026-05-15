@@ -2,19 +2,19 @@ use crate::error;
 use crate::memory::alloc_frame;
 use crate::memory::FramTracker;
 use crate::riscv64::satp;
+use crate::trap::pagefaultHandler::PageFaultHandler;
 use crate::PAGE_SIZE;
 use crate::PAGE_SIZE_BITS;
-use crate::trap::pagefaultHandler::PageFaultHandler;
 use alloc::vec;
 use alloc::vec::Vec;
 use bitflags::bitflags;
+use core::ptr::read_volatile;
+use core::sync::atomic::compiler_fence;
+use core::sync::atomic::Ordering;
 use log::debug;
 use log::warn;
 use riscv::register::scause::Scause;
 use riscv::register::scause::Trap;
-use core::ptr::read_volatile;
-use core::sync::atomic::compiler_fence;
-use core::sync::atomic::Ordering;
 bitflags! {
     #[derive(Debug,Clone, Copy)]
     pub struct PTEFlags: usize {
@@ -282,35 +282,31 @@ impl PageTable {
     ///专注翻译完整虚拟地址带偏移,结束地址不考虑是否对齐,使用者肯定
     /// 自动尝试处理mmap区域地质的fault
     pub fn translate(&mut self, VDDR: VirAddr) -> Option<PhysiAddr> {
-            match self.find_pte_vpn(VDDR.into()) {
+        match self.find_pte_vpn(VDDR.into()) {
             Some(pte) => {
-                // TODO(dirinkbottle): 这里后面要重新审视“返回的 PTE 是否真的可用”。
                 let ppn = pte.ppn();
-                if ppn.0==0 {
+                if ppn.0 == 0 {
                     warn!("ppe's ppn is zero!");
-                   return None;
-                }
-
-                let addr = (ppn.0 * PAGE_SIZE) + VDDR.offset(); //不考虑是否对齐,使用者肯定
-                return Some(PhysiAddr(addr))
-            }
-            None =>{
-                // 尝试处理mmap 缺页
-               PageFaultHandler(VDDR, Scause::from_code(13));
-                if let Some(pte) =  self.find_pte_vpn(VDDR.into()) {
-                    if pte.ppn().0==0{
-                        warn!("mmap fault process fail!");
-                        return None;
-                    }
-                    return Some(PhysiAddr(pte.ppn().0*PAGE_SIZE));
-                }else {
                     return None;
                 }
 
-            } ,
+                let addr = (ppn.0 * PAGE_SIZE) + VDDR.offset(); //不考虑是否对齐,使用者肯定
+                return Some(PhysiAddr(addr));
+            }
+            None => {
+                // 尝试处理mmap 缺页
+                PageFaultHandler(VDDR, Scause::from_code(13));
+                if let Some(pte) = self.find_pte_vpn(VDDR.into()) {
+                    if pte.ppn().0 == 0 {
+                        warn!("mmap fault process fail!");
+                        return None;
+                    }
+                    return Some(PhysiAddr(pte.ppn().0 * PAGE_SIZE));
+                } else {
+                    return None;
+                }
+            }
         }
-
-
     }
 
     ///专注于通过vpn翻译,返回ppn号
