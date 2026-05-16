@@ -1,153 +1,119 @@
-<!DOCTYPE html>
+# BlueStarOS
 
-<html lang="zh-CN">
-<head>
-<meta charset="UTF-8">
+![Rust](https://img.shields.io/badge/rust-latest-brightgreen)
+![License](https://img.shields.io/badge/license-MIT-blue)
+![Lines of Code](https://img.shields.io/badge/LoC-51K-orange)
+![Status](https://img.shields.io/badge/status-active-success)
 
-### BlueStarOS - 一个用 Rust 开发的轻量级操作系统内核
+一个用纯 Rust 从零开发的操作系统内核，支持 RISC-V 64 和 AArch64 双架构。
 
+## 特性
 
+### 进程与调度
 
-</head>
+- 多进程管理: fork / exec / exit / wait / signal
+- Stride 调度算法, 支持优先级权重
+- 进程间信号 (SIGKILL / SIGINT / SIGTERM / SIGTSTP)
+- 84 个系统调用, 兼容 musl libc 用户态程序
 
-<body>
+### 内存管理
 
-<header>
+- SV39 / AArch64 4K 页表, 用户/内核地址空间隔离
+- Buddy System 物理页分配器
+- 内核堆动态分配 (buddy_system_allocator)
+- mmap 匿名映射
 
-<h1>BlueStarOS</h1>
+### 文件系统
 
-<div class="badges">
+- VFS 抽象层 + dentry/inode 缓存
+- **ext4** (rsext4 crate, ~18K 行): extent tree, JBD2 事务日志, htree 目录索引, mkfs
+- FAT32 / ramfs
+- pipe, tty
 
-<img src="https://img.shields.io/badge/rust-latest-brightgreen" alt="Rust" class="badge">
+### 设备驱动
 
-<img src="https://img.shields.io/badge/license-MIT-blue" alt="License" class="badge">
+- **PCIe**: 枚举, BAR 解析, MSI 中断
+- **NVMe**: 块设备驱动 (替代 virtio-blk)
+- **e1000 网卡**: RX/TX DMA 环形队列, 中断驱动
+- virtio-blk / virtio-gpu
+- DTB (设备树) 解析
 
-<img src="https://img.shields.io/badge/OS%20Kernel-Learning%20Project-orange" alt="Type" class="badge">
+### 网络协议栈 (进行中)
 
-<img src="https://img.shields.io/badge/status-active-success" alt="Status" class="badge">
+- L2: 以太网帧收发
+- L3: IPv4 头解析/校验, ICMP Echo Request/Reply
+- L4: UDP 头 + 伪头校验和
+- ARP 协议 (请求/应答/缓存)
 
-</div>
+### 双架构支持
 
-</header>
+- `arch/riscv64`: QEMU virt 机器, PLIC 中断控制器
+- `arch/aarch64`: QEMU virt + OrangePi 5 Plus (RK3588), GIC 中断控制器
 
+## 目录结构
 
-<nav>
-    <h2>目录</h2>
-    <ul>
-        <li><a href="#注意">注意</a></li>
-        <li><a href="#简介">简介</a></li>
-        <li><a href="#功能特性">功能特性</a></li>
-        <li><a href="#快速开始">快速开始</a></li>
-        <li><a href="#使用说明">使用说明</a></li>
-        <li><a href="#开发计划">开发计划</a></li>
-        <li><a href="#许可证">许可证</a></li>
-        <li><a href="#致谢">致谢</a></li>
-        <li><a href="#联系方式">联系方式</a></li>
-    </ul>
-</nav>
+```text
+kernel/
+├── src/
+│   ├── arch/              # 架构相关 (riscv64, aarch64)
+│   │   ├── */driver/      # UART, PLIC/GIC, virtio
+│   │   ├── */memory/      # 地址空间, 页表
+│   │   ├── */task/        # 上下文切换
+│   │   └── */trap/        # 陷阱处理
+│   ├── driver/
+│   │   ├── network/e1000/ # e1000 网卡驱动 + 协议栈
+│   │   ├── nvme/          # NVMe 块设备驱动
+│   │   ├── pcie/          # PCIe 枚举与 BAR
+│   │   └── gpu/           # VGA 帧缓冲
+│   ├── fs/
+│   │   ├── vfs/           # VFS 抽象层 + 缓存
+│   │   ├── fs_backend/    # ext4, FAT32, ramfs
+│   │   └── component/     # pipe, tty
+│   ├── memory/            # 物理/虚拟内存管理
+│   ├── task/              # 进程控制块, 调度器
+│   ├── syscall/           # 系统调用分发
+│   └── sync/              # 同步原语
+├── dependencies/
+│   └── rsext4/            # 自研 ext4 文件系统 (~18K 行)
+└── Cargo.toml
+```
 
-<section id="注意">
-    <h1>本项目处于开发阶段，模块和功能尚不完善！</h1>
-</section>
+## 快速开始
 
-<section id="简介">
-    <h2>简介</h2>
-    <p>BlueStarOS 是一个使用 Rust 语言开发的轻量级操作系统内核。该内核是本人学习操作系统过程中实践的产物，开发过程中部分构架和设计参考主流教学操作系统rCore及xv6</p>
-</section>
+**前置依赖**
 
-<section id="功能特性">
-    <h2>功能特性</h2>
-    <ul>
-        <li><strong>动态堆分配器</strong>: 实现基于 Buddy System 或类似算法的动态内存管理</li>
-        <li><strong>陷阱处理程序</strong>: 处理异常、中断和系统调用陷阱</li>
-        <li><strong>虚拟地址空间和分页功能</strong>: 实现虚拟内存管理，支持分页机制</li>
-        <li><strong>任务切换功能</strong>:已经实现基于时钟中断的Stride任务调度算法支持多用户程序运行，syscall目前较完善</li>
-        <li><strong>下一步开发目标</strong>: 完善用户库，支持基本系统调用，开发文件系统和硬件驱动</li>
-    </ul>
-</section>
+- Rust nightly 工具链
+- QEMU (7.0+)
+- GNU Make
 
-<section id="快速开始">
-    <h2>快速开始</h2>
-    
-    前置依赖
-    在开始之前，请确保您的系统已安装以下软件：
-    
-        Rust工具链（1.6nightly版本）
-        QEMU（ 7.0 版本）
-        git
-        GNU Make
-    
-  安装与运行
-    
-        克隆仓库：
-        git clone https://github.com/Dirinkbottle/BlueStarOS.git
-        cd BlueStarOS
+**构建与运行**
 
-</li>
+```bash
+# 克隆
+git clone https://github.com/Dirinkbottle/BlueStarOS.git
+cd BlueStarOS/kernel
 
-<li>构建项目：
+# RISC-V (默认)
+make run LOG=TRACE
 
-<pre><code>cargo build --release</code></pre>
+# AArch64
+make run ARCH=aarch64 LOG=TRACE
+```
 
-</li>
+## 开发计划
 
-<li>运行内核（使用 QEMU）：
+- [ ] 网络: socket syscall, 用户态 UDP/TCP
+- [ ] 同步: 信号量, Mutex, condvar (WaitQueue 骨架已就位)
+- [ ] SMP 多核支持
+- [ ] 用户态 shell
+- [ ] ext4 写入支持完善
 
-<pre><code>make run LOG=TRACE</code></pre>
+## 许可证
 
-</li>
+MIT License. 详见 [LICENSE](LICENSE)。
 
-</ol>
+## 联系方式
 
-<p>注意：实际运行命令可能因架构和配置不同而有所调整，请参考项目内的具体文档。
-</p>
-
-</section>
-
-复制
-<section id="使用说明">
-    <h2>使用说明</h2>
-    <p>当前版本的 BlueStarOS 主要提供内核不完整功能演示。运行时，内核将初始化内存分配器和初始化内核地址空间 </p>
-    <p>您可以通过查看串口输出或控制台信息来观察内核的运行状态和调试信息。</p>
-</section>
-
-<section id="开发计划">
-    <h2>开发计划</h2>
-    <ul>
-        <li><strong>中期目标</strong>: 完成文件系统开发，完成usb，串口等硬件驱动开发</li>
-        <li><strong>长期目标</strong>: 支持shell，命令行</li>
-        <li><strong>最终目标</strong>: 开发图形api，显卡驱动，支持图形化桌面</li>
-    </ul>
-</section>
-
-<section id="许可证">
-    <h2>许可证</h2>
-    <p>本项目基于 MIT 许可证开源。详情请查看 <a href="LICENSE">LICENSE</a> 文件。</p>
-</section>
-
-<section id="致谢">
-    <h2>致谢</h2>
-    <p>感谢以下资源对项目的启发和帮助：</p>
-    <ul>
-        <li><a href="https://www.rust-lang.org/">Rust 编程语言社区</a></li>
-        <li><a href="https://opencamp.cn/os2edu/camp/2025fall">2025冬季开源操作系统训练营</a></li>
-        <li>所有为操作系统开发提供优秀文档的开发者</li>
-    </ul>
-</section>
-
-<section id="联系方式">
-    <h2>联系方式</h2>
-    <p>如有问题或建议，请通过以下方式联系：</p>
-    <ul>
-        <li>项目维护者邮箱：yellowfish@dirinkbottle.asia</li>
-        <li>GitHub 仓库：<a href="https://github.com/Dirinkbottle/BlueStarOS/">BlueStarOS</a></li>
-        <li>项目议题页面：<a href="https://github.com/Dirinkbottle/BlueStarOS/issues">提交问题或建议</a></li>
-    </ul>
-</section>
-<footer>
-    <p>© 2025 BlueStarOS By Dirinkbottle</p>
-</footer>
-</body>
-
-</html>
-
+- 邮箱: <2909128143@qq.com>
+- GitHub: [BlueStarOS](https://github.com/Dirinkbottle/BlueStarOS/)
+- Issues: [提交问题或建议](https://github.com/Dirinkbottle/BlueStarOS/issues)
