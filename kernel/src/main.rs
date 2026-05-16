@@ -33,11 +33,6 @@ use crate::arch::*;
 use crate::config::*;
 use crate::driver::dtb;
 use crate::driver::gpu::inital_gpu;
-use crate::driver::network::e1000::agreenment::Ipv4Addr;
-use crate::driver::network::e1000::arp::arp_receive;
-use crate::driver::network::e1000::arp::raw_ethdat_recivea;
-use crate::driver::network::e1000::arp::send_arp_packet;
-use crate::driver::network::e1000::rx_ringbuffer::e1000_poll_rx;
 use crate::fs::vfs::*;
 use crate::logger::*;
 use crate::memory::*;
@@ -45,7 +40,6 @@ use crate::root::RootFs;
 use crate::task::run_first_task;
 use crate::time::*;
 use core::arch::global_asm;
-use core::ptr::write_volatile;
 use log::*;
 pub use sbi::*;
 
@@ -79,20 +73,16 @@ pub fn blue_main() -> ! {
         __kernel_refume as *const () as usize - __kernel_trap as *const () as usize
             + TRAP_BOTTOM_ADDR
     );
-    unsafe {
-        loop {
-            let data = e1000_poll_rx();
-            if let Some(dt) = data {
-                debug!("Revice network packet!,data:{:?}", dt.data_slice());
-                let split_eth = raw_ethdat_recivea(dt).expect("a");
-                arp_receive(split_eth);
-            }
-        }
-    }
-
+    // loop {
+    //     let data = e1000_poll_rx();
+    //     if let Some(dt) = data {
+    //         network_packet_resolve(dt);
+    //     }
+    // }
     inital_gpu();
     warn!("initial file system");
-
+    
+   
     RootFs::init_rootfs();
 
     run_first_task();

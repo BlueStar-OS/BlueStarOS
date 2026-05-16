@@ -52,6 +52,7 @@ mod sys_mprotect;
 mod sys_readv;
 mod sys_rt_sigaction;
 mod sys_rt_sigprocmask;
+mod network;
 use crate::syscall::sys_mmap::sys_mmap;
 use crate::syscall::sys_mprotect::sys_mprotect;
 use crate::syscall::sys_readv::sys_readv;

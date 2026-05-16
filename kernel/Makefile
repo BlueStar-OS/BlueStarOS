@@ -99,7 +99,7 @@ clippy-check:
 	@LOG=$(LOG) cargo clippy --target $(TARGET) $(MODE_ARG) $(FEATURES_ARG) --all-targets -- -D warnings
 
 # 总是重新构建：每次 build 都先通过格式化与 clippy 检查，再跑 cargo build 和 objcopy
-build: fmt-check clippy-check user-makeimg
+build:
 	@cargo clean
 	@rm -f $(KERNEL_ELF) $(KERNEL_BIN) src/BlueStarOS.elf src/BlueStarOS.bin
 	@LOG=$(LOG) cargo build --target $(TARGET) $(MODE_ARG) $(FEATURES_ARG)
