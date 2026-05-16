@@ -24,6 +24,11 @@ pub mod arp {
     pub use super::packet::arp::*;
 }
 
+/// 兼容旧路径：`e1000::icmp::*`
+pub mod icmp {
+    pub use super::packet::icmp::*;
+}
+
 /// 兼容旧路径：`e1000::ipv4::*`
 pub mod ipv4 {
     pub use super::packet::ipv4::*;
