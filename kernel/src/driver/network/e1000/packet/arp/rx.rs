@@ -3,7 +3,7 @@
 use log::{debug, info, warn};
 
 use crate::driver::network::e1000::agreenment::{
-    DstMac, EthHead, EtherType, Ipv4Addr, Net16, SourceMac, ETH_HLEN,
+    DstMac, EthHead, EtherType, Ipv4Addr, Net16, SourceMac,
 };
 use crate::driver::network::e1000::netbuffer::NetBuffer;
 use crate::driver::network::e1000::packet::arp::cache::ARP_TABLE;
@@ -13,42 +13,21 @@ use crate::driver::network::e1000::packet::arp::packet::{
 use crate::driver::network::e1000::tx_ringbuffer::{e1000_transmit, E1000TxRing};
 use crate::driver::network::e1000::E1000_DEV;
 
-/// 对齐故障调试钩子。
-///
-/// 旧 `main.rs` 调试路径仍会调用该符号；ARP 模块拆分后先保留一个空实现，
-/// 避免重构期间因路径变化破坏启动流程。
-pub fn trigger_alignment_fault() {}
-
-/// 剥离以太网头，返回 ARP payload。
-pub fn raw_ethdat_recivea(raw_eth_payload: NetBuffer) -> Option<NetBuffer> {
-    let mut netb = raw_eth_payload;
-
-    if netb.data_len() < ETH_HLEN {
-        warn!("收到残缺的以太网帧，直接丢弃");
-        return None;
-    }
-
-    // SAFETY: 长度已检查且 `EthHead` 为 packed。
-    let eth_hdr = unsafe { &*(netb.data_slice().as_ptr() as *const EthHead) };
-    info!("{}  len={}", eth_hdr, netb.data_len());
-
-    if !netb.push_data_ptr(ETH_HLEN) {
-        warn!("push data ptr fail");
-        return None;
-    }
-    Some(netb)
-}
-
 /// 处理一个 ARP payload。
-pub fn arp_receive(payload: NetBuffer) {
+pub fn arp_receive(payload: NetBuffer, eth_hdr: EthHead) {
     let mut netb = payload;
     if netb.data_len() < core::mem::size_of::<ArpHeader>() {
         warn!("Bad ARP Packet, so short packet len,drop");
         return;
     }
 
-    // SAFETY: 长度已检查且 `ArpHeader` 为 packed。
-    let arp_hdr = unsafe { &*(netb.data_slice_mut().as_ptr() as *const ArpHeader) };
+    let arp_hdr = match netb.as_arp_header() {
+        Some(hdr) => hdr,
+        None => {
+            warn!("ARP 头解析失败，直接丢弃");
+            return;
+        }
+    };
     let arp_b = arp_hdr as *const ArpHeader as *const u8;
 
     let hw_type = arp_hdr.hw_type.host();

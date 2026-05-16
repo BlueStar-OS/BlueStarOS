@@ -1,8 +1,12 @@
 //! ARP 线速报文头定义。
+//!
+//! 参考 Linux:
+//! - `/home/inkbottle/桌面/linux-5.4.29/include/uapi/linux/if_arp.h:145-154`
 
 use alloc::fmt::Write;
 
 use crate::driver::network::e1000::agreenment::{Ipv4Addr, Net16, Net8};
+use crate::driver::network::e1000::netbuffer::NetHeader;
 
 /// ARP Request opcode。
 pub const ARP_OPCODE_REQUEST: u16 = 1;
@@ -34,6 +38,11 @@ pub struct ArpHeader {
 }
 
 const _: () = assert!(core::mem::size_of::<ArpHeader>() == 28);
+
+// SAFETY: `ArpHeader` 的布局固定且与线速 ARP 头一致。
+unsafe impl NetHeader for ArpHeader {
+    const WIRE_LEN: usize = 28;
+}
 
 impl ArpHeader {
     /// 构造一个 ARP 报文头。
