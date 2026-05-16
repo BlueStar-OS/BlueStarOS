@@ -437,29 +437,44 @@ pub fn e1000_alloc_rx_buffers(bar: &BarSpace, ring: &mut E1000RxRing) {
     );
 }
 
+/// RX 描述符消费结果。
+///
+/// 区分"好包"、"坏包"和"环空"，让调用者按需处理。
+#[derive(Debug)]
+pub enum RxResult {
+    /// 收到一个完整的无错误帧 (已剥离 FCS)。
+    Good(NetBuffer),
+    /// 收到了帧但有硬件错误 / 不支持的 jumbo 帧，已丢弃。
+    /// RDT 已推进，描述符已回收。
+    Bad,
+}
+
 /// 轮询收包 — 检查 DD 位, 返回接收数据
 ///
 /// 对应 Linux: e1000_main.c:4339 `e1000_clean_rx_irq` (简化轮询版, 无 NAPI)
 ///
 /// ## 返回
-/// - `Some(pkt)`: 收到一个完整、无错误的数据帧 (已剥离 FCS)
-/// - `None`: 无新数据 / 帧有错误 / jumbo 帧
+/// - `Some(RxResult::Good(pkt))`: 收到一个完整、无错误的数据帧 (已剥离 FCS)
+/// - `Some(RxResult::Bad)`: 收到了帧但有错误 / 不支持的 jumbo 帧，已丢弃
+/// - `None`: 环空 (DD=0), 无新数据
 ///
-/// ## 注意
-/// 该函数不重新分配缓冲区。调用者读取 pkt 内容后必须调用
-/// `e1000_refill_rx_buffers()` 回收描述符。
-///
+/// ## RDT 更新
+/// 无论好包坏包，只要消费了描述符就立即推进 RDT，
+/// 确保硬件不会因为 RDT 停滞而停止 DMA 写入。
 #[allow(dead_code)]
-pub fn e1000_poll_rx() -> Option<NetBuffer> {
+pub fn e1000_poll_rx() -> Option<RxResult> {
     let mut lock = E1000_DEV.try_lock().expect("Lock is busy or get not exist");
-    let ring = &mut (*lock).as_mut().expect("nodev").rx_ring;
+    // SAFETY: `bar` 和 `rx_ring` 是 `E1000` 的不相交字段，拆分借用安全。
+    let dev = (*lock).as_mut().expect("nodev");
+    let ring = unsafe { &mut *(&mut dev.rx_ring as *mut E1000RxRing) };
+    let bar = &dev.bar;
     let i = ring.next_to_clean;
 
     // 读描述符状态 (volatile 防止编译器优化)
     // 参考: e1000_main.c:4357
     let status = unsafe { core::ptr::read_volatile(&(*ring.desc.add(i)).status) };
     if (status & E1000_RXD_STAT_DD) == 0 {
-        return None; // 无新包
+        return None; // 环空, 无新包
     }
 
     // dma_rmb(): 确保读取 DD=1 后, length/errors/data 是硬件 DMA 写完的最新值
@@ -472,48 +487,59 @@ pub fn e1000_poll_rx() -> Option<NetBuffer> {
     let length = unsafe { core::ptr::read_volatile(&(*ring.desc.add(i)).length) } as usize;
     let data = ring.buffer_info[i].data as *const u8;
 
+    // ── 准备好包还是坏包的判断 ──
+    let mut result: Option<RxResult> = None;
+
     // ── !EOP: 多描述符帧 (jumbo) ──
-    // 当前不处理 jumbo 帧, 仅清除当前 desc 的 DD, 返回 None。
+    // 当前不处理 jumbo 帧, 仅清除当前 desc 的 DD, 丢弃。
     // 后续 poll 会逐个跳过剩下的分片 desc 直到 EOP, 然后硬件恢复收包。
-    // 参考: e1000_main.c:4407-4417 (Linux 用 adapter->discarding 标记跳过整帧)
+    // 参考: e1000_main.c:4407-4417
     if (status & E1000_RXD_STAT_EOP) == 0 {
-        unsafe {
-            (*ring.desc.add(i)).status = 0;
-        }
-        ring.next_to_clean = (i + 1) % ring.count;
         warn!("e1000: dropped multi-descriptor frame (jumbo not supported)");
-        return None;
+        result = Some(RxResult::Bad);
     }
 
     // ── 帧错误检查 ──
     // 检查 CRC/符号/序列/载波扩展/Rx 数据错误。
     // 参考: e1000_main.c:4419-4429
-    let errors = unsafe { core::ptr::read_volatile(&(*ring.desc.add(i)).errors) };
-    if (errors & E1000_RXD_ERR_FRAME_ERR_MASK) != 0 {
-        // 有硬件错误, 丢弃此帧
-        // 在完整驱动中此处应统计 rx_crc_errors 等计数器
-        unsafe {
-            (*ring.desc.add(i)).status = 0;
+    if result.is_none() {
+        let errors = unsafe { core::ptr::read_volatile(&(*ring.desc.add(i)).errors) };
+        if (errors & E1000_RXD_ERR_FRAME_ERR_MASK) != 0 {
+            result = Some(RxResult::Bad);
         }
-        ring.next_to_clean = (i + 1) % ring.count;
-        return None;
     }
 
-    // ── FCS 剥离 ──
+    // ── 好包: FCS 剥离 + 拷贝数据 ──
     // e1000 硬件在标准模式下不自动剥离 FCS, length 包含 4 字节 Ethernet CRC。
-    // Linux 通过 length -= 4 手动剥离 (除非 NETIF_F_RXFCS 保留原始帧)。
     // 参考: e1000_main.c:4433,4440
-    let pkt_len = length - ETHERNET_FCS_LENGTH;
+    if result.is_none() {
+        let pkt_len = length - ETHERNET_FCS_LENGTH;
+        let mut new_buffer = NetBuffer::new();
+        new_buffer.new_data(unsafe { &*core::ptr::slice_from_raw_parts(data, pkt_len) });
+        result = Some(RxResult::Good(new_buffer));
+    }
 
-    // 清除 DD 位, 标记描述符已消费
-    // 参考: e1000_main.c:4456
+    // ── 统一回收描述符并推进 RDT ──
+    // 无论好包坏包，描述符已被消费，必须:
+    //   1. 清零 status (通知硬件此 desc 可重用)
+    //   2. 推进 next_to_clean
+    //   3. 写 RDT (doorbell 通知硬件可以继续 DMA 到此 desc)
+    //
+    // 参考: e1000_main.c:4449-4457
     unsafe {
         (*ring.desc.add(i)).status = 0;
     }
+    
     ring.next_to_clean = (i + 1) % ring.count;
-    let mut new_buffer = NetBuffer::new();
-    new_buffer.new_data(unsafe { &*core::ptr::slice_from_raw_parts(data, pkt_len) });
-    Some(new_buffer)
+
+    // dma_wmb(): 保证 status 清零在 RDT 写入之前全局可见
+    dma_wmb();
+
+    // 写 RDT = 最后一个被软件释放的描述符索引
+    // 参考: e1000_main.c:4646-4657
+    bar.write_32(E1000_RDT, i as u32);
+
+    result
 }
 
 /// 补充已消费的接收缓冲区
