@@ -34,6 +34,7 @@ use alloc::vec::Vec;
 use log::{debug, info, warn};
 
 use crate::config::PAGE_SIZE;
+use crate::driver::network::e1000::E1000_DEV;
 use crate::driver::network::e1000::netbuffer::NetBuffer;
 use crate::driver::pcie::BarSpace;
 use crate::memory::{alloc_contiguous_frames, alloc_frame, FramTracker};
@@ -459,7 +460,11 @@ pub fn e1000_configure_tx(bar: &BarSpace, ring: &E1000TxRing) {
 /// ## 调用时机
 /// - 中断处理程序中检测到 TXDW (TX Descriptor Done) 事件时
 /// - 发送前检查是否有可用槽位时
-pub fn e1000_clean_tx_irq(bar: &BarSpace, ring: &mut E1000TxRing) -> usize {
+pub fn e1000_clean_tx_irq() -> usize {
+    let mut e1000 = E1000_DEV.lock();
+    let dev =(*e1000).as_mut().expect("no dev");
+    let bar =&dev.bar;
+    let ring = &mut dev.tx_ring;
     let hw_head = bar.read_32(E1000_TDH) as usize;
     let mut i = ring.next_to_clean;
     let mut cleaned = 0;
@@ -474,6 +479,7 @@ pub fn e1000_clean_tx_irq(bar: &BarSpace, ring: &mut E1000TxRing) -> usize {
 
         // 释放 DMA 缓冲区物理页
         if let Some(frame) = ring.buffer_info[i].frame.take() {
+            let _ = frame;
             // frame dropped here → dealloc_frame
         }
         ring.buffer_info[i].data = core::ptr::null_mut();
@@ -565,32 +571,7 @@ pub fn e1000_transmit(bar: &BarSpace, ring: &mut E1000TxRing, data: NetBuffer) -
     ring.next_to_use = next;
     bar.write_32(E1000_TDT, next as u32);
 
-    //  轮询等待硬件发送完成 (DD=1)
-    //  参考: e1000_main.c 中 clean_tx_irq 在中断中完成,
-    //       这里简化实现: 同步等待, 实际生产环境应使用中断
-    loop {
-        let status = unsafe { (*ring.desc.add(i)).status };
-        if status != 0 {
-            debug!(
-                "e1000: tx complete desc={} len={} status={:#04x}{}{}",
-                i,
-                data.data_len(),
-                status,
-                if (status & E1000_TXD_STAT_EC) != 0 {
-                    " EC"
-                } else {
-                    ""
-                },
-                if (status & E1000_TXD_STAT_LC) != 0 {
-                    " LC"
-                } else {
-                    ""
-                },
-            );
-
-            break;
-        }
-    }
+    debug!("e1000: tx submitted desc={} len={}", i, data.data_len());
 
     true
 }
