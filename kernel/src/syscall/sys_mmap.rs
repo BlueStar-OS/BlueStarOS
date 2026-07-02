@@ -1,3 +1,20 @@
+//! sys_mmap — 建立用户虚拟地址映射。
+//!
+//! ## 作用
+//! 在当前进程地址空间中创建一段映射，返回映射起始虚拟地址。
+//!
+//! ## 参数
+//! `addr` 为用户期望地址；`len` 为映射长度；`prot` 为访问权限；`flags` 为映射标志；`fd`/`offset` 描述可选文件后端。
+//!
+//! ## 注意事项
+//! Linux mmap 强语义包含 VMA 合并/拆分、文件页缓存、MAP_FIXED 覆盖和权限校验；当前实现委托 `MemorySet::mmap`，语义完整度取决于内存子系统。
+//!
+//! ## Linux 参考版本
+//! K3 Linux 6.18.3 (/home/inkbottle/othersrc/k3/spacemit-k3-linux-6.18)，参考: arch/riscv/kernel/sys_riscv.c:24。
+//!
+//! ## 实现情况
+//! 已接入当前任务地址空间的 mmap 路径；TODO: 继续补齐 Linux VMA 合并/拆分、文件映射、MAP_FIXED_NOREPLACE 和页缓存一致性语义。
+//!
 use log::debug;
 
 use crate::syscall::VirAddr;
@@ -30,17 +47,14 @@ pub fn sys_mmap(
     fd: i32,
     offset: usize,
 ) -> isize {
-    //warn!("enter mmap");
-    let inner = TASK_MANAER.task_que_inner.lock();
-    let current = inner.current;
-    drop(inner);
     let fd_backing = TASK_MANAER.get_current_fd(fd as usize).unwrap_or_default();
-    let inner = TASK_MANAER.task_que_inner.lock();
-    let mut tcb = inner.task_queen[current].lock();
-
-    let result = tcb
-        .memory_set
-        .mmap(VirAddr(addr), len, prot, flags, fd, offset, fd_backing);
+    let result = TASK_MANAER.task_que_inner.lock(|inner| {
+        let current = inner.current;
+        inner.task_queen[current].lock(|tcb| {
+            tcb.memory_set
+                .mmap(VirAddr(addr), len, prot, flags, fd, offset, fd_backing)
+        })
+    });
 
     // 记录 mmap 调试信息
     if result < 0 {

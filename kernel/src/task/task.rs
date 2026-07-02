@@ -1239,7 +1239,7 @@ impl TaskManager {
 
     ///kail当前任务，内核有权调用 调用栈顶必须为TrapHandler! 调用它的地方考虑是否直接return
     pub fn kail_current_task_and_run_next(&self) {
-        use crate::syscall::syscall::sys_exit;
+        use crate::syscall::sys_exit::sys_exit;
         sys_exit(usize::MAX);
         error!("Task Kailed!");
     }

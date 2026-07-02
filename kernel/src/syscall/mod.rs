@@ -1,6 +1,4 @@
-pub mod syscall;
 use crate::error::BlueErr;
-use crate::syscall::syscall::*;
 use crate::{arch::memory::*, task::TASK_MANAER};
 use log::{error, warn};
 // Linux riscv64 syscall numbers (subset used by the oscomp test suite)
@@ -47,17 +45,175 @@ pub const SYS_DUP: usize = 23;
 pub const SYS_DUP3: usize = 24;
 pub const SYS_MPROTECT: usize = 226;
 
+// ── 新增系统调用 (Linux riscv64 ABI) ─────────────────────────
+// 参考: include/uapi/asm-generic/unistd.h
+pub const SYS_FACCESSAT: usize = 48;
+pub const SYS_READLINKAT: usize = 78;
+pub const SYS_FTRUNCATE: usize = 46;
+pub const SYS_UMASK: usize = 166;
+// process
+pub const SYS_GETUID: usize = 174;
+pub const SYS_GETEUID: usize = 175;
+pub const SYS_GETGID: usize = 176;
+pub const SYS_GETEGID: usize = 177;
+pub const SYS_GETTID: usize = 178;
+pub const SYS_SETPGID: usize = 154;
+pub const SYS_GETPGID: usize = 155;
+pub const SYS_GETSID: usize = 156;
+pub const SYS_SETSID: usize = 157;
+// signal
+pub const SYS_KILL: usize = 129;
+pub const SYS_TKILL: usize = 130;
+pub const SYS_TGKILL: usize = 131;
+pub const SYS_RT_SIGRETURN: usize = 139;
+// network (已定义但未 dispatch)
+pub const SYS_SOCKET: usize = 198;
+pub const SYS_SOCKETPAIR: usize = 199;
+pub const SYS_BIND: usize = 200;
+pub const SYS_LISTEN: usize = 201;
+pub const SYS_ACCEPT: usize = 202;
+pub const SYS_CONNECT: usize = 203;
+pub const SYS_SENDTO: usize = 206;
+pub const SYS_RECVFROM: usize = 207;
+pub const SYS_SETSOCKOPT: usize = 208;
+pub const SYS_GETSOCKOPT: usize = 209;
+pub const SYS_SHUTDOWN: usize = 210;
+pub const SYS_ACCEPT4: usize = 242;
+// misc
+pub const SYS_FCNTL: usize = 25;
+pub const SYS_SELECT: usize = 72;
+
+mod network;
+mod process;
+mod signal;
+mod sys_brk;
+mod sys_chdir;
+mod sys_clock_gettime;
+mod sys_clone;
+mod sys_close;
+mod sys_creat;
+mod sys_dup;
+mod sys_dup2;
+mod sys_execve;
+pub(crate) mod sys_exit;
+mod sys_exit_group;
+mod sys_faccessat;
+mod sys_fcntl;
+mod sys_fork;
+mod sys_fstat;
+mod sys_ftruncate;
+mod sys_getcwd;
+mod sys_getdents64;
+mod sys_getpid;
+mod sys_getppid;
+mod sys_gettimeofday;
+mod sys_ioctl;
+mod sys_lseek;
+mod sys_mkdir;
+mod sys_mkdirat;
 mod sys_mmap;
+mod sys_mount;
 mod sys_mprotect;
+mod sys_munmap;
+mod sys_nanosleep;
+mod sys_open;
+mod sys_pipe;
+mod sys_read;
+mod sys_readlinkat;
 mod sys_readv;
 mod sys_rt_sigaction;
 mod sys_rt_sigprocmask;
-mod network;
+mod sys_select;
+mod sys_set_tid_address;
+mod sys_stat;
+mod sys_times;
+mod sys_umask;
+mod sys_umount2;
+mod sys_uname;
+mod sys_unlink;
+mod sys_wait;
+mod sys_wait4;
+mod sys_write;
+mod sys_writev;
+mod sys_yield;
+pub(crate) mod syscall;
+
+use crate::syscall::sys_brk::sys_brk;
+use crate::syscall::sys_chdir::sys_chdir;
+use crate::syscall::sys_clock_gettime::sys_clock_gettime;
+use crate::syscall::sys_clone::sys_clone;
+use crate::syscall::sys_close::sys_close;
+use crate::syscall::sys_creat::sys_creat;
+use crate::syscall::sys_dup::sys_dup;
+use crate::syscall::sys_dup2::sys_dup2;
+use crate::syscall::sys_execve::sys_execve;
+use crate::syscall::sys_exit::sys_exit;
+use crate::syscall::sys_exit_group::sys_exit_group;
+use crate::syscall::sys_faccessat::sys_faccessat;
+use crate::syscall::sys_fcntl::sys_fcntl;
+use crate::syscall::sys_fork::sys_fork;
+use crate::syscall::sys_fstat::sys_fstat;
+use crate::syscall::sys_ftruncate::sys_ftruncate;
+use crate::syscall::sys_getcwd::sys_getcwd;
+use crate::syscall::sys_getdents64::sys_getdents64;
+use crate::syscall::sys_getpid::sys_getpid;
+use crate::syscall::sys_getppid::sys_getppid;
+use crate::syscall::sys_gettimeofday::sys_gettimeofday;
+use crate::syscall::sys_ioctl::sys_ioctl;
+use crate::syscall::sys_lseek::sys_lseek;
+use crate::syscall::sys_mkdir::sys_mkdir;
+use crate::syscall::sys_mkdirat::sys_mkdirat;
 use crate::syscall::sys_mmap::sys_mmap;
+use crate::syscall::sys_mount::sys_mount;
 use crate::syscall::sys_mprotect::sys_mprotect;
+use crate::syscall::sys_munmap::sys_munmap;
+use crate::syscall::sys_nanosleep::sys_nanosleep;
+use crate::syscall::sys_open::sys_open;
+use crate::syscall::sys_pipe::sys_pipe;
+use crate::syscall::sys_read::sys_read;
+use crate::syscall::sys_readlinkat::sys_readlinkat;
 use crate::syscall::sys_readv::sys_readv;
 use crate::syscall::sys_rt_sigaction::sys_rt_sigaction;
 use crate::syscall::sys_rt_sigprocmask::sys_rt_sigprocmask;
+use crate::syscall::sys_select::sys_select;
+use crate::syscall::sys_set_tid_address::sys_set_tid_address;
+use crate::syscall::sys_stat::sys_stat;
+use crate::syscall::sys_times::sys_times;
+use crate::syscall::sys_umask::sys_umask;
+use crate::syscall::sys_umount2::sys_umount2;
+use crate::syscall::sys_uname::sys_uname;
+use crate::syscall::sys_unlink::sys_unlink;
+use crate::syscall::sys_wait::sys_wait;
+use crate::syscall::sys_wait4::sys_wait4;
+use crate::syscall::sys_write::sys_write;
+use crate::syscall::sys_writev::sys_writev;
+use crate::syscall::sys_yield::sys_yield;
+
+use crate::syscall::network::sys_accept::sys_accept;
+use crate::syscall::network::sys_accept4::sys_accept4;
+use crate::syscall::network::sys_bind::sys_bind;
+use crate::syscall::network::sys_connect::sys_connect;
+use crate::syscall::network::sys_getsockopt::sys_getsockopt;
+use crate::syscall::network::sys_listen::sys_listen;
+use crate::syscall::network::sys_recvfrom::sys_recvfrom;
+use crate::syscall::network::sys_sendto::sys_sendto;
+use crate::syscall::network::sys_setsockopt::sys_setsockopt;
+use crate::syscall::network::sys_shutdown::sys_shutdown;
+use crate::syscall::network::sys_socket::sys_socket;
+use crate::syscall::network::sys_socketpair::sys_socketpair;
+use crate::syscall::process::sys_getegid::sys_getegid;
+use crate::syscall::process::sys_geteuid::sys_geteuid;
+use crate::syscall::process::sys_getgid::sys_getgid;
+use crate::syscall::process::sys_getpgid::sys_getpgid;
+use crate::syscall::process::sys_getsid::sys_getsid;
+use crate::syscall::process::sys_gettid::sys_gettid;
+use crate::syscall::process::sys_getuid::sys_getuid;
+use crate::syscall::process::sys_setpgid::sys_setpgid;
+use crate::syscall::process::sys_setsid::sys_setsid;
+use crate::syscall::signal::sys_kill::sys_kill;
+use crate::syscall::signal::sys_rt_sigreturn::*;
+use crate::syscall::signal::sys_tgkill::sys_tgkill;
+use crate::syscall::signal::sys_tkill::sys_tkill;
 #[inline]
 /// log x0-x31
 fn log_x_regs(stage: &str, id: usize, trap_cx: &[usize; 32]) {
@@ -182,6 +338,42 @@ pub fn syscall_handler(id: usize, arg: [usize; 6]) -> isize {
             error!("Unimplemented syscall id={}", id);
             BlueErr::ENOSYS.as_isize()
         }
+
+        // ── 网络系统调用 ──────────────────────────────────────
+        SYS_SOCKET => sys_socket(arg[0], arg[1], arg[2]),
+        SYS_BIND => sys_bind(arg[0], arg[1], arg[2]),
+        SYS_SENDTO => sys_sendto(arg[0], arg[1], arg[2], arg[3], arg[4], arg[5]),
+        SYS_RECVFROM => sys_recvfrom(arg[0], arg[1], arg[2], arg[3], arg[4], arg[5]),
+
+        SYS_SELECT => sys_select(arg[0], arg[1], arg[2], arg[3], arg[4]),
+
+        // ── 新增系统调用 ──────────────────────────────────────
+        SYS_FACCESSAT => sys_faccessat(arg[0], arg[1], arg[2], arg[3]),
+        SYS_READLINKAT => sys_readlinkat(arg[0], arg[1], arg[2], arg[3]),
+        SYS_FCNTL => sys_fcntl(arg[0], arg[1], arg[2]),
+        SYS_FTRUNCATE => sys_ftruncate(arg[0], arg[1]),
+        SYS_UMASK => sys_umask(arg[0]),
+        SYS_GETUID => sys_getuid(),
+        SYS_GETEUID => sys_geteuid(),
+        SYS_GETGID => sys_getgid(),
+        SYS_GETEGID => sys_getegid(),
+        SYS_GETTID => sys_gettid(),
+        SYS_SETPGID => sys_setpgid(arg[0], arg[1]),
+        SYS_GETPGID => sys_getpgid(arg[0]),
+        SYS_GETSID => sys_getsid(arg[0]),
+        SYS_SETSID => sys_setsid(),
+        SYS_KILL => sys_kill(arg[0], arg[1]),
+        SYS_TKILL => sys_tkill(arg[0], arg[1]),
+        SYS_TGKILL => sys_tgkill(arg[0], arg[1], arg[2]),
+        SYS_RT_SIGRETURN => sys_rt_sigreturn(),
+        SYS_LISTEN => sys_listen(arg[0], arg[1]),
+        SYS_CONNECT => sys_connect(arg[0], arg[1], arg[2]),
+        SYS_ACCEPT => sys_accept(arg[0], arg[1], arg[2]),
+        SYS_ACCEPT4 => sys_accept4(arg[0], arg[1], arg[2], arg[3]),
+        SYS_SETSOCKOPT => sys_setsockopt(arg[0], arg[1], arg[2], arg[3], arg[4]),
+        SYS_GETSOCKOPT => sys_getsockopt(arg[0], arg[1], arg[2], arg[3], arg[4]),
+        SYS_SOCKETPAIR => sys_socketpair(arg[0], arg[1], arg[2], arg[3]),
+        SYS_SHUTDOWN => sys_shutdown(arg[0], arg[1]),
 
         _ => {
             error!("Unknown syscall id={}", id);

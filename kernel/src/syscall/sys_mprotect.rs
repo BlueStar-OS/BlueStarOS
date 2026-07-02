@@ -1,3 +1,20 @@
+//! sys_mprotect — 修改既有用户映射的访问权限。
+//!
+//! ## 作用
+//! 调整当前进程 `[addr, addr + len)` 虚拟地址区间的 PTE/VMA 访问权限。
+//!
+//! ## 参数
+//! `addr` 为页对齐起始虚拟地址；`len` 为保护范围长度；`prot` 为 PROT_READ/PROT_WRITE/PROT_EXEC 权限组合。
+//!
+//! ## 注意事项
+//! 权限更新后必须刷新 TLB；当前只覆盖本地 `sfence.vma`，SMP 下还需要跨核 shootdown。
+//!
+//! ## Linux 参考版本
+//! K3 Linux 6.18.3 (/home/inkbottle/othersrc/k3/spacemit-k3-linux-6.18)，参考: mm/mprotect.c:1008。
+//!
+//! ## 实现情况
+//! 已实现页对齐校验、权限校验、VMA/PTE 更新和本地 TLB 刷新；TODO: 补齐 Linux 的 mmap_lock、SMP TLB shootdown 和细粒度 VMA flag 兼容。
+//!
 use crate::arch::memory::VirAddr;
 use crate::error::BlueErr::EINVAL;
 use crate::memory::MmapProt;
@@ -35,24 +52,19 @@ pub fn sys_mprotect(addr: usize, len: usize, prot: usize) -> isize {
     }
 
     // 2. 获取当前进程的地址空间
-    let inner = TASK_MANAER.task_que_inner.lock();
-    let current = inner.current;
-    drop(inner);
+    let result = TASK_MANAER.task_que_inner.lock(|inner| {
+        let current = inner.current;
+        inner.task_queen[current]
+            .lock(|tcb| tcb.memory_set.mprotect_range(VirAddr(addr), len, prot))
+    });
 
-    let inner = TASK_MANAER.task_que_inner.lock();
-    let mut tcb = inner.task_queen[current].lock();
-
-    // 3. 委托 MapSet 执行核心逻辑（VMA 切割 + 标志更新 + PTE 同步）
-    let result: isize = tcb.memory_set.mprotect_range(VirAddr(addr), len, prot);
-
-    // 4. 成功返回前刷新 TLB，确保 CPU 使用新的权限位
+    // 3. 成功返回前刷新 TLB
     if result == 0 {
-        // RISC-V: 全量 TLB 刷新
-        // AArch64: 替换为 `tlbi vmalle1; dsb nsh`
+        // SAFETY: sfence.vma 是 RISC-V 特权指令，用于使当前 hart 的旧页表权限缓存失效；
+        // 此处只在内核态执行，且不读写 Rust 管理的内存对象。
         unsafe { core::arch::asm!("sfence.vma") };
         return 0;
     }
 
-    // mprotect_range 返回具体 errno（EINVAL/ENOMEM），直接透传
     result
 }

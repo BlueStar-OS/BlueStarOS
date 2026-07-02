@@ -1,33 +1,26 @@
-/// rt_sigprocmask 系统调用 —— 检查/更改信号掩码
-///
-/// # Linux 参考
-/// - 函数原型：kernel/signal.c:3015  SYSCALL_DEFINE4(rt_sigprocmask, int, how,
-///                     sigset_t __user *, nset,
-///                     sigset_t __user *, oset,
-///                     size_t, sigsetsize)
-/// - how 参数：include/uapi/asm-generic/signal-defs.h:7-15
-///   - SIG_BLOCK   = 0  （将 nset 中的信号加入当前阻塞集）
-///   - SIG_UNBLOCK = 1  （将 nset 中的信号从阻塞集移除）
-///   - SIG_SETMASK = 2  （用 nset 完全替换当前阻塞集）
-/// - sigset_t：include/uapi/asm-generic/signal.h:90-92
-///   riscv64 上 _NSIG_WORDS=1, sigset_t = unsigned long = 8 字节
-///
-/// # 输入
-/// - `how`        : 操作方式（SIG_BLOCK=0, SIG_UNBLOCK=1, SIG_SETMASK=2）
-/// - `nset`       : 新的信号掩码（用户态指针，可为 NULL）
-/// - `oset`       : 输出旧的信号掩码（用户态指针，可为 NULL）
-/// - `sigsetsize` : sigset_t 大小校验（必须等于 sizeof(sigset_t) = 8）
-///
-/// # 处理流程
-/// 1. 校验 sigsetsize == sizeof(sigset_t)
-/// 2. 当前实现：不实际维护信号掩码，始终返回空掩码（0）
-/// 3. 若 oset != NULL，写入 0（表示无信号被阻塞）
-/// 4. 若 nset != NULL，忽略（当前不做实际阻塞）
-/// 5. 返回 0 表示成功
-///
-/// # 返回
-/// -  0 : 成功
-/// - <0 : 错误码（-EINVAL, -EFAULT）
+//! sys_rt_sigprocmask — 检查或更改当前线程信号掩码。
+//!
+//! ## 作用
+//! 按 SIG_BLOCK/SIG_UNBLOCK/SIG_SETMASK 查询或更新当前线程的阻塞信号集合。
+//!
+//! ## 参数
+//! `how` 为掩码操作；`nset` 为新掩码用户指针；`oset` 为旧掩码输出指针；`sigsetsize` 为用户 sigset_t 大小。
+//!
+//! ## 注意事项
+//! 当前信号掩码未真正接入调度/递送路径，只能显式返回空掩码，避免静默伪装完整 Linux 语义。
+//!
+//! ## Linux 参考版本
+//! K3 Linux 6.18.3 (/home/inkbottle/othersrc/k3/spacemit-k3-linux-6.18)，参考: kernel/signal.c:3318。
+//!
+//! ## 实现情况
+//! 已实现 sigsetsize/how 校验和 oset 写回；TODO: 依赖 per-thread blocked mask、pending signal 队列和 signal delivery 临界区。
+//!
+//! # 处理流程
+//! 1. 校验 sigsetsize == sizeof(sigset_t)
+//! 2. 当前实现：不实际维护信号掩码，始终返回空掩码（0）
+//! 3. 若 oset != NULL，写入 0（表示无信号被阻塞）
+//! 4. 若 nset != NULL，忽略（当前不做实际阻塞）
+//! 5. 返回 0 表示成功
 use crate::arch::memory::*;
 use crate::task::TASK_MANAER;
 use core::mem::size_of;
@@ -42,6 +35,8 @@ fn write_to_user(dst: usize, src: &[u8]) -> bool {
         let Some(paddr) = pt.translate(vaddr) else {
             return false;
         };
+        // SAFETY: paddr 来自当前任务页表对单字节用户地址的成功翻译；
+        // 写入粒度为 u8，不跨越本次已校验地址。
         unsafe {
             *(paddr.0 as *mut u8) = *byte;
         }
@@ -67,6 +62,7 @@ pub fn sys_rt_sigprocmask(how: i32, nset: usize, oset: usize, sigsetsize: usize)
     // 如果调用者要求获取旧掩码，返回 0（表示无信号被阻塞）
     if oset != 0 {
         let empty_mask: usize = 0;
+        // SAFETY: empty_mask 是当前栈上的有效 usize，对其只读地重解释为连续字节用于 copy_to_user。
         let slice = unsafe {
             core::slice::from_raw_parts(
                 &empty_mask as *const usize as *const u8,

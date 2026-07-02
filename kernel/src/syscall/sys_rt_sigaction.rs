@@ -1,29 +1,26 @@
-/// rt_sigaction 系统调用 —— 设置/获取信号处理函数
-///
-/// # Linux 参考
-/// - 函数原型：kernel/signal.c:4233  SYSCALL_DEFINE4(rt_sigaction, int, sig,
-///                     const struct sigaction __user *, act,
-///                     struct sigaction __user *, oact,
-///                     size_t, sigsetsize)
-/// - sigaction 结构：include/uapi/asm-generic/signal.h:104
-/// - riscv64 信号头：arch/riscv64 使用 generic, 无独立 signal.h
-///
-/// # 输入
-/// - `sig`        : 信号编号 (Linux: 1..64, include/uapi/asm-generic/signal.h:7 _NSIG=64)
-/// - `act`        : 新的信号处理配置（用户态指针，可为 NULL）
-/// - `oact`       : 输出旧的信号处理配置（用户态指针，可为 NULL）
-/// - `sigsetsize` : sigset_t 大小校验（必须等于 sizeof(sigset_t) = 8）
-///
-/// # 处理流程
-/// 1. 校验 sigsetsize == sizeof(sigset_t)（riscv64: 8 字节）
-/// 2. 当前实现：返回空 sigaction（全部 SIG_DFL）
-/// 3. 若 oact != NULL，写入全零结构（表示全部默认处理）
-/// 4. 若 act != NULL，仅记录日志，不做实际动作
-/// 5. 返回 0 表示成功
-///
-/// # 返回
-/// -  0 : 成功
-/// - <0 : 错误码（-EINVAL, -EFAULT）
+//! sys_rt_sigaction — 设置或获取信号处理函数。
+//!
+//! ## 作用
+//! 查询或替换指定信号的处理动作，包括 handler、flags 和 signal mask。
+//!
+//! ## 参数
+//! `sig` 为信号编号；`act` 为新动作用户指针；`oact` 为旧动作输出指针；`sigsetsize` 为用户 sigset_t 大小。
+//!
+//! ## 注意事项
+//! 当前信号子系统尚未完整实现，`act` 被显式降级为忽略；这不能代表 Linux 的真实信号递送语义。
+//!
+//! ## Linux 参考版本
+//! K3 Linux 6.18.3 (/home/inkbottle/othersrc/k3/spacemit-k3-linux-6.18)，参考: kernel/signal.c:4629。
+//!
+//! ## 实现情况
+//! 已实现参数校验和 oact 默认动作写回；TODO: 依赖 per-task sighand、signal mask、SA_RESTART/SA_SIGINFO 和用户栈 signal frame。
+//!
+//! # 处理流程
+//! 1. 校验 sigsetsize == sizeof(sigset_t)（riscv64: 8 字节）
+//! 2. 当前实现：返回空 sigaction（全部 SIG_DFL）
+//! 3. 若 oact != NULL，写入全零结构（表示全部默认处理）
+//! 4. 若 act != NULL，仅记录日志，不做实际动作
+//! 5. 返回 0 表示成功
 use crate::arch::memory::*;
 use crate::task::TASK_MANAER;
 use core::mem::size_of;
@@ -53,6 +50,8 @@ fn write_to_user(dst: usize, src: &[u8]) -> bool {
         let Some(paddr) = pt.translate(vaddr) else {
             return false;
         };
+        // SAFETY: paddr 来自当前任务页表对单字节用户地址的成功翻译；
+        // 写入粒度为 u8，不跨越本次已校验地址。
         unsafe {
             *(paddr.0 as *mut u8) = *byte;
         }
@@ -82,6 +81,7 @@ pub fn sys_rt_sigaction(sig: i32, act: usize, oact: usize, sigsetsize: usize) ->
             sa_flags: 0,
             sa_mask: 0,
         };
+        // SAFETY: empty 是当前栈上的有效 SigAction，对其只读地重解释为连续字节用于 copy_to_user。
         let slice = unsafe {
             core::slice::from_raw_parts(
                 &empty as *const SigAction as *const u8,

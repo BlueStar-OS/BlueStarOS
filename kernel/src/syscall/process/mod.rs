@@ -1,0 +1,9 @@
+pub mod sys_getegid;
+pub mod sys_geteuid;
+pub mod sys_getgid;
+pub mod sys_getpgid;
+pub mod sys_getsid;
+pub mod sys_gettid;
+pub mod sys_getuid;
+pub mod sys_setpgid;
+pub mod sys_setsid;
