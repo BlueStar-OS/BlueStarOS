@@ -15,6 +15,7 @@
 - Stride 调度算法, 支持优先级权重
 - 进程间信号 (SIGKILL / SIGINT / SIGTERM / SIGTSTP)
 - 84 个系统调用, 兼容 musl libc 用户态程序
+- 系统调用按“一文件一 syscall”模块化组织, 每个实现文件记录作用、参数、注意事项、Linux 参考版本和当前实现情况
 
 ### 内存管理
 
@@ -45,6 +46,13 @@
 - L4: UDP 头 + 伪头校验和
 - ARP 协议 (请求/应答/缓存)
 
+### 测试系统
+
+- `kernel/TestOS.mk` 提供专用测试入口: `make test`, `make test_all`, `make test_syscall`, `make testfs`, `make test_clean`
+- 根目录 `test/<module>/*.c` 存放 C 测试源码, 当前首个模块为 `test/syscall`
+- `test/tools/gen_runner.py` 动态生成集中测试 runner, 运行 `/test/test_all` 后按 `[TESTOS]` 协议汇总 PASS/FAIL
+- v1 生成专用测试 rootfs staging 和可选 initramfs cpio; 内核侧 initramfs 加载、挂载和 QEMU 自动输入仍保留 TODO
+
 ### 双架构支持
 
 - `arch/riscv64`: QEMU virt 机器, PLIC 中断控制器
@@ -71,11 +79,15 @@ kernel/
 │   │   └── component/     # pipe, tty
 │   ├── memory/            # 物理/虚拟内存管理
 │   ├── task/              # 进程控制块, 调度器
-│   ├── syscall/           # 系统调用分发
+│   ├── syscall/           # 系统调用分发与一文件一 syscall 实现
 │   └── sync/              # 同步原语
 ├── dependencies/
 │   └── rsext4/            # 自研 ext4 文件系统 (~18K 行)
 └── Cargo.toml
+test/
+├── common/                # C 测试公共宏与日志协议
+├── syscall/               # syscall 用户态 C 测试
+└── tools/                 # 测试 runner 生成工具
 ```
 
 ## 快速开始
@@ -98,15 +110,28 @@ make run LOG=TRACE
 
 # AArch64
 make run ARCH=aarch64 LOG=TRACE
+
+# 构建专用测试 rootfs staging
+make testfs
+
+# 构建 syscall 测试和集中 runner
+make test_syscall
+
+# 构建全部测试; v1 暂不自动启动 QEMU
+make test_all
 ```
 
 ## 开发计划
 
+- [x] syscall: 一文件一 syscall 模块化拆分与 Linux 6.18.3 参考注释
+- [x] 测试系统: TestOS v1 Makefile, C 测试目录, runner 生成器, 专用 rootfs staging
+- [ ] 测试系统: QEMU 自动输入 `/test/test_all` 并解析失败测例
+- [ ] 测试系统: 内核侧 initramfs 加载与测试 rootfs 挂载
 - [ ] 网络: socket syscall, 用户态 UDP/TCP
-- [ ] 同步: 信号量, Mutex, condvar (WaitQueue 骨架已就位)
+- [x] 同步: 信号量, Mutex, condvar (WaitQueue 骨架已就位)
 - [ ] SMP 多核支持
-- [ ] 用户态 shell
-- [ ] ext4 写入支持完善
+- [x] 用户态 shell
+- [x] ext4 写入支持完善
 
 ## 许可证
 
