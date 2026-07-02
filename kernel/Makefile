@@ -182,3 +182,4 @@ gdbclient:
 	@$(ARCH)-unknown-elf-gdb -ex 'file $(KERNEL_ELF)' $(GDB_SET_ARCH) -ex 'target remote localhost:1234'
 
 .PHONY: build fmt-check clippy-check env kernel clean user user-apps disasm disasm-vim run-inner run-consent-inner run_consent gdbserver gdbclient list-apps regen-asm
+-include TestOS.mk
