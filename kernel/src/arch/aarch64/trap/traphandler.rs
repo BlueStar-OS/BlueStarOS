@@ -7,7 +7,7 @@ use crate::arch::trap::traplog::log_user_opcode_window;
 use crate::arch::TrapContext;
 use crate::syscall::syscall_handler;
 use crate::task::TASK_MANAER;
-use crate::time::set_next_timeInterupt;
+use crate::time::set_next_time_interupt;
 use core::arch::asm;
 use log::{debug, error, warn};
 
@@ -52,31 +52,25 @@ pub(crate) fn handle_page_fault_aarch64(fault_addr: VirAddr, esr: u64) {
         None => {}
     }
 
-    let inner = TASK_MANAER.task_que_inner.lock();
-    let current = inner.current;
-    drop(inner);
-    let inner = TASK_MANAER.task_que_inner.lock();
-
-    let will_kill: bool = {
-        let memset = &mut inner.task_queen[current].lock().memory_set;
-        !memset.is_mmap_vpn(contain_vpn)
-    };
+    let will_kill = TASK_MANAER.task_que_inner.lock(|inner| {
+        let current = inner.current;
+        inner.task_queen[current].lock(|tcb| !tcb.memory_set.is_mmap_vpn(contain_vpn))
+    });
 
     if will_kill {
         error!("area not contain mmap addr kill!");
-        drop(inner);
         TASK_MANAER.kail_current_task_and_run_next();
         return;
     }
 
-    debug!("[PageFaultHandler]:ligel!");
+    debug!("[page_fault_handler]:ligel!");
 
-    {
-        let memset = &mut inner.task_queen[current].lock().memory_set;
-        memset.findarea_allocFrame_and_setPte(contain_vpn);
-    }
-
-    drop(inner);
+    TASK_MANAER.task_que_inner.lock(|inner| {
+        let current = inner.current;
+        inner.task_queen[current].lock(|tcb| {
+            tcb.memory_set.findarea_alloc_frame_and_set_pte(contain_vpn);
+        });
+    });
 }
 
 pub(crate) fn dispatch_user_sync() {
@@ -242,7 +236,7 @@ fn gic_dispatch_irq(schedule_on_timer: bool) {
         }
         match irqnr {
             TIMER_PPI_INTID => {
-                set_next_timeInterupt();
+                set_next_time_interupt();
                 if schedule_on_timer {
                     need_schedule = true;
                 }

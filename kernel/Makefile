@@ -34,6 +34,7 @@ QEMU_DEVICE_ARGS = \
 	-device nvme,serial=bsosnvme0,drive=nv0,bus=rp2 \
 	-device nvme,serial=bsosnvme1,drive=nv1,bus=rp3 \
 	-device e1000,bus=rp4,netdev=net0
+	
 else ifeq ($(ARCH), aarch64)
 TARGET := aarch64-unknown-none-softfloat
 KERNEL_ENTRY_PA := 0x40080000
@@ -99,8 +100,9 @@ clippy-check:
 	@LOG=$(LOG) cargo clippy --target $(TARGET) $(MODE_ARG) $(FEATURES_ARG) --all-targets -- -D warnings
 
 # 总是重新构建：每次 build 都先通过格式化与 clippy 检查，再跑 cargo build 和 objcopy
-build:
+build: user-makeimg
 	@cargo clean
+	@cargo clippy -p os
 	@rm -f $(KERNEL_ELF) $(KERNEL_BIN) src/BlueStarOS.elf src/BlueStarOS.bin
 	@LOG=$(LOG) cargo build --target $(TARGET) $(MODE_ARG) $(FEATURES_ARG)
 	@# 从 ELF 提取内核符号表，生成 src/kernel_symbols.txt（用于 backtrace 函数名解析）
@@ -182,4 +184,5 @@ gdbclient:
 	@$(ARCH)-unknown-elf-gdb -ex 'file $(KERNEL_ELF)' $(GDB_SET_ARCH) -ex 'target remote localhost:1234'
 
 .PHONY: build fmt-check clippy-check env kernel clean user user-apps disasm disasm-vim run-inner run-consent-inner run_consent gdbserver gdbclient list-apps regen-asm
+
 -include TestOS.mk

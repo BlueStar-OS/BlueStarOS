@@ -14,3 +14,4 @@ linux
 initrd.gz
 AGENTS.md
 CLAUDE.md
+.codeimprover/

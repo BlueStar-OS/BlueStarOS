@@ -36,6 +36,7 @@ use lazy_static::lazy_static;
 use log::{debug, warn};
 
 use crate::kprintln;
+use crate::memory::KERNEL_MAIN_MEMORY;
 use crate::sync::UPSafeCell;
 
 // Import DTB pointer from assembly (defined in entry.asm)
@@ -44,8 +45,8 @@ extern "C" {
     static _dtb_pointer: usize;
 }
 
-/// Maximum DTB size to map (1MB)
-const DTB_MAX_SIZE: usize = 0x100000;
+/// Maximum DTB size to map (10MB)
+const DTB_MAX_SIZE: usize = 0xa00000;
 
 lazy_static! {
     /// 缓存解析后的设备树。
@@ -78,13 +79,14 @@ pub fn init() {
                 Ok(tree) => {
                     // 扫描 memory 节点，注册到 KERNEL_MAIN_MEMORY
                     scan_and_register_memory(&tree);
+
                     // 日志输出设备树信息
                     trace_device_tree(&tree);
                     // 这里只做早期安全的解析和注册，不直接做设备 probe。
                     //
                     // 原因是块设备驱动可能在 probe 时申请连续页帧，
                     // 而 frame allocator 此时还没有初始化完成。
-                    *PARSED_DEVICE_TREE.lock() = Some(tree);
+                    PARSED_DEVICE_TREE.lock(|dt| *dt = Some(tree));
                 }
                 Err(e) => {
                     warn!("[DTB] Failed to parse: {:?}", e);
@@ -95,6 +97,22 @@ pub fn init() {
             warn!("[DTB] Parse error: {:?}", e);
         }
     }
+}
+
+/// 返回 DTB header 中声明的 boot CPU 物理 ID。
+///
+/// 参考:
+/// - `kernel/src/driver/dtb/fdt.rs:21-31,94-123`
+pub fn boot_cpuid_phys() -> Option<u32> {
+    let dtb_ptr = unsafe { _dtb_pointer };
+    if dtb_ptr == 0 {
+        return None;
+    }
+
+    let header_slice = unsafe { core::slice::from_raw_parts(dtb_ptr as *const u8, 40) };
+    let header = fdt::FdtHeader::from_bytes(header_slice)?;
+    header.validate().ok()?;
+    Some(header.boot_cpuid_phys)
 }
 
 /// 扫描 DTB 中的 memory 节点，注册到 KERNEL_MAIN_MEMORY
@@ -129,13 +147,13 @@ fn scan_and_register_memory(tree: &DeviceTree) {
 /// 这一阶段才允许驱动真正初始化 virtio 队列、申请连续页帧、
 /// 注册全局块设备等依赖内存分配器的动作。
 pub fn run_device_probes() {
-    let tree_guard = PARSED_DEVICE_TREE.lock();
-    let Some(tree) = tree_guard.as_ref() else {
-        warn!("[DTB] run_device_probes called before DTB init");
-        return;
-    };
-
-    probe::run_probes(tree);
+    PARSED_DEVICE_TREE.lock(|tree_guard| {
+        let Some(tree) = tree_guard.as_ref() else {
+            warn!("[DTB] run_device_probes called before DTB init");
+            return;
+        };
+        probe::run_probes(tree);
+    });
 }
 
 /// Trace device tree content

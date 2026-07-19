@@ -79,15 +79,15 @@ impl MachineMemoryInfo {
 
 lazy_static! {
     pub static ref KERNEL_MAIN_MEMORY: UPSafeCell<MachineMemoryInfo> =
-        unsafe { UPSafeCell::new(MachineMemoryInfo::new()) };
+        UPSafeCell::new(MachineMemoryInfo::new());
 }
 
 /// 注册一段物理内存区域（供 dtb::init 调用）
 pub fn register_main_memory_region(start: usize, end: usize) {
-    KERNEL_MAIN_MEMORY.lock().register(start, end);
+    KERNEL_MAIN_MEMORY.lock(|m: &mut MachineMemoryInfo| m.register(start, end));
 }
 
 /// 标记物理内存注册完成
 pub fn finalize_main_memory() {
-    KERNEL_MAIN_MEMORY.lock().mark_initialized();
+    KERNEL_MAIN_MEMORY.lock(|m| m.mark_initialized());
 }

@@ -17,7 +17,10 @@
 //! - `/home/inkbottle/桌面/linux-5.4.29/net/ipv4/udp.c:882-886`
 //! - `/home/inkbottle/桌面/linux-5.4.29/arch/x86/include/asm/checksum_64.h:87-99`
 
-use crate::driver::network::e1000::{agreenment::{UdpHeader, UdpPrseHeader}, packet::net_endian::Net16};
+use crate::driver::network::e1000::{
+    agreenment::{UdpHeader, UdpPrseHeader},
+    packet::net_endian::Net16,
+};
 
 /// IPv4 协议号: UDP
 const IPPROTO_UDP: u8 = 17;
@@ -29,27 +32,31 @@ const IPPROTO_UDP: u8 = 17;
 /// `udp_packet` 为完整的 UDP 报文 (头+数据), 校验和字段应先置 0。
 ///
 /// 返回值为网络序校验和, 可直接填入 `UdpHeader::checksum`。
-pub fn udp_checksum(src_ip: [u8; 4], dst_ip: [u8; 4], udp_total_len: u16, udp_packet: &[u8]) -> Net16 {
-    let prseheader  = UdpPrseHeader::new(src_ip, dst_ip, udp_total_len);
-    let mut checksum:u32 = 0;
+pub fn udp_checksum(
+    src_ip: [u8; 4],
+    dst_ip: [u8; 4],
+    udp_total_len: u16,
+    udp_packet: &[u8],
+) -> Net16 {
+    let prseheader = UdpPrseHeader::new(src_ip, dst_ip, udp_total_len);
+    let mut checksum: u32 = 0;
 
-    for i in prseheader.as_bytes().chunks(2){
-            checksum+=u16::from_be_bytes([i[0],i[1]])as u32;            
+    for i in prseheader.as_bytes().chunks(2) {
+        checksum += u16::from_be_bytes([i[0], i[1]]) as u32;
     }
 
     for i in udp_packet.chunks(2) {
         if i.len() == 2 {
-            checksum+=u16::from_be_bytes([i[0],i[1]])as u32;            
-        }else {
-            checksum+=u16::from_be_bytes([i[0],0])as u32;            
+            checksum += u16::from_be_bytes([i[0], i[1]]) as u32;
+        } else {
+            checksum += u16::from_be_bytes([i[0], 0]) as u32;
         }
     }
-    
-    while checksum>>16 >0 {
-        checksum= (checksum & 0xffff) + (checksum>>16);
+
+    while checksum >> 16 > 0 {
+        checksum = (checksum & 0xffff) + (checksum >> 16);
     }
     Net16::new(!checksum as u16)
-
 }
 
 /// 验证 UDP 校验和。
@@ -81,7 +88,8 @@ pub fn udp_verify_checksum(
     sum = sum.wrapping_add(dst_w1 as u32);
     sum = sum.wrapping_add(dst_w2 as u32);
 
-    sum = sum.wrapping_add(((0u16 << 8) | IPPROTO_UDP as u16) as u32);
+    // 伪首部协议字段：高字节保留为 0，低字节为协议号（此处即 IPPROTO_UDP）。
+    sum = sum.wrapping_add(u32::from(IPPROTO_UDP as u16));
     sum = sum.wrapping_add(udp_total_len as u32);
 
     // UDP 报文 (含 checksum 字段)

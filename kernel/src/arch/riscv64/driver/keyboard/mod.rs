@@ -83,36 +83,42 @@ fn handle_char(c: u8) {
         0x03 => push_signal_to_current(Signal::SIGINT),
         0x1C => push_signal_to_current(Signal::SIGQUIT),
         0x1A => push_signal_to_current(Signal::SIGTSTP),
-        _ => {
-            if let Some(mut buf) = INPUT_BUF.try_lock() {
+        _ => INPUT_BUF.try_lock(|lock| {
+            if let Some(buf) = lock {
                 buf.push_back(c);
             }
-        }
+        }),
     }
 }
 
 /// 从输入缓冲区读取一个字符（供 TTY 使用）
 pub fn read_input() -> Option<u8> {
-    INPUT_BUF.try_lock()?.pop_front()
+    let mut re = None;
+    INPUT_BUF.try_lock(|lock| {
+        if let Some(buf) = lock {
+            re = buf.pop_front();
+        }
+    });
+    re
 }
 
 /// 将信号投递到当前任务的信号队列
 fn push_signal_to_current(sig: Signal) {
-    let inner = match TASK_MANAER.task_que_inner.try_lock() {
-        Some(inner) => inner,
-        None => return,
-    };
-    if inner.task_queen.is_empty() {
-        return;
-    }
-    let current = inner.current;
-    if current >= inner.task_queen.len() {
-        return;
-    }
-    let current_task = inner.task_queen[current].clone();
-    drop(inner);
+    TASK_MANAER.task_que_inner.try_lock(|inner_opt| {
+        let Some(inner) = inner_opt else { return };
+        if inner.task_queen.is_empty() {
+            return;
+        }
+        let current = inner.current;
+        if current >= inner.task_queen.len() {
+            return;
+        }
+        let current_task = inner.task_queen[current].clone();
 
-    if let Some(mut task) = current_task.try_lock() {
-        push_signal(&mut task.signal, OsSignal::new(sig));
-    };
+        current_task.try_lock(|task_opt| {
+            if let Some(task) = task_opt {
+                push_signal(&mut task.signal, OsSignal::new(sig));
+            }
+        });
+    });
 }

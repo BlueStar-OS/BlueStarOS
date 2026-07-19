@@ -404,7 +404,7 @@ unsafe fn poll_admin_cqe(
 
     while (cqe.status & cqe_status::PHASE_TAG) != expected_phase {
         spin_count += 1;
-        if spin_count % 1_000_000 == 0 {
+        if spin_count.is_multiple_of(1_000_000) {
             debug!(
                 "wait {} cqe[{}]: spin={} status={:#x} sq_id={} cid={}",
                 operation_name,
@@ -469,7 +469,7 @@ unsafe fn poll_io_cqe(
 
     while (cqe.status & cqe_status::PHASE_TAG) != expected_phase {
         spin_count += 1;
-        if spin_count % 1_000_000 == 0 {
+        if spin_count.is_multiple_of(1_000_000) {
             debug!(
                 "wait {} io cqe[{}]: spin={} status={:#x} sq_id={} cid={}",
                 operation_name,
@@ -855,14 +855,14 @@ impl NvmeBlockDevice {
             );
             return Err(VfsFsError::NotSupported);
         }
-        if logical_block_size >= SECTOR_SIZE && logical_block_size % SECTOR_SIZE != 0 {
+        if logical_block_size >= SECTOR_SIZE && !logical_block_size.is_multiple_of(SECTOR_SIZE) {
             error!(
                 "NVMe logical block size is not a multiple of VFS sector size: block_size={} sector_size={}",
                 logical_block_size, SECTOR_SIZE
             );
             return Err(VfsFsError::NotSupported);
         }
-        if logical_block_size < SECTOR_SIZE && SECTOR_SIZE % logical_block_size != 0 {
+        if logical_block_size < SECTOR_SIZE && !SECTOR_SIZE.is_multiple_of(logical_block_size) {
             error!(
                 "VFS sector size is not a multiple of NVMe logical block size: block_size={} sector_size={}",
                 logical_block_size, SECTOR_SIZE
@@ -1562,6 +1562,7 @@ pub fn probe_registered_pcie_nvme_devices() -> Result<(), BlueErr> {
                     "NVMe block device registered: sectors={}",
                     block_device.capacity_in_sectors()
                 );
+                // TODO(IRQ-unsafe): spin::Mutex on NVMe BlockDevice does not disable IRQ. If e1000 IRQ fires during block I/O and tries block I/O, deadlock. Replace with IRQ-safe spinlock.
                 register_global_block_device(Arc::new(Mutex::new(block_device)));
             }
             Err(error) => {

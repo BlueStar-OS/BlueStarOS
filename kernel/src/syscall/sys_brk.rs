@@ -69,7 +69,7 @@ pub fn sys_brk(new_brk: VirAddr) -> isize {
 
         if tcb
             .memory_set
-            .AallArea_Iscontain_thisVpn_plus(VirNumRange(start_vpn, end_vpn))
+            .aall_area_iscontain_this_vpn_plus(VirNumRange(start_vpn, end_vpn))
         {
             return old_brk as isize;
         }

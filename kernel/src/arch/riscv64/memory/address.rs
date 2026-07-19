@@ -2,7 +2,7 @@ use crate::error;
 use crate::memory::alloc_frame;
 use crate::memory::FramTracker;
 use crate::riscv64::satp;
-use crate::trap::pagefaultHandler::PageFaultHandler;
+use crate::trap::pagefault_handler::page_fault_handler;
 use crate::PAGE_SIZE;
 use crate::PAGE_SIZE_BITS;
 use alloc::vec;
@@ -160,7 +160,7 @@ impl PageTableEntry {
         re
     }
     ///设置页表项不合法
-    pub fn set_inValid(&mut self) {
+    pub fn set_invalid(&mut self) {
         self.0 = 0 //全部置零
     }
     // 设置脏 刷新页表
@@ -203,9 +203,8 @@ impl PageTable {
     pub fn get_mut_slice_from_satp(
         satp: usize,
         len: usize,
-        startAddr: VirAddr,
+        mut start_addr: VirAddr,
     ) -> Vec<&'static mut [u8]> {
-        let mut start_addr = startAddr;
         let end_addr = VirAddr(start_addr.0 + len);
         // 创建临时页表视图，只用于地址转换，不管理页表生命周期
         let mut table = PageTable::crate_table_from_satp(satp);
@@ -281,8 +280,8 @@ impl PageTable {
 
     ///专注翻译完整虚拟地址带偏移,结束地址不考虑是否对齐,使用者肯定
     /// 自动尝试处理mmap区域地质的fault
-    pub fn translate(&mut self, VDDR: VirAddr) -> Option<PhysiAddr> {
-        match self.find_pte_vpn(VDDR.into()) {
+    pub fn translate(&mut self, vddr: VirAddr) -> Option<PhysiAddr> {
+        match self.find_pte_vpn(vddr.into()) {
             Some(pte) => {
                 let ppn = pte.ppn();
                 if ppn.0 == 0 {
@@ -290,20 +289,21 @@ impl PageTable {
                     return None;
                 }
 
-                let addr = (ppn.0 * PAGE_SIZE) + VDDR.offset(); //不考虑是否对齐,使用者肯定
-                return Some(PhysiAddr(addr));
+                let addr = (ppn.0 * PAGE_SIZE) + vddr.offset(); //不考虑是否对齐,使用者肯定
+                Some(PhysiAddr(addr))
             }
             None => {
                 // 尝试处理mmap 缺页
-                PageFaultHandler(VDDR, Scause::from_code(13));
-                if let Some(pte) = self.find_pte_vpn(VDDR.into()) {
+                page_fault_handler(vddr, Scause::from_code(13));
+                if let Some(pte) = self.find_pte_vpn(vddr.into()) {
                     if pte.ppn().0 == 0 {
                         warn!("mmap fault process fail!");
-                        return None;
+                        None
+                    } else {
+                        Some(PhysiAddr(pte.ppn().0 * PAGE_SIZE))
                     }
-                    return Some(PhysiAddr(pte.ppn().0 * PAGE_SIZE));
                 } else {
-                    return None;
+                    None
                 }
             }
         }
@@ -335,9 +335,9 @@ impl PageTable {
     }
 
     ///查找但是不创建新页表项 需要检查pte合法
-    pub fn find_pte_vpn(&mut self, VirNum: VirNumber) -> Option<&mut PageTableEntry> {
+    pub fn find_pte_vpn(&mut self, vir_num: VirNumber) -> Option<&mut PageTableEntry> {
         let mut current_ppn = self.root_ppn.0;
-        let idx = VirNum.index();
+        let idx = vir_num.index();
         let mut pte_array = self.get_pte_array(current_ppn);
 
         for (id, index) in idx.iter().enumerate() {
@@ -399,7 +399,7 @@ impl PageTable {
             Some(pte) => {
                 if pte.is_valid() {
                     //second
-                    pte.set_inValid();
+                    pte.set_invalid();
                 } else {
                     error!("This PTE is Invalid");
                 }
@@ -410,9 +410,9 @@ impl PageTable {
         }
     }
 
-    fn find_or_create_pte_vpn(&mut self, VirNum: VirNumber) -> Option<&mut PageTableEntry> {
+    fn find_or_create_pte_vpn(&mut self, vir_num: VirNumber) -> Option<&mut PageTableEntry> {
         let mut current_ppn = self.root_ppn.0;
-        let idx = VirNum.index();
+        let idx = vir_num.index();
         let mut pte_array = self.get_pte_array(current_ppn);
         for (id, index) in idx.iter().enumerate() {
             let entry = &mut pte_array[*index];

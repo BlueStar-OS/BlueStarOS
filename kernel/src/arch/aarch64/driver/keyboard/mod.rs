@@ -63,11 +63,11 @@ fn handle_char(c: u8) {
         0x1A => {}
         _ => {
             info!("[Keyboard] buffer char={:#x} '{}'", c, c as char);
-            INPUT_BUF.lock().push_back(c);
+            INPUT_BUF.lock(|buf| buf.push_back(c));
         }
     }
 }
 
 pub fn read_input() -> Option<u8> {
-    INPUT_BUF.lock().pop_front()
+    INPUT_BUF.lock(|buf| buf.pop_front())
 }

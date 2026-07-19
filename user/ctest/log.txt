@@ -1,0 +1,527 @@
+   Finished `release` profile [optimized + debuginfo] target(s) in 9.27s
+rust-objcopy --binary-architecture=riscv64 target/riscv64gc-unknown-none-elf/release/os --strip-all -O binary target/riscv64gc-unknown-none-elf/release/os.bin
+Copied to src/BlueStarOS.elf and src/BlueStarOS.bin
+
+OpenSBI v1.5.1
+   ____                    _____ ____ _____
+  / __ \                  / ____|  _ \_   _|
+ | |  | |_ __   ___ _ __ | (___ | |_) || |
+ | |  | | '_ \ / _ \ '_ \ \___ \|  _ < | |
+ | |__| | |_) |  __/ | | |____) | |_) || |_
+  \____/| .__/ \___|_| |_|_____/|____/_____|
+        | |
+        |_|
+
+Platform Name             : riscv-virtio,qemu
+Platform Features         : medeleg
+Platform HART Count       : 1
+Platform IPI Device       : aclint-mswi
+Platform Timer Device     : aclint-mtimer @ 10000000Hz
+Platform Console Device   : uart8250
+Platform HSM Device       : ---
+Platform PMU Device       : ---
+Platform Reboot Device    : syscon-reboot
+Platform Shutdown Device  : syscon-poweroff
+Platform Suspend Device   : ---
+Platform CPPC Device      : ---
+Firmware Base             : 0x80000000
+Firmware Size             : 327 KB
+Firmware RW Offset        : 0x40000
+Firmware RW Size          : 71 KB
+Firmware Heap Offset      : 0x49000
+Firmware Heap Size        : 35 KB (total), 2 KB (reserved), 11 KB (used), 21 KB (free)
+Firmware Scratch Size     : 4096 B (total), 416 B (used), 3680 B (free)
+Runtime SBI Version       : 2.0
+
+Domain0 Name              : root
+Domain0 Boot HART         : 0
+Domain0 HARTs             : 0*
+Domain0 Region00          : 0x0000000000100000-0x0000000000100fff M: (I,R,W) S/U: (R,W)
+Domain0 Region01          : 0x0000000010000000-0x0000000010000fff M: (I,R,W) S/U: (R,W)
+Domain0 Region02          : 0x0000000002000000-0x000000000200ffff M: (I,R,W) S/U: ()
+Domain0 Region03          : 0x0000000080040000-0x000000008005ffff M: (R,W) S/U: ()
+Domain0 Region04          : 0x0000000080000000-0x000000008003ffff M: (R,X) S/U: ()
+Domain0 Region05          : 0x000000000c400000-0x000000000c5fffff M: (I,R,W) S/U: (R,W)
+Domain0 Region06          : 0x000000000c000000-0x000000000c3fffff M: (I,R,W) S/U: (R,W)
+Domain0 Region07          : 0x0000000000000000-0xffffffffffffffff M: () S/U: (R,W,X)
+Domain0 Next Address      : 0x0000000080200000
+Domain0 Next Arg1         : 0x000000008fe00000
+Domain0 Next Mode         : S-mode
+Domain0 SysReset          : yes
+Domain0 SysSuspend        : yes
+
+Boot HART ID              : 0
+Boot HART Domain          : root
+Boot HART Priv Version    : v1.12
+Boot HART Base ISA        : rv64imafdch
+Boot HART ISA Extensions  : sstc,zicntr,zihpm,zicboz,zicbom,sdtrig,svadu
+Boot HART PMP Count       : 16
+Boot HART PMP Granularity : 2 bits
+Boot HART PMP Address Bits: 54
+Boot HART MHPM Info       : 16 (0x0007fff8)
+Boot HART Debug Triggers  : 2 triggers
+Boot HART MIDELEG         : 0x0000000000001666
+Boot HART MEDELEG         : 0x0000000000f0b509
+Clean BSS
+Arch PlatForm init
+heap range: [0x80366759, 0x84366759) size=64 MB
+Kernel HeapAlloctor init, can use size:64MB , mount on KERNEL_HEADP
+[DTB] DTB pointer at 0x8fe00000
+[MemModel] Register Physical Memory region: 0x80000000-0x90000000 (256 MB)
+Logger start inited
+Start set logger end
+Logger inited
+Inital Physical Memory Alloctor
+frame range: ppn [541544, 589824) addr [0x84368000, 0x90000000) size=188MB
+frame allocator init: 1 ranges, total 48280 pages (188MB)
+[    0.132566]  INFO os::driver::dtb::probe: [DTB Probe] Found 4 probe entries
+[    0.133092] DEBUG os::driver::dtb::probe: [DTB Probe] Probing 1 devices with compatible 'sifive,plic-1.0.0'
+[PLIC]:PLIC device is probed!, registe mmio...
+[MMIO Registry] Registers: 0xc000000-0xc5ff000
+[    0.133613]  INFO os::driver::dtb::probe: [DTB Probe] ✓ plic probed //soc (sifive,plic-1.0.0)
+[    0.133804] DEBUG os::driver::dtb::probe: [DTB Probe] Probing 1 devices with compatible 'pci-host-ecam-generic'
+[PCIE]: detect pcie host bridge
+[PCIE]: Start register MMIO memory
+[PCIE]: register one mmio region
+[MMIO Registry] Registers: 0x30000000-0x3ffff000
+[PCIE]: register pcie window mmio range
+[MMIO Registry] Registers: 0x40000000-0x7ffff000
+[PCIE]: PCI 00:00.0 vendor=1b36 device=0008 class=060000 header=00
+[PCIE]:   skip BAR probe (class=0x0600, header=00)
+[PCIE]: PCI 00:01.0 vendor=1b36 device=000c class=060400 header=01
+[PCIE]: PCI 01:00.0 vendor=1234 device=11e8 class=00ff00 header=00
+[PCIE]: Find edu device at 01:00.0
+[PCIE]: bar alloc memory 0x100000 bytes on addrress:0x40000000
+[PCIE]:   BAR0 Mem32 base=0x40000000 size=0x100000
+[PCIE]:   bridge memory window: child-bus=1..1 range=[0x40000000-0x400fffff]
+[PCIE]:   bridge: primary=0, secondary=1, subordinate=1
+[PCIE]: PCI 00:02.0 vendor=1b36 device=000c class=060400 header=01
+[PCIE]: PCI 02:00.0 vendor=1234 device=1111 class=030000 header=00
+[PCIE]: bar alloc memory 0x1000000 bytes on addrress:0x41000000
+[PCIE]:   BAR0 Mem32 base=0x41000000 size=0x1000000
+[PCIE]: bar alloc memory 0x1000 bytes on addrress:0x42000000
+[PCIE]:   BAR2 Mem32 base=0x42000000 size=0x1000
+[PCIE]:   bridge memory window: child-bus=2..2 range=[0x41000000-0x420fffff]
+[PCIE]:   bridge: primary=0, secondary=2, subordinate=2
+[PCIE]: PCI 00:03.0 vendor=1b36 device=000c class=060400 header=01
+[PCIE]: PCI 03:00.0 vendor=1b36 device=0010 class=010802 header=00
+[PCIE]: bar alloc memory 0x4000 bytes on addrress:0x42004000
+[PCIE]:   BAR0 Mem64 base=0x42004000 size=0x4000 next_raw=0x00000000
+[PCIE]:   bridge memory window: child-bus=3..3 range=[0x42000000-0x420fffff]
+[PCIE]:   bridge: primary=0, secondary=3, subordinate=3
+[PCIE]: PCI 00:04.0 vendor=1b36 device=000c class=060400 header=01
+[PCIE]: PCI 04:00.0 vendor=1b36 device=0010 class=010802 header=00
+[PCIE]: bar alloc memory 0x4000 bytes on addrress:0x42008000
+[PCIE]:   BAR0 Mem64 base=0x42008000 size=0x4000 next_raw=0x00000000
+[PCIE]:   bridge memory window: child-bus=4..4 range=[0x42000000-0x420fffff]
+[PCIE]:   bridge: primary=0, secondary=4, subordinate=4
+[PCIE]: PCI 00:05.0 vendor=1b36 device=000c class=060400 header=01
+[PCIE]: PCI 05:00.0 vendor=8086 device=100e class=020000 header=00
+[PCIE]: bar alloc memory 0x20000 bytes on addrress:0x42020000
+[PCIE]:   BAR0 Mem32 base=0x42020000 size=0x20000
+[PCIE]:   BAR1 I/O    base=0x00000000 size=0x40
+[PCIE]:   bridge memory window: child-bus=5..5 range=[0x42000000-0x420fffff]
+[PCIE]:   bridge: primary=0, secondary=5, subordinate=5
+[    0.149360] DEBUG os::driver::nvme: Already probe nvme device (3, 0, 0) cap=0x4008200f0107ff vs=0x10400 csts=0x0 cc=0x0
+[    0.149667] DEBUG os::driver::nvme: NVMe doorbell stride: 4 bytes
+[    0.150045] DEBUG os::driver::nvme: Build admin queue: NvmeQueueState { queue_id: NvmeQueueId(0), queue_depth: 32, submission_queue_dma_base: PhysiAddr(2218164224), completion_queue_dma_base: PhysiAddr(2218168320), submission_tail: 0, completion_head: 0, completion_phase: 1, doorbell_base_offset: 4096, doorbell_stride: NvmeDoorbellStride { bytes: 4 } }
+[    0.151172]  INFO os::driver::nvme: NVMe admin identify-controller success: cqe=NvmeCompletionQueueEntry { result: 0, submission_queue_head: 1, submission_queue_id: 0, command_id: 0, status: 1 }
+[    0.151823]  INFO os::driver::nvme: NVMe Identify Controller: vid=0x1b36 ssvid=0x1af4 nn=256 sn=bsosnvme0 mn=QEMU NVMe Ctrl fr=10.0.9
+[    0.152092]  INFO os::driver::nvme: NVMe admin identify-namespace success: cqe=NvmeCompletionQueueEntry { result: 0, submission_queue_head: 2, submission_queue_id: 0, command_id: 1, status: 1 }
+[    0.152494]  INFO os::driver::nvme: NVMe Identify Namespace: nsid=1 nsze=204800 ncap=204800 nuse=204800 nsfeat=0x34 nlbaf=7 flbas=0x0 active_lbaf=0 ms=0 raw_ds=9 ds=9 block_size=512 rp=0x0
+[    0.152918]  INFO os::driver::nvme: NVMe admin create-io-cq success: cqe=NvmeCompletionQueueEntry { result: 0, submission_queue_head: 3, submission_queue_id: 0, command_id: 2, status: 1 }
+[    0.153259]  INFO os::driver::nvme: NVMe admin create-io-sq success: cqe=NvmeCompletionQueueEntry { result: 0, submission_queue_head: 4, submission_queue_id: 0, command_id: 3, status: 1 }
+[    0.153637]  INFO os::driver::nvme: NVMe block device registered: sectors=204800
+[    0.154829] DEBUG os::driver::nvme: Already probe nvme device (4, 0, 0) cap=0x4008200f0107ff vs=0x10400 csts=0x0 cc=0x0
+[    0.155017] DEBUG os::driver::nvme: NVMe doorbell stride: 4 bytes
+[    0.155141] DEBUG os::driver::nvme: Build admin queue: NvmeQueueState { queue_id: NvmeQueueId(0), queue_depth: 32, submission_queue_dma_base: PhysiAddr(2218188800), completion_queue_dma_base: PhysiAddr(2218192896), submission_tail: 0, completion_head: 0, completion_phase: 1, doorbell_base_offset: 4096, doorbell_stride: NvmeDoorbellStride { bytes: 4 } }
+[    0.155655]  INFO os::driver::nvme: NVMe admin identify-controller success: cqe=NvmeCompletionQueueEntry { result: 0, submission_queue_head: 1, submission_queue_id: 0, command_id: 4, status: 1 }
+[    0.155948]  INFO os::driver::nvme: NVMe Identify Controller: vid=0x1b36 ssvid=0x1af4 nn=256 sn=bsosnvme1 mn=QEMU NVMe Ctrl fr=10.0.9
+[    0.156149]  INFO os::driver::nvme: NVMe admin identify-namespace success: cqe=NvmeCompletionQueueEntry { result: 0, submission_queue_head: 2, submission_queue_id: 0, command_id: 5, status: 1 }
+[    0.156429]  INFO os::driver::nvme: NVMe Identify Namespace: nsid=1 nsze=204800 ncap=204800 nuse=204800 nsfeat=0x34 nlbaf=7 flbas=0x0 active_lbaf=0 ms=0 raw_ds=9 ds=9 block_size=512 rp=0x0
+[    0.156742]  INFO os::driver::nvme: NVMe admin create-io-cq success: cqe=NvmeCompletionQueueEntry { result: 0, submission_queue_head: 3, submission_queue_id: 0, command_id: 6, status: 1 }
+[    0.157025]  INFO os::driver::nvme: NVMe admin create-io-sq success: cqe=NvmeCompletionQueueEntry { result: 0, submission_queue_head: 4, submission_queue_id: 0, command_id: 7, status: 1 }
+[    0.157303]  INFO os::driver::nvme: NVMe block device registered: sectors=204800
+[    0.157712]  INFO os::driver::network::e1000::hw::probe: e1000: found at 05:00.0 vendor=0x8086 device=0x100e class=0x20000
+[    0.158046]  INFO os::driver::network::e1000::hw::probe: e1000: PCI command 0x0003 -> 0x0007 (MEM|MASTER)
+[    0.158218] DEBUG os::driver::network::e1000::hw::probe: e1000: BARs (2)
+[    0.158360] DEBUG os::driver::network::e1000::hw::probe:   BAR0: offset=0x10 space=Memory32 base=0x42020000 size=0x20000 prefetch=false
+[    0.158583] DEBUG os::driver::network::e1000::hw::probe:   BAR1: offset=0x14 space=Io base=0x00000000 size=0x40 prefetch=false
+[    0.158793]  INFO os::driver::network::e1000::hw::probe: e1000: BAR0 MMIO [0x42020000..0x42040000) size=0x20000
+[    0.158981]  INFO os::driver::network::e1000::hw::probe: e1000: STATUS register = 0x80080783
+[    0.159162]  INFO os::driver::network::e1000::hw::probe: e1000: link=UP duplex=FULL
+[    0.169406]  INFO os::driver::network::e1000::hw::probe: e1000: reset: issuing global reset (CTRL=0x00140240)
+[    0.174686]  INFO os::driver::network::e1000::hw::probe: e1000: reset: complete (ICR=0x00000000)
+[    0.174902] DEBUG os::driver::network::e1000::queue::tx: e1000: setup_link: CTRL.SLU set (CTRL=0x00140240)
+[    0.175193]  INFO os::driver::network::e1000::queue::tx: e1000: link setup: FULL duplex, coll_dist=64, TCTL=0x00040008, TIPG=0x00602008
+[    0.175429]  INFO os::driver::network::e1000::hw::probe: e1000: MAC from ASIC (RA[0]): RAL=0x12005452 RAH=0x80005634 AV=1
+[    0.175633]  INFO os::driver::network::e1000::hw::probe: e1000: MAC = 52:54:00:12:34:56
+[    0.175876]  INFO os::driver::network::e1000::queue::tx: e1000: tx ring: 256 descs, 4096 bytes, dma=0x84374000
+[    0.176138]  INFO os::driver::network::e1000::queue::tx: e1000: tx configured: dma=0x84374000 len=4096 count=256
+[    0.176320]  INFO os::driver::network::e1000::queue::tx: e1000: tx enabled (TCTL=0x000400fa)
+[    0.176560]  INFO os::driver::network::e1000::queue::rx: e1000: rx ring: 128 descs, 2048 bytes, dma=0x84375000, virt=0x84375000
+[    0.176916]  INFO os::driver::network::e1000::queue::rx: e1000: rx configured: dma=0x84375000 len=2048 count=128
+[    0.177103]  INFO os::driver::network::e1000::queue::rx: e1000: rx enabled (RCTL=0x0000803e)
+[    0.177430]  INFO os::driver::network::e1000::queue::rx: e1000: rx buffers allocated: count=128, RDT=127
+[    0.177725]  INFO os::driver::network::e1000::hw::probe: 已监听 PCIe 可能的中断线: 32
+[    0.177916]  INFO os::driver::network::e1000::hw::probe: 已监听 PCIe 可能的中断线: 33
+[    0.178092]  INFO os::driver::network::e1000::hw::probe: 已监听 PCIe 可能的中断线: 34
+[    0.178279]  INFO os::driver::network::e1000::hw::probe: 已监听 PCIe 可能的中断线: 35
+[    0.178449]  INFO os::driver::network::e1000::hw::probe: 已监听 PCIe 可能的中断线: 36
+[    0.178698]  INFO os::driver::network::e1000::hw::probe: e1000: probe complete, driver ready
+[    0.178891]  INFO os::driver::dtb::probe: [DTB Probe] ✓ pci-host probed //soc (pci-host-ecam-generic)
+[    0.179096] DEBUG os::driver::dtb::probe: [DTB Probe] Probing 1 devices with compatible 'ns16550a'
+[UART Probe] Found UART at 0x10000000, size=0x100
+[MMIO Registry] Registers: 0x10000000-0x10000000
+[    0.179468]  INFO os::driver::dtb::probe: [DTB Probe] ✓ uart-16550 probed //soc (ns16550a)
+[    0.179632] DEBUG os::driver::dtb::probe: [DTB Probe] Probing 8 devices with compatible 'virtio,mmio'
+[MMIO Registry] Registers: 0x10008000-0x10008000
+[    0.179953]  WARN os::driver::dtb::probe: [DTB Probe] ✗ virtio-mmio failed to probe //soc: VirtIO MMIO header verify failed
+[MMIO Registry] Registers: 0x10007000-0x10007000
+[    0.180215]  WARN os::driver::dtb::probe: [DTB Probe] ✗ virtio-mmio failed to probe //soc: VirtIO MMIO header verify failed
+[MMIO Registry] Registers: 0x10006000-0x10006000
+[    0.180483]  WARN os::driver::dtb::probe: [DTB Probe] ✗ virtio-mmio failed to probe //soc: VirtIO MMIO header verify failed
+[MMIO Registry] Registers: 0x10005000-0x10005000
+[    0.180757]  WARN os::driver::dtb::probe: [DTB Probe] ✗ virtio-mmio failed to probe //soc: VirtIO MMIO header verify failed
+[MMIO Registry] Registers: 0x10004000-0x10004000
+[    0.181003]  WARN os::driver::dtb::probe: [DTB Probe] ✗ virtio-mmio failed to probe //soc: VirtIO MMIO header verify failed
+[MMIO Registry] Registers: 0x10003000-0x10003000
+[    0.181222]  WARN os::driver::dtb::probe: [DTB Probe] ✗ virtio-mmio failed to probe //soc: VirtIO MMIO header verify failed
+[MMIO Registry] Registers: 0x10002000-0x10002000
+[    0.181476]  WARN os::driver::dtb::probe: [DTB Probe] ✗ virtio-mmio failed to probe //soc: VirtIO MMIO header verify failed
+[MMIO Registry] Registers: 0x10001000-0x10001000
+[    0.181748]  WARN os::driver::dtb::probe: [DTB Probe] ✗ virtio-mmio failed to probe //soc: VirtIO MMIO header verify failed
+[    0.181952]  INFO os::driver::dtb::probe: [DTB Probe] Probe completed
+[    0.182106]  WARN os::logger: Kernel start at 0x80200000 ,End at: 0x84368000
+[    0.182239]  WARN os::logger: .text start at 0x80200000 ,End at: 0x802b5000
+[    0.182367]  WARN os::logger: .rodata start at 0x802b5000 ,End at: 0x80308000
+[    0.182496]  WARN os::logger: .data start at 0x80308000 ,End at: 0x8031d000
+[    0.182621]  WARN os::logger: .bss start at 0x8031d000 ,End at: 0x84367000
+[    0.182748]  WARN os::logger: .kernelStack start at 0x8031e000 ,End at: 0x8035e000
+[    0.182888]  WARN os::logger: kernel_stack_protect start at 0x8031d000 ,End at: 0x8031e000
+[    0.183039]  WARN os::logger: Kernel stack at 0x8031e000 ,End at: 0x8035e000
+[    0.183169]  WARN os::logger: kernel_trap_stack_protect start at 0x8035f000 ,End at: 0x80360000
+[    0.183319]  WARN os::logger: kernel_trap_stack bottom at 0x80364000 ,Top at: 0x80365000
+[PLIC] Initial success! threshold=0, ready for IRQ registration.
+[Keyboard] UART RX interrupt enabled
+[UART] IER=0x01 IIR=0xc1 LSR=0x60
+Welcome to BlueStarOS!
+[    0.183969] DEBUG os::arch::riscv64: Kernel init success!
+[    0.184173] ERROR os::driver::network::e1000::hw::irq: recive irq:
+[    0.184384] ERROR os::driver::network::e1000::hw::irq: recive irq:
+[    0.193353] DEBUG os::memory::memset: [MEMMAP] MMIO (Device): 0xc000000-0xc5ff000
+[    0.542039] DEBUG os::memory::memset: [MEMMAP] MMIO (Device): 0x30000000-0x3ffff000
+[    1.882840] DEBUG os::memory::memset: [MEMMAP] MMIO (Device): 0x40000000-0x7ffff000
+[    1.883039] DEBUG os::memory::memset: [MEMMAP] MMIO (Device): 0x10000000-0x10000000
+[    1.883248] DEBUG os::memory::memset: [MEMMAP] MMIO (Device): 0x10008000-0x10008000
+[    1.883423] DEBUG os::memory::memset: [MEMMAP] MMIO (Device): 0x10007000-0x10007000
+[    1.883588] DEBUG os::memory::memset: [MEMMAP] MMIO (Device): 0x10006000-0x10006000
+[    1.883748] DEBUG os::memory::memset: [MEMMAP] MMIO (Device): 0x10005000-0x10005000
+[    1.883915] DEBUG os::memory::memset: [MEMMAP] MMIO (Device): 0x10004000-0x10004000
+[    1.884085] DEBUG os::memory::memset: [MEMMAP] MMIO (Device): 0x10003000-0x10003000
+[    1.884258] DEBUG os::memory::memset: [MEMMAP] MMIO (Device): 0x10002000-0x10002000
+[    1.884427] DEBUG os::memory::memset: [MEMMAP] MMIO (Device): 0x10001000-0x10001000
+[    1.884599] ERROR os::driver::network::e1000::hw::irq: recive irq:
+[    1.884975]  INFO os::driver::network::e1000::packet: Ethernet: 6a:c0:87:8e:56:a6 -> 33:33:00:00:00:16  type=0x86dd (IPv6)  len=90
+[    1.885301]  WARN os::driver::network::e1000::packet: 未支持的 EtherType: EtherType(0x86dd, IPv6)
+[    1.885646] DEBUG os::driver::network::e1000::packet::udp::tx: Send UDP: 8080 -> 8080 total_len=21 checksum=0x5847
+[    1.885967]  INFO os::driver::network::e1000::packet::ipv4::tx: ARP cache miss for 10.0.0.1, sending ARP request
+[    1.886399] DEBUG os::driver::network::e1000::queue::tx: e1000: tx submitted desc=0 len=42
+[    1.886607]  INFO os::driver::network::e1000::packet::arp::rx: 发出了 ARP Request: Who is 10.0.0.1 ? Tell 10.0.0.2
+[    1.886855]  WARN os::driver::network::e1000::packet::ipv4::tx: ARP resolution failed for 10.0.0.1 after 3 attempts
+[    1.887091]  WARN os::driver::network::e1000::packet::ipv4::tx: send_ipv4_packet: dropping packet to 10.0.0.1 — ARP resolution failed
+[    1.887346] ERROR os::driver::network::e1000::hw::irq: recive irq:
+[    1.887535] DEBUG os::driver::network::e1000::queue::tx: e1000: tx cleaned 1 descriptors
+[    1.888682] DEBUG os::memory::memset: [MEMMAP] Text: 0x80200000-0x802b5000, flags: V|R|X|A|G
+[    1.889317] DEBUG os::memory::memset: [MEMMAP] Rodata: 0x802b5000-0x80308000, flags: V|R|A|G
+[    1.889633] DEBUG os::memory::memset: [MEMMAP] Data: 0x80308000-0x8031d000, flags: V|R|W|A|G
+[    1.889829] DEBUG os::memory::memset: [MEMMAP] Stack Guard: 0x8031d000-0x8031e000, flags: V (guard page)
+[    1.890373] DEBUG os::memory::memset: [MEMMAP] Stack: 0x8031e000-0x8035e000, flags: V|R|W|A|G
+[    1.890579] DEBUG os::memory::memset: [MEMMAP] Trap Stack Guard: 0x8035f000-0x80360000, flags: V (guard page)
+[    1.890805] DEBUG os::memory::memset: [MEMMAP] Trap Stack: 0x80364000-0x80365000, flags: V|R|W|A|G
+[    1.891023] DEBUG os::memory::memset: [MEMMAP] Kernel Trap Stack: 0x80360000-0x80364000, flags: V|R|W|A|G
+[    1.974858] DEBUG os::memory::memset: [MEMMAP] BSS (heap): 0x80366000-0x84368000, flags: V|R|W|A|G
+[    2.219624] DEBUG os::memory::memset: [MEMMAP] Physical Memory: 0x84368000-0x8ffff000
+[    2.219827] DEBUG os::memory::memset: [MEMMAP] Kernel address space mapped, Kernel size 65 MB
+[    2.220059] DEBUG os::arch::riscv64::memory: Active PageTable: SATP = 0x80000000000843f2
+[    2.220231] DEBUG os::arch::riscv64::memory: Page Witch Successful!!!!!
+[    2.220797] DEBUG os::arch::riscv64: Initial sstatus value:
+[    2.220910] DEBUG os::arch::riscv64:   SIE  (bit 1): 1
+[    2.221025] DEBUG os::arch::riscv64:   SPIE (bit 5): 1
+[    2.221128] DEBUG os::arch::riscv64:   SPP  (bit 8): 0
+[    2.221445] DEBUG os: stext 0x80201000
+[    2.221587] DEBUG os: traper 0x80201000
+[    2.221670] DEBUG os: trap refume virtualaddr:0xfffffffffffff080
+[    2.221959]  WARN os::driver::gpu: Already get vga pcie device
+[    2.222121] DEBUG os::driver::gpu: vga framebuffer=0x41000000, bar2 mmio=0x42000000, fb_size=0x1000000
+[    2.222315] DEBUG os::driver::gpu: bochs id=0xb0c5, video_memory=0x4000 KiB
+[    2.222962] DEBUG os::driver::gpu: after modeset: enable=0x41 xres=640 yres=400 bpp=32 virt_width=640 virt_height=6553
+[    2.223415]  WARN os: initial file system
+[    2.223746] DEBUG os::fs::vfs::root::initfs: FileSysteam Initialing...
+[    2.230177]  WARN os::fs::vfs::root::block_device: find 2 block device
+[    2.230530]  WARN os::fs::vfs::root::block_device: Registe block /vda
+[    2.230693]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vda: register begin
+[    2.230908]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vda: capacity query done, sectors=204800, bytes=0x6400000
+[    2.231200]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vda: mkdev whole begin
+[    2.231484]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vda: mkdev whole done
+[    2.231678]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vda: read MBR(lba=0) begin
+[    2.232348]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vda: read MBR(lba=0) done, sig=0xaa55
+[    2.232703] DEBUG os::fs::vfs::root::block_device: /vda MBR parse result: ok=true, protective=true, count=1
+[    2.232939] DEBUG os::fs::vfs::root::block_device: /vda Try Parse GPT Partition table
+[    2.233126]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vda: read GPT header(lba=1) begin
+[    2.233436]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vda: read GPT header(lba=1) done
+[    2.233710] DEBUG os::fs::vfs::root::block_device: /vda GPT header: entry_lba=2, num_entries=128, entry_size=128
+[    2.234625]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vda: read GPT entry sector begin lba=2
+[    2.235236]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vda: read GPT entry sector done lba=2
+[    2.235742]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vda: read GPT entry sector begin lba=3
+[    2.236346]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vda: read GPT entry sector done lba=3
+[    2.236865]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vda: read GPT entry sector begin lba=4
+[    2.237456]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vda: read GPT entry sector done lba=4
+[    2.237983]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vda: read GPT entry sector begin lba=5
+[    2.243758]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vda: read GPT entry sector done lba=5
+[    2.244794]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vda: read GPT entry sector begin lba=6
+[    2.245338]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vda: read GPT entry sector done lba=6
+[    2.245881]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vda: read GPT entry sector begin lba=7
+[    2.246426]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vda: read GPT entry sector done lba=7
+[    2.246923]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vda: read GPT entry sector begin lba=8
+[    2.253029]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vda: read GPT entry sector done lba=8
+[    2.253555]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vda: read GPT entry sector begin lba=9
+[    2.254126]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vda: read GPT entry sector done lba=9
+[    2.254640]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vda: read GPT entry sector begin lba=10
+[    2.260986]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vda: read GPT entry sector done lba=10
+[    2.261676]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vda: read GPT entry sector begin lba=11
+[    2.262217]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vda: read GPT entry sector done lba=11
+[    2.262744]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vda: read GPT entry sector begin lba=12
+[    2.269295]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vda: read GPT entry sector done lba=12
+[    2.269819]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vda: read GPT entry sector begin lba=13
+[    2.270385]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vda: read GPT entry sector done lba=13
+[    2.270895]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vda: read GPT entry sector begin lba=14
+[    2.277113]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vda: read GPT entry sector done lba=14
+[    2.277636]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vda: read GPT entry sector begin lba=15
+[    2.278184]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vda: read GPT entry sector done lba=15
+[    2.278757]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vda: read GPT entry sector begin lba=16
+[    2.285588]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vda: read GPT entry sector done lba=16
+[    2.286101]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vda: read GPT entry sector begin lba=17
+[    2.286684]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vda: read GPT entry sector done lba=17
+[    2.287223]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vda: read GPT entry sector begin lba=18
+[    2.287887]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vda: read GPT entry sector done lba=18
+[    2.288394]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vda: read GPT entry sector begin lba=19
+[    2.294682]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vda: read GPT entry sector done lba=19
+[    2.295194]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vda: read GPT entry sector begin lba=20
+[    2.295775]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vda: read GPT entry sector done lba=20
+[    2.296354]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vda: read GPT entry sector begin lba=21
+[    2.296894]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vda: read GPT entry sector done lba=21
+[    2.297408]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vda: read GPT entry sector begin lba=22
+[    2.298036]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vda: read GPT entry sector done lba=22
+[    2.298603]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vda: read GPT entry sector begin lba=23
+[    2.304609]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vda: read GPT entry sector done lba=23
+[    2.305116]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vda: read GPT entry sector begin lba=24
+[    2.305680]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vda: read GPT entry sector done lba=24
+[    2.311323]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vda: read GPT entry sector begin lba=25
+[    2.311926]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vda: read GPT entry sector done lba=25
+[    2.312428]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vda: read GPT entry sector begin lba=26
+[    2.313009]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vda: read GPT entry sector done lba=26
+[    2.313515]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vda: read GPT entry sector begin lba=27
+[    2.319435]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vda: read GPT entry sector done lba=27
+[    2.319957]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vda: read GPT entry sector begin lba=28
+[    2.320492]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vda: read GPT entry sector done lba=28
+[    2.321031]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vda: read GPT entry sector begin lba=29
+[    2.321625]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vda: read GPT entry sector done lba=29
+[    2.322155]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vda: read GPT entry sector begin lba=30
+[    2.327532]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vda: read GPT entry sector done lba=30
+[    2.328533]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vda: read GPT entry sector begin lba=31
+[    2.329094]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vda: read GPT entry sector done lba=31
+[    2.329629]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vda: read GPT entry sector begin lba=32
+[    2.330217]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vda: read GPT entry sector done lba=32
+[    2.336112]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vda: read GPT entry sector begin lba=33
+[    2.336672]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vda: read GPT entry sector done lba=33
+[    2.337458] DEBUG os::fs::vfs::root::block_device: /vda GPT found 4 partitions
+[    2.338060] DEBUG os::fs::vfs::root::block_device: /vda GPT partition 0: start_lba=2048, sectors=122880, meta=GptPartitionMetadata { type_guid: Guid([175, 61, 198, 15, 131, 132, 114, 71, 142, 121, 61, 105, 216, 71, 125, 228]), part_guid: Guid([180, 181, 6, 148, 191, 122, 184, 72, 133, 107, 67, 51, 119, 251, 95, 119]), name: Named("rootfs"), attrs: 0 }
+[    2.345353]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vda: mkdev GPT part1 begin start_lba=2048, sectors=122880
+[    2.346026]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vda: mkdev GPT part1 done
+[    2.352009] DEBUG os::fs::vfs::root::block_device: /vda GPT partition 1: start_lba=124928, sectors=20480, meta=GptPartitionMetadata { type_guid: Guid([162, 160, 208, 235, 229, 185, 51, 68, 135, 192, 104, 182, 183, 38, 153, 199]), part_guid: Guid([200, 210, 51, 174, 56, 189, 41, 79, 158, 105, 149, 227, 204, 226, 208, 241]), name: Named("datafat"), attrs: 0 }
+[    2.353488]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vda: mkdev GPT part2 begin start_lba=124928, sectors=20480
+[    2.359607]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vda: mkdev GPT part2 done
+[    2.360113] DEBUG os::fs::vfs::root::block_device: /vda GPT partition 2: start_lba=145408, sectors=30720, meta=GptPartitionMetadata { type_guid: Guid([175, 61, 198, 15, 131, 132, 114, 71, 142, 121, 61, 105, 216, 71, 125, 228]), part_guid: Guid([62, 32, 41, 47, 16, 190, 107, 78, 136, 167, 58, 98, 249, 53, 206, 2]), name: Named("dataext"), attrs: 0 }
+[    2.361578]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vda: mkdev GPT part3 begin start_lba=145408, sectors=30720
+[    2.362131]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vda: mkdev GPT part3 done
+[    2.362627] DEBUG os::fs::vfs::root::block_device: /vda GPT partition 3: start_lba=176128, sectors=28639, meta=GptPartitionMetadata { type_guid: Guid([162, 160, 208, 235, 229, 185, 51, 68, 135, 192, 104, 182, 183, 38, 153, 199]), part_guid: Guid([177, 242, 21, 109, 45, 150, 65, 73, 147, 104, 112, 150, 30, 12, 12, 59]), name: Named("sharefat"), attrs: 0 }
+[    2.369624]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vda: mkdev GPT part4 begin start_lba=176128, sectors=28639
+[    2.370181]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vda: mkdev GPT part4 done
+[    2.376618]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vda: register done via GPT
+[    2.377153]  WARN os::fs::vfs::root::block_device: Registe block /vdb
+[    2.377485]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vdb: register begin
+[    2.378052]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vdb: capacity query done, sectors=204800, bytes=0x6400000
+[    2.378605]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vdb: mkdev whole begin
+[    2.379095]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vdb: mkdev whole done
+[    2.379566]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vdb: read MBR(lba=0) begin
+[    2.380191]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vdb: read MBR(lba=0) done, sig=0xaa55
+[    2.380743] DEBUG os::fs::vfs::root::block_device: /vdb MBR parse result: ok=true, protective=true, count=1
+[    2.387178] DEBUG os::fs::vfs::root::block_device: /vdb Try Parse GPT Partition table
+[    2.387644]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vdb: read GPT header(lba=1) begin
+[    2.388236]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vdb: read GPT header(lba=1) done
+[    2.388733] DEBUG os::fs::vfs::root::block_device: /vdb GPT header: entry_lba=2, num_entries=128, entry_size=128
+[    2.389304]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vdb: read GPT entry sector begin lba=2
+[    2.389865]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vdb: read GPT entry sector done lba=2
+[    2.390395]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vdb: read GPT entry sector begin lba=3
+[    2.390988]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vdb: read GPT entry sector done lba=3
+[    2.396645]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vdb: read GPT entry sector begin lba=4
+[    2.397228]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vdb: read GPT entry sector done lba=4
+[    2.397740]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vdb: read GPT entry sector begin lba=5
+[    2.398280]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vdb: read GPT entry sector done lba=5
+[    2.398832]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vdb: read GPT entry sector begin lba=6
+[    2.399377]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vdb: read GPT entry sector done lba=6
+[    2.399900]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vdb: read GPT entry sector begin lba=7
+[    2.406025]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vdb: read GPT entry sector done lba=7
+[    2.406568]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vdb: read GPT entry sector begin lba=8
+[    2.407117]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vdb: read GPT entry sector done lba=8
+[    2.413136]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vdb: read GPT entry sector begin lba=9
+[    2.413698]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vdb: read GPT entry sector done lba=9
+[    2.414191]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vdb: read GPT entry sector begin lba=10
+[    2.414809]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vdb: read GPT entry sector done lba=10
+[    2.415397]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vdb: read GPT entry sector begin lba=11
+[    2.421943]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vdb: read GPT entry sector done lba=11
+[    2.422480]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vdb: read GPT entry sector begin lba=12
+[    2.423038]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vdb: read GPT entry sector done lba=12
+[    2.429075]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vdb: read GPT entry sector begin lba=13
+[    2.429642]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vdb: read GPT entry sector done lba=13
+[    2.430150]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vdb: read GPT entry sector begin lba=14
+[    2.430735]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vdb: read GPT entry sector done lba=14
+[    2.431337]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vdb: read GPT entry sector begin lba=15
+[    2.437259]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vdb: read GPT entry sector done lba=15
+[    2.437771]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vdb: read GPT entry sector begin lba=16
+[    2.438325]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vdb: read GPT entry sector done lba=16
+[    2.438913]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vdb: read GPT entry sector begin lba=17
+[    2.439508]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vdb: read GPT entry sector done lba=17
+[    2.445463]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vdb: read GPT entry sector begin lba=18
+[    2.446023]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vdb: read GPT entry sector done lba=18
+[    2.446556]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vdb: read GPT entry sector begin lba=19
+[    2.447100]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vdb: read GPT entry sector done lba=19
+[    2.453134]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vdb: read GPT entry sector begin lba=20
+[    2.453698]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vdb: read GPT entry sector done lba=20
+[    2.454200]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vdb: read GPT entry sector begin lba=21
+[    2.454788]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vdb: read GPT entry sector done lba=21
+[    2.455387]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vdb: read GPT entry sector begin lba=22
+[    2.461668]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vdb: read GPT entry sector done lba=22
+[    2.462165]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vdb: read GPT entry sector begin lba=23
+[    2.462748]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vdb: read GPT entry sector done lba=23
+[    2.463367]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vdb: read GPT entry sector begin lba=24
+[    2.463908]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vdb: read GPT entry sector done lba=24
+[    2.469803]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vdb: read GPT entry sector begin lba=25
+[    2.470351]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vdb: read GPT entry sector done lba=25
+[    2.470878]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vdb: read GPT entry sector begin lba=26
+[    2.471490]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vdb: read GPT entry sector done lba=26
+[    2.477565]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vdb: read GPT entry sector begin lba=27
+[    2.478118]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vdb: read GPT entry sector done lba=27
+[    2.478635]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vdb: read GPT entry sector begin lba=28
+[    2.484786]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vdb: read GPT entry sector done lba=28
+[    2.485514]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vdb: read GPT entry sector begin lba=29
+[    2.486058]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vdb: read GPT entry sector done lba=29
+[    2.486563]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vdb: read GPT entry sector begin lba=30
+[    2.487102]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vdb: read GPT entry sector done lba=30
+[    2.487736]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vdb: read GPT entry sector begin lba=31
+[    2.494140]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vdb: read GPT entry sector done lba=31
+[    2.494653]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vdb: read GPT entry sector begin lba=32
+[    2.500097]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vdb: read GPT entry sector done lba=32
+[    2.501275]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vdb: read GPT entry sector begin lba=33
+[    2.501822]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vdb: read GPT entry sector done lba=33
+[    2.502356] DEBUG os::fs::vfs::root::block_device: /vdb GPT found 4 partitions
+[    2.502825] DEBUG os::fs::vfs::root::block_device: /vdb GPT partition 0: start_lba=2048, sectors=122880, meta=GptPartitionMetadata { type_guid: Guid([175, 61, 198, 15, 131, 132, 114, 71, 142, 121, 61, 105, 216, 71, 125, 228]), part_guid: Guid([180, 181, 6, 148, 191, 122, 184, 72, 133, 107, 67, 51, 119, 251, 95, 119]), name: Named("rootfs"), attrs: 0 }
+[    2.504360]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vdb: mkdev GPT part1 begin start_lba=2048, sectors=122880
+[    2.505039]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vdb: mkdev GPT part1 done
+[    2.505552] DEBUG os::fs::vfs::root::block_device: /vdb GPT partition 1: start_lba=124928, sectors=20480, meta=GptPartitionMetadata { type_guid: Guid([162, 160, 208, 235, 229, 185, 51, 68, 135, 192, 104, 182, 183, 38, 153, 199]), part_guid: Guid([200, 210, 51, 174, 56, 189, 41, 79, 158, 105, 149, 227, 204, 226, 208, 241]), name: Named("datafat"), attrs: 0 }
+[    2.512748]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vdb: mkdev GPT part2 begin start_lba=124928, sectors=20480
+[    2.513308]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vdb: mkdev GPT part2 done
+[    2.513838] DEBUG os::fs::vfs::root::block_device: /vdb GPT partition 2: start_lba=145408, sectors=30720, meta=GptPartitionMetadata { type_guid: Guid([175, 61, 198, 15, 131, 132, 114, 71, 142, 121, 61, 105, 216, 71, 125, 228]), part_guid: Guid([62, 32, 41, 47, 16, 190, 107, 78, 136, 167, 58, 98, 249, 53, 206, 2]), name: Named("dataext"), attrs: 0 }
+[    2.520519]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vdb: mkdev GPT part3 begin start_lba=145408, sectors=30720
+[    2.521257]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vdb: mkdev GPT part3 done
+[    2.521897] DEBUG os::fs::vfs::root::block_device: /vdb GPT partition 3: start_lba=176128, sectors=28639, meta=GptPartitionMetadata { type_guid: Guid([162, 160, 208, 235, 229, 185, 51, 68, 135, 192, 104, 182, 183, 38, 153, 199]), part_guid: Guid([177, 242, 21, 109, 45, 150, 65, 73, 147, 104, 112, 150, 30, 12, 12, 59]), name: Named("sharefat"), attrs: 0 }
+[    2.528848]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vdb: mkdev GPT part4 begin start_lba=176128, sectors=28639
+[    2.529536]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vdb: mkdev GPT part4 done
+[    2.530133]  WARN os::fs::vfs::root::block_device: [vblock-scan] /vdb: register done via GPT
+[    2.536249] DEBUG os::fs::vfs::root::block_device: /vda has protective MBR, continue parse GPT
+[    2.543125] DEBUG os::fs::vfs::root::block_device: /vdb has protective MBR, continue parse GPT
+[    2.545860] DEBUG rsext4::ext4::mount: Start mounting Ext4 filesystem...
+[    2.547473] DEBUG rsext4::ext4::mount: Superblock magic verified
+[    2.552986] DEBUG rsext4::ext4::mount: Block group count: 1
+[    2.553328] DEBUG rsext4::ext4::mount: Loading group descriptors: 1 groups, desc_size = 64 bytes
+[    2.559794] DEBUG rsext4::ext4::mount: Successfully loaded 1 group descriptors
+[    2.560351] DEBUG rsext4::ext4::mount: Loaded 1 group descriptors
+[    2.560664] DEBUG rsext4::ext4::mount: Allocators initialized
+[    2.560960] DEBUG rsext4::ext4::mount: Bitmap cache initialized (lazy loading)
+[    2.561426] DEBUG rsext4::ext4::mount: Inode cache initialized
+[    2.561894] DEBUG rsext4::ext4::mount: Data block cache initialized
+[    2.567991] DEBUG rsext4::tool::filetool: Superblock info: Ext4Superblock { s_inodes_count: 15360, s_blocks_count_lo: 15360, s_r_blocks_count_lo: 768, s_free_blocks_count_lo: 8304, s_free_inodes_count: 15266, s_first_data_block: 0, s_log_block_size: 2, s_log_cluster_size: 2, s_blocks_per_group: 32768, s_clusters_per_group: 32768, s_inodes_per_group: 15360, s_mtime: 1779079870, s_wtime: 1779079871, s_mnt_count: 2, s_max_mnt_count: 65535, s_magic: 61267, s_state: 0, s_errors: 1, s_minor_rev_level: 0, s_lastcheck: 1779079870, s_checkinterval: 0, s_creator_os: 0, s_rev_level: 1, s_def_resuid: 0, s_def_resgid: 0, s_first_ino: 11, s_inode_size: 256, s_block_group_nr: 0, s_feature_compat: 4156, s_feature_incompat: 8386, s_feature_ro_compat: 1131, s_uuid: [119, 155, 42, 224, 163, 183, 65, 17, 148, 167, 150, 236, 192, 193, 99, 41], s_volume_name: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], s_last_mounted: [47, 116, 109, 112, 47, 116, 109, 112, 46, 90, 83, 86, 53, 120, 109, 110, 87, 84, 56, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], s_algorithm_usage_bitmap: 0, s_prealloc_blocks: 0, s_prealloc_dir_blocks: 0, s_reserved_gdt_blocks: 7, s_journal_uuid: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], s_journal_inum: 8, s_journal_dev: 0, s_last_orphan: 0, s_hash_seed: [3595700783, 575543758, 3322528437, 3577520071], s_def_hash_version: 1, s_jnl_backup_type: 1, s_desc_size: 64, s_default_mount_opts: 12, s_first_meta_bg: 0, s_mkfs_time: 1779079870, s_jnl_blocks: [127754, 4, 0, 0, 1024, 977, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 4194304], s_blocks_count_hi: 0, s_r_blocks_count_hi: 0, s_free_blocks_count_hi: 0, s_min_extra_isize: 32, s_want_extra_isize: 32, s_flags: 1, s_raid_stride: 0, s_mmp_interval: 0, s_mmp_block: 0, s_raid_stripe_width: 0, s_log_groups_per_flex: 0, s_checksum_type: 1, s_encryption_level: 0, s_reserved_pad: 0, s_kbytes_written: 20393, s_snapshot_inum: 0, s_snapshot_id: 0, s_snapshot_r_blocks_count: 0, s_snapshot_list: 0, s_error_count: 0, s_first_error_time: 0, s_first_error_ino: 0, s_first_error_block: 0, s_first_error_func: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], s_first_error_line: 0, s_last_error_time: 0, s_last_error_ino: 0, s_last_error_line: 0, s_last_error_block: 0, s_last_error_func: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], s_mount_opts: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], s_usr_quota_inum: 0, s_grp_quota_inum: 0, s_overhead_blocks: 1995, s_backup_bgs: [0, 0], s_encrypt_algos: [0, 0, 0, 0], s_encrypt_pw_salt: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], s_lpf_ino: 0, s_prj_quota_inum: 0, s_checksum_seed: 889343684, s_wtime_hi: 0, s_mtime_hi: 0, s_mkfs_time_hi: 0, s_lastcheck_hi: 0, s_first_error_time_hi: 0, s_last_error_time_hi: 0, s_first_error_errcode: 0, s_last_error_errcode: 0, s_encoding: 0, s_encoding_flags: 0, s_orphan_file_inum: 12, s_reserved: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], s_checksum: 2877530961 }
+[    2.616223] DEBUG rsext4::tool::filetool: Block group descriptors:
+[    2.616604] DEBUG rsext4::tool::filetool: Group descriptor: Ext4GroupDesc { bg_block_bitmap_lo: 9, bg_inode_bitmap_lo: 10, bg_inode_table_lo: 11, bg_free_blocks_count_lo: 8304, bg_free_inodes_count_lo: 15266, bg_used_dirs_count_lo: 6, bg_flags: 0, bg_exclude_bitmap_lo: 0, bg_block_bitmap_csum_lo: 60100, bg_inode_bitmap_csum_lo: 25100, bg_itable_unused_lo: 15266, bg_checksum: 32720, bg_block_bitmap_hi: 0, bg_inode_bitmap_hi: 0, bg_inode_table_hi: 0, bg_free_blocks_count_hi: 0, bg_free_inodes_count_hi: 0, bg_used_dirs_count_hi: 0, bg_itable_unused_hi: 0, bg_exclude_bitmap_hi: 0, bg_block_bitmap_csum_hi: 47224, bg_inode_bitmap_csum_hi: 58825, bg_reserved: 0 }
+[    2.624689] DEBUG rsext4::ext4::mount: Checking root directory...
+[    2.625855] DEBUG rsext4::ext4::lookup: Root inode i_mode: 16877
+[    2.626185] DEBUG rsext4::ext4::lookup: Root inode detail: Ext4Inode { i_mode: 16877, i_uid: 0, i_size_lo: 4096, i_atime: 1779079870, i_ctime: 1779079870, i_mtime: 1779079870, i_dtime: 0, i_gid: 0, i_links_count: 7, i_blocks_lo: 8, i_flags: 524288, l_i_version: 4, i_block: [127754, 4, 0, 0, 1, 971, 0, 0, 0, 0, 0, 0, 0, 0, 0], i_generation: 0, i_file_acl_lo: 0, i_size_high: 0, i_obso_faddr: 0, l_i_blocks_high: 0, l_i_file_acl_high: 0, l_i_uid_high: 0, l_i_gid_high: 0, l_i_checksum_lo: 57568, l_i_reserved: 0, i_extra_isize: 32, i_checksum_hi: 15882, i_ctime_extra: 2818430460, i_mtime_extra: 2818430460, i_atime_extra: 0, i_crtime: 1779079870, i_crtime_extra: 0, i_version_hi: 0, i_projid: 0 }
+[    2.640392] DEBUG rsext4::ext4::mount: Checking lost+found directory...
+[    2.640727] DEBUG rsext4::ext4::mount: s_lpf_ino is 0, lost+found inode hint missing in superblock
+[    2.641276] DEBUG rsext4::ext4::lookup: Root inode i_mode: 16877
+[    2.641656] DEBUG rsext4::ext4::lookup: Root inode detail: Ext4Inode { i_mode: 16877, i_uid: 0, i_size_lo: 4096, i_atime: 1779079870, i_ctime: 1779079870, i_mtime: 1779079870, i_dtime: 0, i_gid: 0, i_links_count: 7, i_blocks_lo: 8, i_flags: 524288, l_i_version: 4, i_block: [127754, 4, 0, 0, 1, 971, 0, 0, 0, 0, 0, 0, 0, 0, 0], i_generation: 0, i_file_acl_lo: 0, i_size_high: 0, i_obso_faddr: 0, l_i_blocks_high: 0, l_i_file_acl_high: 0, l_i_uid_high: 0, l_i_gid_high: 0, l_i_checksum_lo: 57568, l_i_reserved: 0, i_extra_isize: 32, i_checksum_hi: 15882, i_ctime_extra: 2818430460, i_mtime_extra: 2818430460, i_atime_extra: 0, i_crtime: 1779079870, i_crtime_extra: 0, i_version_hi: 0, i_projid: 0 }
+[    2.649888] DEBUG rsext4::hashtree::lookup: Starting hash tree lookup: Ok("lost+found")
+[    2.656199] DEBUG rsext4::hashtree::lookup: Using linear search: Ok("lost+found")
+[    2.658024] DEBUG rsext4::ext4::lookup: Found inode for path /lost+found
+[    2.658491]  INFO rsext4::ext4::mount: /lost+found exists (path resolution)
+[    2.664938] DEBUG rsext4::ext4::mount: Bitmap usage: inodes used = 17502, data blocks used = 24464
+[    2.665581]  INFO rsext4::ext4::mount: Ext4 filesystem mounted
+[    2.665900]  INFO rsext4::ext4::mount:   - block size: 4096 bytes
+[    2.666207]  INFO rsext4::ext4::mount:   - total blocks: 15360
+[    2.666560]  INFO rsext4::ext4::mount:   - free blocks: 8304
+[    2.666848]  INFO rsext4::ext4::mount:   - total inodes: 15360
+[    2.672339]  INFO rsext4::ext4::mount:   - free inodes: 15266
+[    2.674180]  INFO rsext4::ext4::mount: Ext4 filesystem mounted
+[    2.679940] DEBUG os::fs::vfs::root::initfs: Found ext4 on /vda1
+[    2.681099] DEBUG rsext4::ext4::lookup: Root inode i_mode: 16877
+[    2.681443] DEBUG rsext4::ext4::lookup: Root inode detail: Ext4Inode { i_mode: 16877, i_uid: 0, i_size_lo: 4096, i_atime: 1779079870, i_ctime: 1779079870, i_mtime: 1779079870, i_dtime: 0, i_gid: 0, i_links_count: 7, i_blocks_lo: 8, i_flags: 524288, l_i_version: 4, i_block: [127754, 4, 0, 0, 1, 971, 0, 0, 0, 0, 0, 0, 0, 0, 0], i_generation: 0, i_file_acl_lo: 0, i_size_high: 0, i_obso_faddr: 0, l_i_blocks_high: 0, l_i_file_acl_high: 0, l_i_uid_high: 0, l_i_gid_high: 0, l_i_checksum_lo: 57568, l_i_reserved: 0, i_extra_isize: 32, i_checksum_hi: 15882, i_ctime_extra: 2818430460, i_mtime_extra: 2818430460, i_atime_extra: 0, i_crtime: 1779079870, i_crtime_extra: 0, i_version_hi: 0, i_projid: 0 }
+[    2.696775] DEBUG rsext4::hashtree::lookup: Starting hash tree lookup: Ok("dev")
+[    2.697366] DEBUG rsext4::hashtree::lookup: Using linear search: Ok("dev")
+[    2.698523] DEBUG rsext4::loopfile: Hash tree lookup failed, falling back to linear search
+[    2.704027] DEBUG rsext4::loopfile: Directory inode size: 4096 bytes, blocks used: 1
+[    2.704651] DEBUG rsext4::loopfile: Scan dir block idx 0 phys 971
+[    2.705284] DEBUG rsext4::ext4::lookup: Root inode i_mode: 16877
+[    2.705616] DEBUG rsext4::ext4::lookup: Root inode detail: Ext4Inode { i_mode: 16877, i_uid: 0, i_size_lo: 4096, i_atime: 1779079870, i_ctime: 1779079870, i_mtime: 1779079870, i_dtime: 0, i_gid: 0, i_links_count: 7, i_blocks_lo: 8, i_flags: 524288, l_i_version: 4, i_block: [127754, 4, 0, 0, 1, 971, 0, 0, 0, 0, 0, 0, 0, 0, 0], i_generation: 0, i_file_acl_lo: 0, i_size_high: 0, i_obso_faddr: 0, l_i_blocks_high: 0, l_i_file_acl_high: 0, l_i_uid_high: 0, l_i_gid_high: 0, l_i_checksum_lo: 57568, l_i_reserved: 0, i_extra_isize: 32, i_checksum_hi: 15882, i_ctime_extra: 2818430460, i_mtime_extra: 2818430460, i_atime_extra: 0, i_crtime: 1779079870, i_crtime_extra: 0, i_version_hi: 0, i_projid: 0 }
+[    2.713723] DEBUG rsext4::cache::bitmap: BitmapCache::modify: key=(0:Inode) block_num=10 before_dirty=false (will apply in-memory changes)
+[    2.714432] DEBUG rsext4::cache::bitmap: BitmapCache::modify: key=(0:Inode) block_num=10 marked_dirty=true (bitmap updated in cache, writeback deferred)
+[    2.721208] DEBUG rsext4::ext4::alloc: Allocated inodes: group=0, first_global_inode=95, count=1 [delayed write]
+[    2.722013] DEBUG rsext4::ext4::alloc: alloc_blocks: candidate group=0 bitmap_block=9 starting contiguous allocation of 1 blocks
+[    2.727860] DEBUG rsext4::cache::bitmap: BitmapCache::modify: key=(0:Block) block_num=9 before_dirty=false (will apply in-memory changes)
+[    2.728650] DEBUG rsext4::cache::bitmap: BitmapCache::modify: key=(0:Block) block_num=9 marked_dirty=true (bitmap updated in cache, writeback deferred)
+[    2.730032] DEBUG rsext4::ext4::alloc: alloc_blocks: group=0 free_blocks_count change 8304 -> 8303 (allocated 1 blocks starting at global=3502)
+[    2.736821] DEBUG rsext4::ext4::alloc: alloc_blocks: superblock free_blocks_count change 8304 -> 8303 (delta=-1)
+[    2.737501] DEBUG rsext4::ext4::alloc: Allocated blocks: group=0, first_block_in_group=3502, first_global_block=3502, count=1 [bitmap updated, writeback deferred]
+[    2.739315] DEBUG rsext4::disknode::inode: No tree header!!!
+[    2.743768] DEBUG rsext4::extents_tree::insert: ExtentTree::insert_extent: new_ext lbn=0 len=1 phys_start=3502
+[    2.744453] DEBUG rsext4::extents_tree::insert: ExtentTree::insert_extent: current root=LEAF depth=0 entries=0 max=4 first_extents=[]
+[    2.745190] DEBUG rsext4::extents_tree::insert: insert_recursive: LEAF depth=0 entries_before=0 max=4 new_ext=(lbn=0, len=1, phys_start=3502) phy_block=None
+[    2.746001] DEBUG rsext4::extents_tree::insert: insert_recursive: after insert (no split yet) leaf entries_len=1 (max=4) first_extents=[(0, 1, 3502)]
+[    2.752050] DEBUG rsext4::extents_tree::insert: ExtentTree::insert_extent: no root split, writing updated root back to inode
+[    2.753631] DEBUG os::task::task: Initializing TASK_MANAGER...
+[    2.753965] DEBUG os::task::task: Loading init lication 0...
+[    2.754272] DEBUG os::task::task: Creating task for app_path: /test/init, kernel_stack_id: 1
+[    2.760305] DEBUG os::task: Eter in loader
+[    2.760738] DEBUG rsext4::ext4::lookup: Root inode i_mode: 16877
+[    2.761026] DEBUG rsext4::ext4::lookup: Root inode detail: Ext4Inode { i_mode: 16877, i_uid: 0, i_size_lo: 4096, i_atime: 1779079870, i_ctime: 2, i_mtime: 2, i_dtime: 0, i_gid: 0, i_links_count: 8, i_blocks_lo: 8, i_flags: 524288, l_i_version: 4, i_block: [127754, 4, 0, 0, 1, 971, 0, 0, 0, 0, 0, 0, 0, 0, 0], i_generation: 0, i_file_acl_lo: 0, i_size_high: 0, i_obso_faddr: 0, l_i_blocks_high: 0, l_i_file_acl_high: 0, l_i_uid_high: 0, l_i_gid_high: 0, l_i_checksum_lo: 1978, l_i_reserved: 0, i_extra_isize: 32, i_checksum_hi: 55071, i_ctime_extra: 3013476800, i_mtime_extra: 3013476800, i_atime_extra: 0, i_crtime: 1779079870, i_crtime_extra: 0, i_version_hi: 0, i_projid: 0 }
+[    2.768892] DEBUG rsext4::hashtree::lookup: Starting hash tree lookup: Ok("test")
+[    2.769387] DEBUG rsext4::hashtree::lookup: Using linear search: Ok("test")
+[    2.770091] DEBUG rsext4::hashtree::lookup: Starting hash tree lookup: Ok("init")
+[    2.770572] DEBUG rsext4::hashtree::lookup: Using linear search: Ok("init")
+[    2.776432] DEBUG os::task: open file success
+[    2.801141] DEBUG os::task: Load app for /test/init success!
+[    2.805182]  WARN os::task::task: auxv: PHDR table (off=0x40, end=0x158) not covered by any LOAD segment, AT_PHDR=0
+[    2.808300] DEBUG os::arch::riscv64::trap: SSTATUS:0x8000000200006022
+[    2.808714] DEBUG os::task::task: Task created successfully: entry=0x2000, user_sp=0xa0000
+[    2.809286] DEBUG os::task::task: Application init 0 loaded successfully
+[    2.809712] DEBUG os::task::task: run_first_task: task_cx_ptr=0x8433e0e8
+[    2.810038] DEBUG os::task::task: run_first_task: task sp=0xffffffffffffe000, lr(x30)=0x0
+Argc is :1 sp:0x9fec0
+["/test/init"]
+BlueStarOS---------------------------------------------
+CopyRight -> Dirinkbottle 2025
+
+BlueStarOS> exit
+[    3.526605]  WARN os::task::task: Init are exit: pid 1 
+qemu: terminating on signal 2
+

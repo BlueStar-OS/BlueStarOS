@@ -5,7 +5,7 @@ use log::{debug, error, warn};
 
 use crate::{
     driver::{
-        gpu::vga_console::{Console, VgaScreen},
+        gpu::vga_console::{vga_screen_mut, Console},
         pcie::find_pcie_device,
     },
     fs::fs_backend::new_ext4fs,
@@ -208,7 +208,7 @@ pub unsafe fn put_pixel(
 /// 1. 读出 BAR0 framebuffer 和 BAR2 MMIO；
 /// 2. 校验 Bochs ID；
 /// 3. 做一次 640x400x32 modeset；
-/// 4. 初始化全局 `VgaScreen`，供 `/dev/fb0` 和 VGA 控制台共享。
+/// 4. 初始化全局 `VGA_SCREEN`，供 `/dev/fb0` 和 VGA 控制台共享。
 pub fn inital_gpu() {
     if let Some(vga_device) = find_pcie_device(0x1234, 0x1111) {
         warn!("Already get vga pcie device");
@@ -283,7 +283,7 @@ pub fn inital_gpu() {
             );
 
             asm!("fence iorw, iorw");
-            VgaScreen = Console {
+            *vga_screen_mut() = Console {
                 fb_base: framebuffer_base_addr as *mut u32,
                 width: DOOM_FRAMEBUFFER_WIDTH as usize,
                 height: DOOM_FRAMEBUFFER_HEIGHT as usize,
@@ -298,7 +298,7 @@ pub fn inital_gpu() {
                 soft_buffer: Vec::new(),
             };
             let soft_buffer_frame = alloc_frame().expect("VGA buffer alloc fail!");
-            VgaScreen.soft_buffer.push(soft_buffer_frame)
+            vga_screen_mut().soft_buffer.push(soft_buffer_frame)
         }
     }
 }

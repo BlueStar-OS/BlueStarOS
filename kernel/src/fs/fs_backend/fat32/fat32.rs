@@ -476,6 +476,10 @@ impl DirEnt {
     }
 }
 
+/// `open_path_with_loc` 的解析结果：
+/// (起始簇号, 是否目录, 文件大小字节, 父目录项定位`(目录簇, 项内偏移)`, 短文件名 8.3)。
+type OpenPathLoc = (u32, bool, u32, Option<(u32, usize)>, Option<[u8; 11]>);
+
 impl Fat32Fs {
     fn sector_bytes(&self) -> usize {
         self.info.byts_per_sec as usize
@@ -844,8 +848,8 @@ impl Fat32Fs {
             e[idx] = b[0];
             e[idx + 1] = b[1];
         };
-        for i in 0..5 {
-            put_u16(1 + i * 2, name13[i]);
+        for (i, &ch) in name13.iter().take(5).enumerate() {
+            put_u16(1 + i * 2, ch);
         }
         for i in 0..6 {
             put_u16(14 + i * 2, name13[5 + i]);
@@ -894,9 +898,7 @@ impl Fat32Fs {
                 if k < u16s.len() {
                     part[j] = u16s[k];
                     if u16s[k] == 0 {
-                        for t in (j + 1)..13 {
-                            part[t] = 0xFFFF;
-                        }
+                        part[(j + 1)..].fill(0xFFFF);
                         break;
                     }
                 }
@@ -1016,10 +1018,7 @@ impl Fat32Fs {
         Ok((cur_clus, true, 0))
     }
 
-    fn open_path_with_loc(
-        &self,
-        path: &str,
-    ) -> Result<(u32, bool, u32, Option<(u32, usize)>, Option<[u8; 11]>), VfsFsError> {
+    fn open_path_with_loc(&self, path: &str) -> Result<OpenPathLoc, VfsFsError> {
         if path == "/" || path.is_empty() {
             return Ok((self.info.root_clus, true, 0, None, None));
         }
@@ -1256,6 +1255,10 @@ impl Fat32File {
 }
 
 impl File for Fat32File {
+    fn as_any(&self) -> &dyn core::any::Any {
+        self
+    }
+
     fn read(&self, buf: &mut [u8]) -> Result<usize, VfsFsError> {
         let mut off = self.offset.lock();
         let n = self.read_at(*off, buf)?;

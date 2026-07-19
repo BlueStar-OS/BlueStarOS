@@ -11,6 +11,7 @@ const PCI_MMIO_ALLOC_BASE: u64 = 0x4000_0000;
 const PCI_MMIO_ALLOC_END: u64 = 0x8000_0000;
 
 /// MMIO 分配器当前指针，从 PCI_MMIO_ALLOC_BASE 开始向上增长
+// TODO(soundness): static mut with no synchronization. Wrap in UPSafeCell or atomic.
 static mut PCI_MMIO_ALLOC: u64 = PCI_MMIO_ALLOC_BASE;
 
 // ─── BAR 属性位定义（PCI 规范 7.5.1.2） ─────────────────────────────

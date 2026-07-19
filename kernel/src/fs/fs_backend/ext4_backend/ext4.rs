@@ -53,6 +53,10 @@ impl Ext4File {
 }
 
 impl File for Ext4File {
+    fn as_any(&self) -> &dyn core::any::Any {
+        self
+    }
+
     fn read(&self, buf: &mut [u8]) -> Result<usize, VfsFsError> {
         if !self.flags.readable() {
             return Err(VfsFsError::PermissionDenied);

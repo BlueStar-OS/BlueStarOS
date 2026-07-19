@@ -301,6 +301,10 @@ impl RamFile {
 }
 
 impl File for RamFile {
+    fn as_any(&self) -> &dyn core::any::Any {
+        self
+    }
+
     fn read(&self, buf: &mut [u8]) -> Result<usize, VfsFsError> {
         if !self.flags.readable() {
             return Err(VfsFsError::PermissionDenied);
@@ -495,10 +499,12 @@ impl VfsFs for RamFs {
         if matches!(node.kind, NodeKind::Dir { .. }) {
             return Err(VfsFsError::IsDir);
         }
-        if let Some(Node { kind, .. }) = self.nodes.remove(&child) {
-            if let NodeKind::File { data } = kind {
-                self.used_bytes = self.used_bytes.saturating_sub(data.len());
-            }
+        if let Some(Node {
+            kind: NodeKind::File { data },
+            ..
+        }) = self.nodes.remove(&child)
+        {
+            self.used_bytes = self.used_bytes.saturating_sub(data.len());
         }
         Ok(())
     }

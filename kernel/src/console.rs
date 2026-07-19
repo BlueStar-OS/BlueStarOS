@@ -6,6 +6,9 @@ pub fn kprint(fmt: fmt::Arguments) {
     driver_print(fmt);
 }
 
+/// 内核格式化打印宏（不带换行）。
+///
+/// 用法: `kprint!("value = {:#x}", val);`
 #[macro_export]
 macro_rules! kprint {
     ($fmt: literal $(, $($arg: tt)+)?) => {
@@ -13,6 +16,9 @@ macro_rules! kprint {
     }
 }
 
+/// 内核格式化打印宏（带换行）。
+///
+/// 用法: `kprintln!("Hello, kernel!");`
 #[macro_export]
 macro_rules! kprintln {
     ($fmt: literal $(, $($arg: tt)+)?) => {

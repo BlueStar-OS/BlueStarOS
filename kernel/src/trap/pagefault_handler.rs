@@ -54,11 +54,11 @@ fn log_current_user_registers() {
 ///专门处理非虚拟化环境下的PAGEFAULT exception
 ///faultVAddr发生fault时被操作的addr
 ///pagefault触发时的环境可能为内核，可能为用户态 内核态可能是在帮用户处理程序->合法,User态->合法
-pub fn PageFaultHandler(faultVAddr: VirAddr, cause: Scause) {
+pub fn page_fault_handler(fault_vaddr: VirAddr, cause: Scause) {
     // TODO:处理用户栈溢出逻辑
 
-    debug!("Handle Fault Virtual Address:{:#x}", faultVAddr.0);
-    let contain_vpn: VirNumber = faultVAddr.floor_down();
+    debug!("Handle Fault Virtual Address:{:#x}", fault_vaddr.0);
+    let contain_vpn: VirNumber = fault_vaddr.floor_down();
     let tsak_satp = TASK_MANAER.get_current_stap();
     let mut map_layer: PageTable = PageTable::crate_table_from_satp(tsak_satp); //临时的页表视图
 
@@ -96,7 +96,7 @@ pub fn PageFaultHandler(faultVAddr: VirAddr, cause: Scause) {
             } else {
                 //非法!,kail进程
                 error!("PageFault Unhandled! Killed.");
-                error!("  Addr: {:#x}", faultVAddr.0);
+                error!("  Addr: {:#x}", fault_vaddr.0);
                 error!("  Cause: {:?}", cause.cause());
                 log_current_user_registers();
                 error!("  PTE Flags: {:?}", pte.flags());
@@ -114,38 +114,26 @@ pub fn PageFaultHandler(faultVAddr: VirAddr, cause: Scause) {
     }
 
     //是否有对应area
-    let inner = TASK_MANAER.task_que_inner.lock();
-    let current = inner.current;
-    drop(inner);
-    let inner = TASK_MANAER.task_que_inner.lock();
-    // 必须有 area 包含该 vpn，且该 area 是 mmap 区域（memset.areas 中 MapArea.mmap.is_some()）。
-    let will_kill: bool = {
-        let memset = &mut inner.task_queen[current].lock().memory_set;
-        !memset.is_mmap_vpn(contain_vpn)
-    };
+    let will_kill = TASK_MANAER.task_que_inner.lock(|inner| {
+        let current = inner.current;
+        inner.task_queen[current].lock(|tcb| !tcb.memory_set.is_mmap_vpn(contain_vpn))
+    });
+
     if will_kill {
         //没有area包含mmap的地址，杀掉
         error!("area not contain mmap addr kill!");
-        drop(inner); //杀任务的话提前drop了
         log_current_user_registers();
         TASK_MANAER.kail_current_task_and_run_next();
         return;
     }
 
-    debug!("[PageFaultHandler]:ligel!");
+    debug!("[page_fault_handler]:ligel!");
 
-    {
-        //重新拿锁
-        let memset = &mut inner.task_queen[current].lock().memory_set;
-
-        //合法，然后
-        //2.分配物理页帧挂载到对应的maparea下面
-        //3.设置合法页表项
-        //一部到位
-
-        memset.findarea_allocFrame_and_setPte(contain_vpn);
-    }
-
-    //返回 释放inner
-    drop(inner);
+    //合法，分配物理页帧挂载到对应的maparea下面并设置合法页表项
+    TASK_MANAER.task_que_inner.lock(|inner| {
+        let current = inner.current;
+        inner.task_queen[current].lock(|tcb| {
+            tcb.memory_set.findarea_alloc_frame_and_set_pte(contain_vpn);
+        });
+    });
 }

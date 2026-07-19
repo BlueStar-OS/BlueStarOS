@@ -104,7 +104,7 @@ impl KernelStackAllocator {
 
 lazy_static! {
     static ref KERNEL_STACK_ALLOCATOR: UPSafeCell<KernelStackAllocator> =
-        unsafe { UPSafeCell::new(KernelStackAllocator::new()) };
+        UPSafeCell::new(KernelStackAllocator::new());
 }
 
 impl Iterator for VirNumRangeIter {
@@ -159,11 +159,11 @@ impl VirNumRange {
     }
 
     ///查找区间是和这个区间有交集 自身是闭区间
-    pub fn is_contain_thisvpnRange(&self, vpnRange: VirNumRange) -> Vec<VirNumber> {
+    pub fn is_contain_thisvpn_range(&self, vpn_range: VirNumRange) -> Vec<VirNumber> {
         let start = self.0;
         let end = self.1;
-        let target_start = vpnRange.0;
-        let target_end = vpnRange.1;
+        let target_start = vpn_range.0;
+        let target_end = vpn_range.1;
 
         let inter_start = if start >= target_start {
             start
@@ -602,9 +602,8 @@ impl MapSet {
         let mut find_re: Option<Arc<FramTracker>> = None;
 
         self.areas.iter().for_each(|area| {
-            let re = area.frames.get_key_value(&target);
-            if re.is_some() {
-                find_re = Some(re.unwrap().1.clone())
+            if let Some((_, frame)) = area.frames.get_key_value(&target) {
+                find_re = Some(frame.clone());
             }
         });
         find_re
@@ -700,10 +699,10 @@ impl MapSet {
     }
 
     ///查找这个vpn对应的area 给这个vpn的maparea分配物理帧，添加合法页表映射 前提是检查过确实有area包含vpn
-    pub fn findarea_allocFrame_and_setPte(&mut self, vpn: VirNumber) {
+    pub fn findarea_alloc_frame_and_set_pte(&mut self, vpn: VirNumber) {
         if vpn.0 >= 0x602 && vpn.0 <= 0x604 {
             error!(
-                "!!! findarea_allocFrame_and_setPte called for vpn={:#x}",
+                "!!! findarea_alloc_frame_and_set_pte called for vpn={:#x}",
                 vpn.0,
             );
         }
@@ -751,7 +750,7 @@ impl MapSet {
         let end = start.saturating_add(len).saturating_sub(1);
         let start_vpn = VirAddr(start).floor_down();
         let end_vpn = VirAddr(end).floor_down();
-        !self.AallArea_Iscontain_thisVpn_plus(VirNumRange(start_vpn, end_vpn))
+        !self.aall_area_iscontain_this_vpn_plus(VirNumRange(start_vpn, end_vpn))
     }
 
     fn find_free_range(&self, len: usize) -> Option<usize> {
@@ -778,6 +777,9 @@ impl MapSet {
     ///mmap系统调用，创建一个有vpnrange的maparea，没有实际映射条目和物理页帧的maparea
     /// Linux/POSIX: mmap(addr, len, prot, flags, fd, offset)
     /// 返回：成功返回映射起始地址；失败返回负errno（EINVAL/ENOMEM/EBADF）
+    // clippy::too_many_arguments: 严格对齐 POSIX `mmap(addr, len, prot, flags, fd, offset)`
+    // 的 6 参数 ABI，加 &mut self 共 7 个入参，不能为满足 lint 而破坏系统调用签名。
+    #[allow(clippy::too_many_arguments)]
     pub fn mmap(
         &mut self,
         addr: VirAddr,
@@ -1022,25 +1024,25 @@ impl MapSet {
     }
 
     ///unmap系统调用,取消映射一个[start,end]范围的虚拟页面，并且设置对应页表项不合法
-    /// startVAR mmap起始地址 size:映射长度(会被裁剪，小于一个页取消映射一个页,不满一个页补全一个页) 返回负errno代表失败 0代表成功
-    pub fn unmap_range(&mut self, startVAR: VirAddr, size: usize) -> isize {
+    /// start_var mmap起始地址 size:映射长度(会被裁剪，小于一个页取消映射一个页,不满一个页补全一个页) 返回负errno代表失败 0代表成功
+    pub fn unmap_range(&mut self, start_var: VirAddr, size: usize) -> isize {
         if size == 0 {
             debug!(
                 "memset::unmap_range: FAIL start_va=0x{:x}, size=0x{:x}, reason=size_is_zero",
-                startVAR.0, size
+                start_var.0, size
             );
             return BlueErr::EINVAL.as_isize();
         }
 
-        let start_vpn: VirNumber = startVAR.floor_down();
+        let start_vpn: VirNumber = start_var.floor_down();
         let end_vpn: VirNumber =
-            VirAddr(startVAR.0.saturating_add(size).saturating_sub(1)).floor_down();
+            VirAddr(start_var.0.saturating_add(size).saturating_sub(1)).floor_down();
         let range: VirNumRange = VirNumRange(start_vpn, end_vpn);
 
-        if !self.AallArea_Iscontain_thisVpn_plus(range) {
+        if !self.aall_area_iscontain_this_vpn_plus(range) {
             debug!(
                 "memset::unmap_range: FAIL start_va=0x{:x}, size=0x{:x}, range={:?}, reason=range_not_fully_contained",
-                startVAR.0,
+                start_var.0,
                 size,
                 range
             );
@@ -1050,11 +1052,11 @@ impl MapSet {
         let none_touches = self
             .areas
             .iter()
-            .all(|area| area.range.is_contain_thisvpnRange(range).is_empty());
+            .all(|area| area.range.is_contain_thisvpn_range(range).is_empty());
         if none_touches {
             debug!(
                 "memset::unmap_range: FAIL start_va=0x{:x}, size=0x{:x}, range={:?}, reason=none_touches_area",
-                startVAR.0,
+                start_var.0,
                 size,
                 range
             );
@@ -1065,7 +1067,7 @@ impl MapSet {
         let mut any_touched = false; //是否有交集
 
         for area in self.areas.drain(..) {
-            let inter = area.range.is_contain_thisvpnRange(range);
+            let inter = area.range.is_contain_thisvpn_range(range);
             if inter.is_empty() {
                 //没有交集
                 new_areas.push(area);
@@ -1107,7 +1109,7 @@ impl MapSet {
                     if let Err(err) = info.write_back_from_frame(&frame) {
                         debug!(
                             "memset::unmap_range: FAIL start_va=0x{:x}, size=0x{:x}, unmap_vpn={}, reason=shared_write_back_failed err={}",
-                            startVAR.0,
+                            start_var.0,
                             size,
                             vpn.0,
                             err
@@ -1121,7 +1123,7 @@ impl MapSet {
 
             for vpn in VirNumRange(unmap_start, unmap_end) {
                 if let Some(pte) = self.table.find_pte_vpn(vpn) {
-                    pte.set_inValid();
+                    pte.set_invalid();
                 }
             }
 
@@ -1138,7 +1140,7 @@ impl MapSet {
         } else {
             debug!(
                 "memset::unmap_range: FAIL start_va=0x{:x}, size=0x{:x}, range={:?}, reason=no_overlapping_area_touched",
-                startVAR.0,
+                start_var.0,
                 size,
                 range
             );
@@ -1177,7 +1179,7 @@ impl MapSet {
 
         // 1. 检查范围内的每一个 VPN 都有 VMA 覆盖，不允许有空洞
         for vpn in range {
-            if !self.AallArea_Iscontain_thisVpn(vpn) {
+            if !self.aall_area_iscontain_this_vpn(vpn) {
                 debug!(
                     "memset::mprotect_range: FAIL start_va=0x{:x}, len=0x{:x}, vpn={}, reason=hole_in_range",
                     start_va.0, len, vpn.0
@@ -1203,7 +1205,7 @@ impl MapSet {
         let mut new_areas: Vec<MapArea> = Vec::with_capacity(self.areas.len());
 
         for area in self.areas.drain(..) {
-            if area.range.is_contain_thisvpnRange(range).is_empty() {
+            if area.range.is_contain_thisvpn_range(range).is_empty() {
                 new_areas.push(area);
                 continue;
             }
@@ -1383,7 +1385,7 @@ impl MapSet {
         // 映射陷阱
         memory_set.map_traper();
         //映射上下文
-        memory_set.map_trapContext();
+        memory_set.map_trap_context();
 
         //映射普通用户栈
         let userstack_start_vpn = VirNumber(max_end_vpn.0 + 1); //留guardpage
@@ -1448,12 +1450,11 @@ impl MapSet {
     }
 
     pub fn dealloc_kernel_stack_id0(id0: usize) {
-        KERNEL_STACK_ALLOCATOR.lock().dealloc_id(id0);
+        KERNEL_STACK_ALLOCATOR.lock(|a| a.dealloc_id(id0));
     }
 
     pub fn kernel_stack_allocator_state() -> (usize, usize) {
-        let alloc = KERNEL_STACK_ALLOCATOR.lock();
-        (alloc.current_id, alloc.recycle.len())
+        KERNEL_STACK_ALLOCATOR.lock(|a| (a.current_id, a.recycle.len()))
     }
 
     pub fn area_count(&self) -> usize {
@@ -1462,7 +1463,7 @@ impl MapSet {
 
     pub(crate) fn alloc_kernel_stack() -> usize {
         // 分配一个逻辑 id（从 1 开始），用于在高地址区域切分出一段内核栈虚拟地址区间
-        let id = KERNEL_STACK_ALLOCATOR.lock().alloc_id() + 1;
+        let id = KERNEL_STACK_ALLOCATOR.lock(|a| a.alloc_id()) + 1;
 
         // 高地址向下切：TRAP_BOTTOM_ADDR 之下为多个 task kernel stack，每段栈前留一个 guard page
         let strat_kernel_vpn =
@@ -1475,13 +1476,15 @@ impl MapSet {
         let kernel_stack_top =
             TRAP_BOTTOM_ADDR - ((PAGE_SIZE + KERNEL_STACK_SIZE) * id) + KERNEL_STACK_SIZE;
 
-        KERNEL_SPACE.lock().add_area(
-            VirNumRange(strat_kernel_vpn, end_kernel_vpn),
-            MapType::Maped,
-            MapAreaFlags::R | MapAreaFlags::W | MapAreaFlags::A,
-            None,
-            None,
-        );
+        KERNEL_SPACE.lock(|ks| {
+            ks.add_area(
+                VirNumRange(strat_kernel_vpn, end_kernel_vpn),
+                MapType::Maped,
+                MapAreaFlags::R | MapAreaFlags::W | MapAreaFlags::A,
+                None,
+                None,
+            )
+        });
 
         kernel_stack_top
     }
@@ -1506,7 +1509,7 @@ impl MapSet {
     }
 
     ///映射陷阱上下文
-    pub fn map_trapContext(&mut self) {
+    pub fn map_trap_context(&mut self) {
         let trapcontext_addr: VirAddr = VirAddr(TRAP_CONTEXT_ADDR);
         self.add_area(
             VirNumRange(
@@ -1520,10 +1523,9 @@ impl MapSet {
         );
     }
 
-    ///目前不可用
-    ///映射特殊用户库没返回的情况，可以直接切换任务或者panic，保证内核稳定,目前就在TrapContext后面巴，如果后续报错，则需要特殊处理。！！！！！！！！！！！！！！！！！！！！！！
-    ///只映射了处理函数一个页，可能不够 目前不能用
-    // pub fn map_user_start_return(&mut self){
+    // 目前不可用
+    // 映射特殊用户库没返回的情况，可以直接切换任务或者panic，保证内核稳定,目前就在TrapContext后面巴，如果后续报错，则需要特殊处理。！！！！！！！！！！！！！！！！！！！！！！
+    // 只映射了处理函数一个页，可能不够 目前不能用
     //   let userlib_start_retunr:usize=USERLIB_START_RETURN_HIGNADDR;
     // let map_vnumber=VirAddr(userlib_start_retunr).strict_into_virnum();//严格对齐
     //let start_return_phyaddr =PhysiAddr(no_return_start as usize).floor_down();
@@ -1533,7 +1535,7 @@ impl MapSet {
 
     ///判断自身的所有maparea是否有过对应vpn的映射或者mmap,只能检查一个页面
     /// vpn ：需要查找的vpn虚拟页号.
-    pub fn AallArea_Iscontain_thisVpn(&self, vpn: VirNumber) -> bool {
+    pub fn aall_area_iscontain_this_vpn(&self, vpn: VirNumber) -> bool {
         self.areas
             .iter()
             .any(|area| area.range.is_contain_thisvpn(vpn))
@@ -1541,10 +1543,10 @@ impl MapSet {
 
     ///判断自身的所有maparea是否有过对应vpn的映射或者mmap,求是否存在交集
     /// VpnRange ：连续闭区间，需要查找的vpn虚拟页号范围.
-    pub fn AallArea_Iscontain_thisVpn_plus(&self, vpnrange: VirNumRange) -> bool {
+    pub fn aall_area_iscontain_this_vpn_plus(&self, vpnrange: VirNumRange) -> bool {
         self.areas
             .iter()
-            .any(|area| !area.range.is_contain_thisvpnRange(vpnrange).is_empty())
+            .any(|area| !area.range.is_contain_thisvpn_range(vpnrange).is_empty())
     }
 
     ///获取所有包含范围内vpn的maparea的实体move所有权
@@ -1554,7 +1556,7 @@ impl MapSet {
             .areas
             .iter()
             .enumerate()
-            .filter(|(_, area)| !area.range.is_contain_thisvpnRange(range).is_empty())
+            .filter(|(_, area)| !area.range.is_contain_thisvpn_range(range).is_empty())
             .map(|(index, _)| index)
             .collect();
         for inde in index {
@@ -1567,7 +1569,7 @@ impl MapSet {
         let index = self
             .areas
             .iter()
-            .position(|area| !area.range.is_contain_thisvpnRange(range).is_empty())?;
+            .position(|area| !area.range.is_contain_thisvpn_range(range).is_empty())?;
         Some(self.areas.remove(index))
     }
 
@@ -1613,29 +1615,26 @@ impl MapSet {
         mem_set.map_traper();
 
         //映射 MMIO 设备区域（从 KERNEL_MEMORY_SPACE_LIST 注册表读取）
-        {
-            let mmio_list = crate::memory::KERNEL_MEMORY_SPACE_LIST.lock();
+        crate::memory::KERNEL_MEMORY_SPACE_LIST.lock(|mmio_list| {
             if mmio_list.is_empty() {
-                // panic
                 panic!("[MMIO]: MMIO list is empty , you are forget registe mmio memory?");
-            } else {
-                for entry in mmio_list.iter() {
-                    mem_set.add_area(
-                        entry.range,
-                        MapType::Indentical,
-                        entry.flags | MapAreaFlags::A,
-                        None,
-                        None,
-                    );
-                    let start_addr: VirAddr = entry.range.0.into();
-                    let end_addr: VirAddr = entry.range.1.into();
-                    debug!(
-                        "[MEMMAP] MMIO (Device): {:#x}-{:#x}",
-                        start_addr.0, end_addr.0
-                    );
-                }
             }
-        }
+            for entry in mmio_list.iter() {
+                mem_set.add_area(
+                    entry.range,
+                    MapType::Indentical,
+                    entry.flags | MapAreaFlags::A,
+                    None,
+                    None,
+                );
+                let start_addr: VirAddr = entry.range.0.into();
+                let end_addr: VirAddr = entry.range.1.into();
+                debug!(
+                    "[MEMMAP] MMIO (Device): {:#x}-{:#x}",
+                    start_addr.0, end_addr.0
+                );
+            }
+        });
 
         //映射代码段
         let text_range = VirNumRange::new(
@@ -1797,45 +1796,41 @@ impl MapSet {
         // 映射物理内存（从 KERNEL_MAIN_MEMORY 注册表读取，支持多段不连续内存）
         {
             use crate::memory::memorymodel::KERNEL_MAIN_MEMORY;
-            let mem_info = KERNEL_MAIN_MEMORY.lock();
-
-            if mem_info.is_initialized() && !mem_info.regions().is_empty() {
-                for region in mem_info.regions() {
-                    // 跳过 kernel image 之前的部分（已被前面的段映射覆盖）
-                    let effective_start = if region.start < ekernel as *const () as usize {
-                        ekernel as *const () as usize
-                    } else {
-                        region.start
-                    };
-
-                    if effective_start >= region.end {
-                        continue;
+            KERNEL_MAIN_MEMORY.lock(|mem_info| {
+                if mem_info.is_initialized() && !mem_info.regions().is_empty() {
+                    for region in mem_info.regions() {
+                        let effective_start = if region.start < ekernel as *const () as usize {
+                            ekernel as *const () as usize
+                        } else {
+                            region.start
+                        };
+                        if effective_start >= region.end {
+                            continue;
+                        }
+                        let phys_start = VirAddr(effective_start).floor_up();
+                        let phys_end = VirAddr(region.end - PAGE_SIZE).floor_down();
+                        let phys_range = VirNumRange(phys_start, phys_end);
+                        mem_set.add_area(
+                            phys_range,
+                            MapType::Indentical,
+                            MapAreaFlags::V
+                                | MapAreaFlags::W
+                                | MapAreaFlags::R
+                                | MapAreaFlags::A
+                                | MapAreaFlags::G,
+                            None,
+                            None,
+                        );
+                        debug!(
+                            "[MEMMAP] Physical Memory: {:#x}-{:#x}",
+                            phys_start.0 << 12,
+                            phys_end.0 << 12
+                        );
                     }
-
-                    let phys_start = VirAddr(effective_start).floor_up();
-                    let phys_end = VirAddr(region.end - PAGE_SIZE).floor_down();
-                    let phys_range = VirNumRange(phys_start, phys_end);
-                    mem_set.add_area(
-                        phys_range,
-                        MapType::Indentical,
-                        MapAreaFlags::V
-                            | MapAreaFlags::W
-                            | MapAreaFlags::R
-                            | MapAreaFlags::A
-                            | MapAreaFlags::G,
-                        None,
-                        None,
-                    );
-                    debug!(
-                        "[MEMMAP] Physical Memory: {:#x}-{:#x}",
-                        phys_start.0 << 12,
-                        phys_end.0 << 12
-                    );
+                } else {
+                    panic!("[Machine Memory]: Are you forget input dtb file to kernel?");
                 }
-            } else {
-                // 物理内存Machine info没初始化
-                panic!("[Machine Memory]: Are you forget input dtb file to kernel?");
-            }
+            });
         }
 
         //设置brk Error

@@ -6,40 +6,45 @@ use crate::MapSet;
 use alloc::vec::Vec;
 use lazy_static::lazy_static;
 
-pub mod pagefaultHandler;
+pub mod pagefault_handler;
 
 lazy_static! {
     static ref PENDING_KSTACK_FREE: UPSafeCell<Vec<(VirNumRange, Option<usize>)>> =
-        unsafe { UPSafeCell::new(Vec::new()) };
+        UPSafeCell::new(Vec::new());
 }
 
 pub fn enqueue_kstack_free(range: VirNumRange, id0: Option<usize>) {
-    let mut q = PENDING_KSTACK_FREE.lock();
-    q.push((range, id0));
-    drop(q);
+    PENDING_KSTACK_FREE.lock(|q| q.push((range, id0)));
 }
 
 pub fn recycle_pending_kstacks() {
-    let mut pending = PENDING_KSTACK_FREE.lock();
-    if pending.is_empty() {
+    // 先取出所有 pending 项，释放 PENDING 锁后再操作 KERNEL_SPACE
+    let items: Vec<_> = PENDING_KSTACK_FREE.lock(|pending| {
+        if pending.is_empty() {
+            return Vec::new();
+        }
+        core::mem::take(&mut *pending)
+    });
+    if items.is_empty() {
         return;
     }
 
-    let mut kspace = KERNEL_SPACE.lock();
-    while let Some((range, id0)) = pending.pop() {
-        while let Some(mut area) = kspace.pop_one_contain_range_area(range) {
-            let mut vpn = area.range.0;
-            while vpn.0 <= area.range.1 .0 {
-                if area.frames.contains_key(&vpn) {
-                    area.unmap_one(&mut kspace.table, vpn);
-                } else {
-                    kspace.table.unmap(vpn);
+    KERNEL_SPACE.lock(|kspace| {
+        for (range, id0) in items {
+            while let Some(mut area) = kspace.pop_one_contain_range_area(range) {
+                let mut vpn = area.range.0;
+                while vpn.0 <= area.range.1 .0 {
+                    if area.frames.contains_key(&vpn) {
+                        area.unmap_one(&mut kspace.table, vpn);
+                    } else {
+                        kspace.table.unmap(vpn);
+                    }
+                    vpn.step();
                 }
-                vpn.step();
+            }
+            if let Some(id0) = id0 {
+                MapSet::dealloc_kernel_stack_id0(id0);
             }
         }
-        if let Some(id0) = id0 {
-            MapSet::dealloc_kernel_stack_id0(id0);
-        }
-    }
+    });
 }

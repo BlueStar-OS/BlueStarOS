@@ -1,6 +1,7 @@
 //! 错误类型定义，错误常量定义，参考 linux 源码
 //! - other/linux-5.4.29/include/uapi/asm-generic/errno-base.h (1-34)
 //! - other/linux-5.4.29/include/uapi/asm-generic/errno.h (35-133)
+#![allow(clippy::upper_case_acronyms)]
 
 /// Linux 兼容错误码
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

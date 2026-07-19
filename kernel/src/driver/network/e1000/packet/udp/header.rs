@@ -95,6 +95,9 @@ impl UdpHeader {
     }
 
     /// 以大端序返回 UDP 头部字节切片。
+    // clippy::wrong_self_convention: 返回的切片借自 `self` 自身内存，必须按 `&self`
+    // 借用；若按值接收 `self`，返回的切片会指向已销毁的临时量，造成悬垂引用。
+    #[allow(clippy::wrong_self_convention)]
     pub fn to_be_bytes(&self) -> &[u8] {
         // SAFETY: `UdpHeader` 为 packed 且固定 8 字节。
         unsafe { core::slice::from_raw_parts(self as *const Self as *const u8, UDP_HEADER_LEN) }
@@ -116,8 +119,6 @@ impl fmt::Debug for UdpHeader {
     }
 }
 
-
-
 /// UDP 伪头 (12 字节) — 不发送, 仅用于校验和计算。
 ///
 /// 布局:
@@ -136,8 +137,8 @@ impl fmt::Debug for UdpHeader {
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub struct UdpPrseHeader {
-    pub sourceip: [u8;4],
-    pub dstip: [u8;4],
+    pub sourceip: [u8; 4],
+    pub dstip: [u8; 4],
     pub zero: u8,
     pub proto: Ipv4Protocol,
     pub udp_len: Net16,
@@ -150,7 +151,7 @@ impl UdpPrseHeader {
     ///
     /// - `src_ip` / `dst_ip`: 从 IPv4 头中取出的源/目的地址
     /// - `udp_total_len`: UDP 总长度 (头 + 数据), 主机序
-    pub fn new(src_ip: [u8;4], dst_ip: [u8;4], udp_total_len: u16) -> Self {
+    pub fn new(src_ip: [u8; 4], dst_ip: [u8; 4], udp_total_len: u16) -> Self {
         Self {
             sourceip: src_ip,
             dstip: dst_ip,
@@ -164,7 +165,10 @@ impl UdpPrseHeader {
     pub fn as_bytes(&self) -> &[u8] {
         // SAFETY: `UdpPrseHeader` 为 repr(C) 且固定 12 字节, 无填充。
         unsafe {
-            core::slice::from_raw_parts(self as *const Self as *const u8, core::mem::size_of::<Self>())
+            core::slice::from_raw_parts(
+                self as *const Self as *const u8,
+                core::mem::size_of::<Self>(),
+            )
         }
     }
 }
@@ -174,7 +178,10 @@ impl fmt::Debug for UdpPrseHeader {
         write!(
             f,
             "PseudoHeader {{ src={:?} dst={:?} proto={:?} udp_len={} }}",
-            self.sourceip, self.dstip, self.proto, self.udp_len.host()
+            self.sourceip,
+            self.dstip,
+            self.proto,
+            self.udp_len.host()
         )
     }
 }

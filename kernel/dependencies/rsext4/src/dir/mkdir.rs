@@ -1,6 +1,7 @@
 //! Directory creation helpers.
 
 use alloc::{string::String, vec::Vec};
+use log::error;
 
 use crate::{
     alloc::string::ToString,
@@ -37,27 +38,48 @@ fn mkdir_internal<B: BlockDevice>(
     let norm_path = split_paren_child_and_tranlatevalid(path);
     // Resolve trivial and already-existing paths before allocating anything.
     if norm_path.is_empty() {
+        error!("mkdir_internal: empty normalized path (input='{}')", path);
         return Err(Ext4Error::invalid_input());
     }
 
     if norm_path == "/" {
-        let root = fs.get_root(device)?;
+        let root = fs.get_root(device).map_err(|e| {
+            error!("mkdir_internal: get_root failed: {:?}", e);
+            e
+        })?;
         return if existing_ok {
             Ok(root)
         } else {
+            error!("mkdir_internal: '/' already exists");
             Err(Ext4Error::already_exists())
         };
     }
 
-    if let Some((_ino, inode)) = get_file_inode(fs, device, &norm_path)? {
+    if let Some((_ino, inode)) = get_file_inode(fs, device, &norm_path).map_err(|e| {
+        error!(
+            "mkdir_internal: get_file_inode('{}') failed: {:?}",
+            norm_path, e
+        );
+        e
+    })? {
         if existing_ok && inode.is_dir() {
             return Ok(inode);
         }
+        error!(
+            "mkdir_internal: path '{}' already exists (is_dir={}, existing_ok={})",
+            norm_path,
+            inode.is_dir(),
+            existing_ok
+        );
         return Err(Ext4Error::already_exists());
     }
 
     let parts: Vec<&str> = norm_path.split('/').filter(|s| !s.is_empty()).collect();
     if parts.is_empty() {
+        error!(
+            "mkdir_internal: no path components after normalization (input='{}')",
+            path
+        );
         return Err(Ext4Error::invalid_input());
     }
 
@@ -66,7 +88,13 @@ fn mkdir_internal<B: BlockDevice>(
     for part in parts.iter().take(parts.len().saturating_sub(1)) {
         cur_path.push('/');
         cur_path.push_str(part);
-        ensure_directory(device, fs, &cur_path)?;
+        ensure_directory(device, fs, &cur_path).map_err(|e| {
+            error!(
+                "mkdir_internal: ensure_directory('{}') failed: {:?}",
+                cur_path, e
+            );
+            e
+        })?;
     }
 
     let child = parts.last().unwrap().to_string();
@@ -81,25 +109,79 @@ fn mkdir_internal<B: BlockDevice>(
         p
     };
 
-    let (parent_ino_num, mut parent_inode) =
-        get_inode_with_num(fs, device, &parent)?.ok_or(Ext4Error::not_found())?;
+    let (parent_ino_num, mut parent_inode) = get_inode_with_num(fs, device, &parent)
+        .map_err(|e| {
+            error!(
+                "mkdir_internal: get_inode_with_num('{}') failed: {:?}",
+                parent, e
+            );
+            e
+        })?
+        .ok_or_else(|| {
+            error!("mkdir_internal: parent directory '{}' not found", parent);
+            Ext4Error::not_found()
+        })?;
     if !parent_inode.is_dir() {
+        error!("mkdir_internal: parent '{}' is not a directory", parent);
         return Err(Ext4Error::not_dir());
     }
 
     if parent == "/" && child == "lost+found" {
-        create_lost_found_directory(fs, device)?;
-        return find_file(fs, device, "/lost+found");
+        create_lost_found_directory(fs, device).map_err(|e| {
+            error!(
+                "mkdir_internal: create_lost_found_directory failed: {:?}",
+                e
+            );
+            e
+        })?;
+        return find_file(fs, device, "/lost+found").map_err(|e| {
+            error!(
+                "mkdir_internal: find_file('/lost+found') after create failed: {:?}",
+                e
+            );
+            e
+        });
     }
 
     // Allocate the child inode and its first directory block only after parent validation.
-    let new_dir_ino = fs.alloc_inode(device)?;
-    let data_block = fs.alloc_block(device)?;
-    let new_dir_gen = fs.get_inode_by_num(device, new_dir_ino)?.i_generation;
+    let new_dir_ino = fs.alloc_inode(device).map_err(|e| {
+        error!(
+            "mkdir_internal: alloc_inode failed for '{}': {:?}",
+            norm_path, e
+        );
+        e
+    })?;
+    let data_block = fs.alloc_block(device).map_err(|e| {
+        error!(
+            "mkdir_internal: alloc_block failed for '{}': {:?}",
+            norm_path, e
+        );
+        e
+    })?;
+    let new_dir_gen = fs
+        .get_inode_by_num(device, new_dir_ino)
+        .map_err(|e| {
+            error!(
+                "mkdir_internal: get_inode_by_num({}) failed: {:?}",
+                new_dir_ino.raw(),
+                e
+            );
+            e
+        })?
+        .i_generation;
 
     {
         // Initialize `.` and `..`, leaving room for the checksum tail when enabled.
-        let cached = fs.datablock_cache.create_new(device, data_block)?;
+        let cached = fs
+            .datablock_cache
+            .create_new(device, data_block)
+            .map_err(|e| {
+                error!(
+                    "mkdir_internal: datablock_cache.create_new(block={}) failed: {:?}",
+                    data_block, e
+                );
+                e
+            })?;
         let data = &mut cached.data;
 
         let dot_name = b".";
@@ -146,7 +228,17 @@ fn mkdir_internal<B: BlockDevice>(
     }
 
     // Persist the child directory inode through the unified metadata path.
-    let (group_idx, _idx) = fs.inode_allocator.global_to_group(new_dir_ino)?;
+    let (group_idx, _idx) = fs
+        .inode_allocator
+        .global_to_group(new_dir_ino)
+        .map_err(|e| {
+            error!(
+                "mkdir_internal: global_to_group(ino={}) failed: {:?}",
+                new_dir_ino.raw(),
+                e
+            );
+            e
+        })?;
     let dir_mode = Ext4Inode::S_IFDIR | 0o755;
     let mut new_inode = Ext4Inode::empty_for_reuse(fs.default_inode_extra_isize());
     new_inode.i_links_count = 2;
@@ -167,11 +259,28 @@ fn mkdir_internal<B: BlockDevice>(
     {
         create_update.projid = Some(parent_inode.i_projid);
     }
-    fs.finalize_inode_update(device, new_dir_ino, &mut new_inode, create_update)?;
+    fs.finalize_inode_update(device, new_dir_ino, &mut new_inode, create_update)
+        .map_err(|e| {
+            error!(
+                "mkdir_internal: finalize_inode_update failed for ino={} path='{}': {:?}",
+                new_dir_ino.raw(),
+                norm_path,
+                e
+            );
+            e
+        })?;
 
     // Publish the new directory: bump link accounting, group stats, then insert the name.
     let parent_new_links = parent_inode.i_links_count.saturating_add(1);
-    fs.set_inode_links_count(device, parent_ino_num, parent_new_links)?;
+    fs.set_inode_links_count(device, parent_ino_num, parent_new_links)
+        .map_err(|e| {
+            error!(
+                "mkdir_internal: set_inode_links_count(parent_ino={}) failed: {:?}",
+                parent_ino_num.raw(),
+                e
+            );
+            e
+        })?;
 
     if let Some(desc) = fs.get_group_desc_mut(group_idx) {
         let newc = desc.used_dirs_count().saturating_add(1);
@@ -187,9 +296,23 @@ fn mkdir_internal<B: BlockDevice>(
         new_dir_ino,
         &child,
         Ext4DirEntry2::EXT4_FT_DIR,
-    )?;
+    )
+    .map_err(|e| {
+        error!(
+            "mkdir_internal: insert_dir_entry('{}/{}') failed: {:?}",
+            parent, child, e
+        );
+        e
+    })?;
 
-    fs.get_inode_by_num(device, new_dir_ino)
+    fs.get_inode_by_num(device, new_dir_ino).map_err(|e| {
+        error!(
+            "mkdir_internal: final get_inode_by_num({}) failed: {:?}",
+            new_dir_ino.raw(),
+            e
+        );
+        e
+    })
 }
 
 pub(crate) fn ensure_directory<B: BlockDevice>(

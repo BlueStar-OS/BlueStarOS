@@ -39,8 +39,7 @@ pub fn ipv4_receive(mut payload: NetBuffer, eth_hdr: EthHead) {
     if ip_checksum_host != 0 {
         warn!(
             "收到 IPv4 报文但头校验和错误 packet_checksum:{:#x} verify_result:{:#x}，丢弃",
-            ip_checksum,
-            ip_checksum_host
+            ip_checksum, ip_checksum_host
         );
         return;
     }

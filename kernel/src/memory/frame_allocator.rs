@@ -246,62 +246,61 @@ impl FramTracker {
 
 lazy_static! {
     pub static ref FRAME_ALLOCATOR: UPSafeCell<FrameAlloctor> =
-        unsafe { UPSafeCell::new(FrameAlloctor::new()) };
+        UPSafeCell::new(FrameAlloctor::new());
 }
 
 pub fn init_frame_allocator(start: usize, end: usize) {
     kprintln!("Init frame allocator start={:#x}, end={:#x}", start, end);
-    FRAME_ALLOCATOR.lock().init(start, end);
+    FRAME_ALLOCATOR.lock(|fa| fa.init(start, end));
 }
 
 /// 从 DTB 探测的物理内存初始化帧分配器
 pub fn init_frame_allocator_from_dtb(kernel_end: usize) {
     use crate::memory::memorymodel::KERNEL_MAIN_MEMORY;
 
-    let mem_info = KERNEL_MAIN_MEMORY.lock();
-
-    if !mem_info.is_initialized() || mem_info.regions().is_empty() {
-        panic!("DTB memory info is not avalible");
-        // warn!("DTB内存信息不可用，使用MEMORY_SIZE回退: {}MB", MEMORY_SIZE / MB);
-        // drop(mem_info);
-        // FRAME_ALLOCATOR.lock().init(kernel_end, kernel_end + MEMORY_SIZE);
-        // return;
-    }
-
-    // 构建 (start, end) 列表，跳过 kernel image 占用的页
-    let mut regions: Vec<(usize, usize)> = Vec::new();
-    for region in mem_info.regions() {
-        if region.end <= kernel_end {
-            continue; // 整个区域在 kernel image 之内
+    let regions = KERNEL_MAIN_MEMORY.lock(|mem_info| {
+        if !mem_info.is_initialized() || mem_info.regions().is_empty() {
+            kprintln!(
+                "initial :{}, region:{:?}",
+                mem_info.is_initialized(),
+                mem_info.regions()
+            );
+            panic!("DTB memory info is not avalible");
         }
-        let effective_start = if region.start < kernel_end {
-            kernel_end
-        } else {
-            region.start
-        };
-        if effective_start < region.end {
-            regions.push((effective_start, region.end));
+        let mut regions: Vec<(usize, usize)> = Vec::new();
+        for region in mem_info.regions() {
+            if region.end <= kernel_end {
+                continue;
+            }
+            let effective_start = if region.start < kernel_end {
+                kernel_end
+            } else {
+                region.start
+            };
+            if effective_start < region.end {
+                regions.push((effective_start, region.end));
+            }
         }
-    }
-    drop(mem_info);
+        regions
+    });
 
     if regions.is_empty() {
         panic!("没有可用的物理内存区域!");
     }
 
-    FRAME_ALLOCATOR.lock().init_ranges(&regions);
+    FRAME_ALLOCATOR.lock(|fa| fa.init_ranges(&regions));
 }
 
 pub fn alloc_frame() -> Option<FramTracker> {
-    FRAME_ALLOCATOR.lock().alloc()
+    FRAME_ALLOCATOR.lock(|fa| fa.alloc())
 }
 
 pub fn alloc_contiguous_frames(pages: usize) -> Option<Vec<FramTracker>> {
-    FRAME_ALLOCATOR.lock().alloc_contiguous(pages)
+    FRAME_ALLOCATOR.lock(|fa| fa.alloc_contiguous(pages))
 }
 
 pub fn dealloc_frame(ppn: usize) {
-    FRAME_ALLOCATOR.lock().dealloc(ppn);
+    FRAME_ALLOCATOR.lock(|fa| fa.dealloc(ppn));
 }
 
 impl Drop for FramTracker {

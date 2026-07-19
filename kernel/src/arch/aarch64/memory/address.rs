@@ -585,7 +585,7 @@ impl PageTableEntry {
         (self.0 & 0b11) == 0b11
     }
 
-    pub fn set_inValid(&mut self) {
+    pub fn set_invalid(&mut self) {
         self.0 = 0;
     }
 
@@ -732,11 +732,11 @@ impl PageTable {
         }
     }
 
-    pub fn translate(&mut self, VDDR: VirAddr) -> Option<PhysiAddr> {
-        match self.find_pte_vpn(VDDR.into()) {
+    pub fn translate(&mut self, vddr: VirAddr) -> Option<PhysiAddr> {
+        match self.find_pte_vpn(vddr.into()) {
             Some(pte) => {
                 let ppn = pte.ppn();
-                let addr = (ppn.0 * PAGE_SIZE) + VDDR.offset();
+                let addr = (ppn.0 * PAGE_SIZE) + vddr.offset();
                 Some(PhysiAddr(addr))
             }
             None => None,
@@ -815,7 +815,7 @@ impl PageTable {
         match pte {
             Some(pte) => {
                 if pte.is_valid() {
-                    pte.set_inValid();
+                    pte.set_invalid();
                 } else {
                     error!("This PTE is Invalid");
                 }

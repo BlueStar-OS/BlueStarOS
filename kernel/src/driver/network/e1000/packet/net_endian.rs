@@ -29,7 +29,7 @@ impl fmt::Debug for Net8 {
 
 /// 16 位网络序字段。
 #[repr(transparent)]
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default)]
 pub struct Net16(u16);
 
 impl Net16 {

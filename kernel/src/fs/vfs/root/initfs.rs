@@ -19,13 +19,13 @@ impl RootFs {
     /// 因而它的根目录项会自然变成最终系统视角里的 `/dev/fb0`
     /// 和 `/dev/keyboard`。
     fn register_bootstrap_device_nodes() {
-        let rootfs_guard = ROOTFS.lock();
-        let root = rootfs_guard.as_ref().expect("root vfs not init");
-        let Ok(Some((fs, _))) = root.resolve_mount_point("/") else {
+        let Some((fs, _)) = ROOTFS.lock(|rootfs_guard| {
+            let root = rootfs_guard.as_ref().expect("root vfs not init");
+            root.resolve_mount_point("/").ok().flatten()
+        }) else {
             error!("register_bootstrap_device_nodes: root mount point missing");
             return;
         };
-        drop(rootfs_guard);
 
         let mut fs_guard = fs.lock();
         let Some(ramfs) = fs_guard.as_any_mut().downcast_mut::<RamFs>() else {
@@ -61,13 +61,13 @@ impl RootFs {
                 continue;
             };
 
-            let rootfs_guard = ROOTFS.lock();
-            let root = rootfs_guard.as_ref().expect("root vfs not init");
-            let Ok(Some((fs, _))) = root.resolve_mount_point("/") else {
+            let Some((fs, _)) = ROOTFS.lock(|rootfs_guard| {
+                let root = rootfs_guard.as_ref().expect("root vfs not init");
+                root.resolve_mount_point("/").ok().flatten()
+            }) else {
                 error!("mirror_bootstrap_devices_into_dev_dir: root mount point missing");
                 continue;
             };
-            drop(rootfs_guard);
 
             let mut fs_guard = fs.lock();
             let Some(ramfs) = fs_guard.as_any_mut().downcast_mut::<RamFs>() else {
@@ -106,7 +106,7 @@ impl RootFs {
         let vfs_root = RootFs {
             mount_poinr: mount_point,
         };
-        *(ROOTFS.lock()) = Some(vfs_root);
+        ROOTFS.lock(|r| *r = Some(vfs_root));
 
         // Step 1.1:
         // 把 framebuffer/keyboard 这类“启动早期就已经存在”的内建设备节点挂到
@@ -169,14 +169,13 @@ impl RootFs {
         // Step 3.4:
         // 把 `/sd` 挂载点加入根挂载表。
         // 这里只做挂载表更新，写完立刻释放 ROOTFS 锁，避免后续 VFS 操作递归拿锁。
-        {
-            let mut rootfs_guard = ROOTFS.lock();
+        ROOTFS.lock(|rootfs_guard| {
             let root_mount_point = &mut rootfs_guard
                 .as_mut()
                 .expect("root vfs not init")
                 .mount_poinr;
             root_mount_point.insert(MountPath("/sd".to_string()), fat32_mnt);
-        }
+        });
 
         // Step 3.5:
         // 在 ramfs 根下补齐常用目录，保证降级模式下基础路径存在。
@@ -188,10 +187,10 @@ impl RootFs {
         // Step 3.6:
         // 把 `/vda` 镜像到 `/dev` 下，便于调试以及用户态按设备路径访问。
         if let Ok(src) = vfs_open("/vda", OpenFlags::empty()) {
-            let rootfs_guard = ROOTFS.lock();
-            let root = rootfs_guard.as_ref().expect("root vfs not init");
-            if let Ok(Some((fs, sub))) = root.resolve_mount_point("/") {
-                let _ = sub;
+            if let Some((fs, _)) = ROOTFS.lock(|rootfs_guard| {
+                let root = rootfs_guard.as_ref().expect("root vfs not init");
+                root.resolve_mount_point("/").ok().flatten()
+            }) {
                 let mut fs_guard = fs.lock();
                 if let Some(ramfs) = fs_guard.as_any_mut().downcast_mut::<RamFs>() {
                     let _ = ramfs.mkdev("/dev/vda", src.clone());
@@ -240,28 +239,28 @@ impl RootFs {
         // Step 4.2:
         // 用找到的 ext4 替换当前 `/`。
         // 这里不能直接丢掉旧 ramfs，因为里面还承载着前期创建好的设备节点。
-        let old_fs: Arc<Mutex<dyn VfsFs>>;
-        {
-            let mut rootfs_guard = ROOTFS.lock();
+        let old_fs: Arc<Mutex<dyn VfsFs>> = ROOTFS.lock(|rootfs_guard| {
             let root_mount_point = &mut rootfs_guard
                 .as_mut()
                 .expect("root vfs not init")
                 .mount_poinr;
-            old_fs = root_mount_point
+            let old = root_mount_point
                 .remove(&MountPath("/".to_string()))
                 .expect("Ramfs not mount at /");
             root_mount_point.insert(MountPath("/".to_string()), fs as Arc<Mutex<dyn VfsFs>>);
-        }
+            old
+        });
 
         // Step 4.3:
         // 在新的 ext4 根上创建 `/dev`，然后把旧 ramfs 回挂到 `/dev`。
         // 这样设备节点仍然由 ramfs 承载，但整个系统根目录已经切换为 ext4。
         vfs_mkdir("/dev").expect("/dev create failed!");
-        let mut rootfs_guard = ROOTFS.lock();
-        let root_mount_point = &mut rootfs_guard
-            .as_mut()
-            .expect("root vfs not init")
-            .mount_poinr;
-        root_mount_point.insert(MountPath("/dev/".to_string()), old_fs);
+        ROOTFS.lock(|rootfs_guard| {
+            let root_mount_point = &mut rootfs_guard
+                .as_mut()
+                .expect("root vfs not init")
+                .mount_poinr;
+            root_mount_point.insert(MountPath("/dev/".to_string()), old_fs);
+        });
     }
 }

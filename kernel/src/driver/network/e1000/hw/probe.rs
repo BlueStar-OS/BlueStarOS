@@ -208,23 +208,7 @@ pub fn probe_registered_e1000() {
         e1000_setup_rx_resources(&mut rx_ring, RX_RING_COUNT);
         e1000_configure_rx(&bar0_space, &rx_ring);
         e1000_alloc_rx_buffers(&bar0_space, &mut rx_ring);
-
-        // let irq = {
-        //     let int_line = unsafe { cfg_read16(bdf.0, bdf.1, bdf.2, 0x3C) & 0xFF };
-        //     if int_line != 0 {
-        //         int_line as u32
-        //     } else {
-        //         warn!("e1000: PCI Interrupt Line is 0, falling back to IRQ 32");
-        //         32
-        //     }
-        // };
-
-        for irq in 32..37 {
-
-                crate::arch::driver::plic::register_irq(irq, e1000_intr_handler, 6);
-            info!("已监听 PCIe 可能的中断线: {}", irq);
-        }
-
+        // TODO:开网卡中断
 
         E1000_MMIO_BASE.store(bar0_addr as usize, Ordering::Release);
         e1000_irq_enable();
@@ -235,7 +219,7 @@ pub fn probe_registered_e1000() {
             tx_ring,
             mac,
         };
-        *E1000_DEV.lock() = Some(e1000);
+        E1000_DEV.lock(|dev| *dev = Some(e1000));
 
         info!("e1000: probe complete, driver ready");
     }

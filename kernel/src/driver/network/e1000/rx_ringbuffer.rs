@@ -25,6 +25,13 @@
 //!   e1000_refill_rx_buffers()    — 重新分配已消耗 desc 的数据帧
 //! ```
 //!
+//! ## 所有权约定
+//!
+//! - 描述符环本身由 `desc_frames` 持有物理页所有权；
+//! - 每个 RX 数据缓冲区由对应的 `E1000RxBuffer.frame` 持有；
+//! - `e1000_poll_rx()` 返回 `NetBuffer` 时会拷贝有效帧数据，随后立即释放该
+//!   描述符给硬件复用，因此上层不能持有原 DMA 页指针。
+//!
 //! TODO(MMU): 物理机部署时, 描述符环和 RX 缓冲区物理页面必须带有
 //!            Uncacheable (Svpbmt NC) 页表属性！
 
@@ -282,7 +289,7 @@ pub fn e1000_setup_rx_resources(ring: &mut E1000RxRing, count: usize) {
     // 当前用 alloc_contiguous_frames 替代, 且 QEMU 无需真正 uncacheable。
     let desc_len = core::mem::size_of::<E1000RxDesc>();
     let ring_bytes = count * desc_len;
-    let pages_needed = (ring_bytes + PAGE_SIZE - 1) / PAGE_SIZE;
+    let pages_needed = ring_bytes.div_ceil(PAGE_SIZE);
 
     let frames = alloc_contiguous_frames(pages_needed)
         .expect("e1000: failed to allocate contiguous frames for rx desc ring");
@@ -440,6 +447,10 @@ pub fn e1000_alloc_rx_buffers(bar: &BarSpace, ring: &mut E1000RxRing) {
 /// RX 描述符消费结果。
 ///
 /// 区分"好包"、"坏包"和"环空"，让调用者按需处理。
+// clippy::large_enum_variant: `Good` 携带 `NetBuffer`，比 `Bad` 大。RX 是高频热
+// 路径，按 CLAUDE.md 的内存纪律禁止在收包回调里触发堆分配，因此不采用 Box 把大
+// 变体装箱，宁可容忍变体大小差异。
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug)]
 pub enum RxResult {
     /// 收到一个完整的无错误帧 (已剥离 FCS)。
@@ -463,83 +474,85 @@ pub enum RxResult {
 /// 确保硬件不会因为 RDT 停滞而停止 DMA 写入。
 #[allow(dead_code)]
 pub fn e1000_poll_rx() -> Option<RxResult> {
-    let mut lock = E1000_DEV.try_lock().expect("Lock is busy or get not exist");
-    // SAFETY: `bar` 和 `rx_ring` 是 `E1000` 的不相交字段，拆分借用安全。
-    let dev = (*lock).as_mut().expect("nodev");
-    let ring = unsafe { &mut *(&mut dev.rx_ring as *mut E1000RxRing) };
-    let bar = &dev.bar;
-    let i = ring.next_to_clean;
+    E1000_DEV.try_lock(|lock_opt| {
+        let lock = lock_opt?;
+        // SAFETY: `bar` 和 `rx_ring` 是 `E1000` 的不相交字段，拆分借用安全。
+        let dev = (*lock).as_mut().expect("nodev");
+        let ring = unsafe { &mut *(&mut dev.rx_ring as *mut E1000RxRing) };
+        let bar = &dev.bar;
+        let i = ring.next_to_clean;
 
-    // 读描述符状态 (volatile 防止编译器优化)
-    // 参考: e1000_main.c:4357
-    let status = unsafe { core::ptr::read_volatile(&(*ring.desc.add(i)).status) };
-    if (status & E1000_RXD_STAT_DD) == 0 {
-        return None; // 环空, 无新包
-    }
+        // 读描述符状态 (volatile 防止编译器优化)
+        // 参考: e1000_main.c:4357
+        let status = unsafe { core::ptr::read_volatile(&(*ring.desc.add(i)).status) };
+        if (status & E1000_RXD_STAT_DD) == 0 {
+            return None; // 环空, 无新包
+        }
 
-    // dma_rmb(): 确保读取 DD=1 后, length/errors/data 是硬件 DMA 写完的最新值
-    // 在 RISC-V 弱序模型下, CPU 可能先看到 DD=1 但 length 还没写完成。
-    // 参考: e1000_main.c:4365
-    dma_rmb();
+        // dma_rmb(): 确保读取 DD=1 后, length/errors/data 是硬件 DMA 写完的最新值
+        // 在 RISC-V 弱序模型下, CPU 可能先看到 DD=1 但 length 还没写完成。
+        // 参考: e1000_main.c:4365
+        dma_rmb();
 
-    // 读取长度 (硬件报告的 length 包含 4 字节 FCS)
-    // 参考: e1000_main.c:4368
-    let length = unsafe { core::ptr::read_volatile(&(*ring.desc.add(i)).length) } as usize;
-    let data = ring.buffer_info[i].data as *const u8;
+        // 读取长度 (硬件报告的 length 包含 4 字节 FCS)
+        // 参考: e1000_main.c:4368
+        let length = unsafe { core::ptr::read_volatile(&(*ring.desc.add(i)).length) } as usize;
+        let data = ring.buffer_info[i].data as *const u8;
 
-    // ── 准备好包还是坏包的判断 ──
-    let mut result: Option<RxResult> = None;
+        // ── 准备好包还是坏包的判断 ──
+        let mut result: Option<RxResult> = None;
 
-    // ── !EOP: 多描述符帧 (jumbo) ──
-    // 当前不处理 jumbo 帧, 仅清除当前 desc 的 DD, 丢弃。
-    // 后续 poll 会逐个跳过剩下的分片 desc 直到 EOP, 然后硬件恢复收包。
-    // 参考: e1000_main.c:4407-4417
-    if (status & E1000_RXD_STAT_EOP) == 0 {
-        warn!("e1000: dropped multi-descriptor frame (jumbo not supported)");
-        result = Some(RxResult::Bad);
-    }
-
-    // ── 帧错误检查 ──
-    // 检查 CRC/符号/序列/载波扩展/Rx 数据错误。
-    // 参考: e1000_main.c:4419-4429
-    if result.is_none() {
-        let errors = unsafe { core::ptr::read_volatile(&(*ring.desc.add(i)).errors) };
-        if (errors & E1000_RXD_ERR_FRAME_ERR_MASK) != 0 {
+        // ── !EOP: 多描述符帧 (jumbo) ──
+        // 当前不处理 jumbo 帧, 仅清除当前 desc 的 DD, 丢弃。
+        // 后续 poll 会逐个跳过剩下的分片 desc 直到 EOP, 然后硬件恢复收包。
+        // 参考: e1000_main.c:4407-4417
+        if (status & E1000_RXD_STAT_EOP) == 0 {
+            warn!("e1000: dropped multi-descriptor frame (jumbo not supported)");
             result = Some(RxResult::Bad);
         }
-    }
 
-    // ── 好包: FCS 剥离 + 拷贝数据 ──
-    // e1000 硬件在标准模式下不自动剥离 FCS, length 包含 4 字节 Ethernet CRC。
-    // 参考: e1000_main.c:4433,4440
-    if result.is_none() {
-        let pkt_len = length - ETHERNET_FCS_LENGTH;
-        let mut new_buffer = NetBuffer::new();
-        new_buffer.new_data(unsafe { &*core::ptr::slice_from_raw_parts(data, pkt_len) });
-        result = Some(RxResult::Good(new_buffer));
-    }
+        // ── 帧错误检查 ──
+        // 检查 CRC/符号/序列/载波扩展/Rx 数据错误。
+        // 参考: e1000_main.c:4419-4429
+        if result.is_none() {
+            let errors = unsafe { core::ptr::read_volatile(&(*ring.desc.add(i)).errors) };
+            if (errors & E1000_RXD_ERR_FRAME_ERR_MASK) != 0 {
+                result = Some(RxResult::Bad);
+            }
+        }
 
-    // ── 统一回收描述符并推进 RDT ──
-    // 无论好包坏包，描述符已被消费，必须:
-    //   1. 清零 status (通知硬件此 desc 可重用)
-    //   2. 推进 next_to_clean
-    //   3. 写 RDT (doorbell 通知硬件可以继续 DMA 到此 desc)
-    //
-    // 参考: e1000_main.c:4449-4457
-    unsafe {
-        (*ring.desc.add(i)).status = 0;
-    }
-    
-    ring.next_to_clean = (i + 1) % ring.count;
+        // ── 好包: FCS 剥离 + 拷贝数据 ──
+        // e1000 硬件在标准模式下不自动剥离 FCS, length 包含 4 字节 Ethernet CRC。
+        // 参考: e1000_main.c:4433,4440
+        if result.is_none() {
+            let pkt_len = length - ETHERNET_FCS_LENGTH;
+            let mut new_buffer = NetBuffer::new();
+            new_buffer.new_data(unsafe { &*core::ptr::slice_from_raw_parts(data, pkt_len) });
+            result = Some(RxResult::Good(new_buffer));
+        }
 
-    // dma_wmb(): 保证 status 清零在 RDT 写入之前全局可见
-    dma_wmb();
+        // ── 统一回收描述符并推进 RDT ──
+        // 无论好包坏包，描述符已被消费，必须:
+        //   1. 清零 status (通知硬件此 desc 可重用)
+        //   2. 推进 next_to_clean
+        //   3. 写 RDT (doorbell 通知硬件可以继续 DMA 到此 desc)
+        //
+        // 参考: e1000_main.c:4449-4457
+        unsafe {
+            (*ring.desc.add(i)).status = 0;
+        }
 
-    // 写 RDT = 最后一个被软件释放的描述符索引
-    // 参考: e1000_main.c:4646-4657
-    bar.write_32(E1000_RDT, i as u32);
+        ring.next_to_clean = (i + 1) % ring.count;
 
-    result
+        // dma_wmb(): 保证 status 清零在 RDT 写入之前全局可见
+        dma_wmb();
+
+        // 写 RDT = 最后一个被软件释放的描述符索引
+        // 参考: e1000_main.c:4646-4657
+        bar.write_32(E1000_RDT, i as u32);
+
+        result
+    })
 }
 
 /// 补充已消费的接收缓冲区

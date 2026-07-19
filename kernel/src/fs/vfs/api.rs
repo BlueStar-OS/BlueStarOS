@@ -13,11 +13,29 @@ use log::error;
 
 fn resolve_mount(path: &str) -> Result<(MountFs, String, String), VfsFsError> {
     let abs = normalize_path(path)?;
-    let mut rootfs_guard = ROOTFS.lock();
-    let rootfs = rootfs_guard.as_mut().ok_or(VfsFsError::IO)?;
-    let (fs, sub) = rootfs
-        .resolve_mount_point(&abs)?
-        .ok_or(VfsFsError::NotFound)?;
+    let (fs, sub) = ROOTFS.lock(|rootfs_guard| {
+        let rootfs = rootfs_guard.as_mut().ok_or_else(|| {
+            error!(
+                "resolve_mount failed: ROOTFS not initialized (path={})",
+                path
+            );
+            VfsFsError::IO
+        })?;
+        let (fs, sub) = rootfs
+            .resolve_mount_point(&abs)
+            .inspect_err(|&e| {
+                error!(
+                    "resolve_mount: resolve_mount_point failed: path={} err={:?}",
+                    abs, e
+                );
+            })?
+            .ok_or_else(|| {
+                error!("resolve_mount: mount point not found: path={}", abs);
+                VfsFsError::NotFound
+            })?;
+        Ok((fs, sub))
+    })?;
+
     Ok((fs, abs, sub))
 }
 
@@ -231,7 +249,9 @@ pub fn vfs_mkdir(path: &str) -> Result<(), VfsFsError> {
         return Ok(());
     }
     let mut guard = mnt.lock();
-    guard.mkdir(&sub)
+    guard.mkdir(&sub).inspect_err(|&e| {
+        error!("vfs_mkdir failed: path={} err={:?}", abs, e);
+    })
 }
 
 /// mkfile：基于绝对或相对路径创建文件
@@ -241,7 +261,9 @@ pub fn vfs_mkfile(path: &str) -> Result<(), VfsFsError> {
         return Err(VfsFsError::Invalid);
     }
     let mut guard = mnt.lock();
-    guard.mkfile(&sub)
+    guard.mkfile(&sub).inspect_err(|&e| {
+        error!("vfs_mkfile failed: path={} err={:?}", abs, e);
+    })
 }
 
 /// mv：移动/重命名（高层按完整路径操作）
@@ -252,7 +274,9 @@ pub fn vfs_mv(src: &str, dest: &str) -> Result<(), VfsFsError> {
         return Err(VfsFsError::NotSupported);
     }
     let mut guard = src_mnt.lock();
-    guard.mv(&src_sub, &dst_sub)
+    guard.mv(&src_sub, &dst_sub).inspect_err(|&e| {
+        error!("vfs_mv failed: src={} err={:?}", src, e);
+    })
 }
 
 /// rename：仅改变同一父目录下的名字（语义上等价于 mv 的子集）
@@ -274,7 +298,12 @@ pub fn vfs_rename(path: &str, new_name: &str) -> Result<(), VfsFsError> {
 
     let _ = new_path;
     let mut guard = mnt.lock();
-    guard.rename(&sub, new_name)
+    guard.rename(&sub, new_name).inspect_err(|&e| {
+        error!(
+            "vfs_rename failed: path={} new_name={} err={:?}",
+            path, new_name, e
+        );
+    })
 }
 
 pub fn vfs_truncate(path: &str, size: u64) -> Result<(), VfsFsError> {
@@ -283,7 +312,12 @@ pub fn vfs_truncate(path: &str, size: u64) -> Result<(), VfsFsError> {
         return Err(VfsFsError::Invalid);
     }
     let mut guard = mnt.lock();
-    guard.truncate(&sub, size)
+    guard.truncate(&sub, size).inspect_err(|&e| {
+        error!(
+            "vfs_truncate failed: path={} size={} err={:?}",
+            path, size, e
+        );
+    })
 }
 
 /// unlink：删除文件（不删除目录）
@@ -293,14 +327,18 @@ pub fn vfs_unlink(path: &str) -> Result<(), VfsFsError> {
         return Err(VfsFsError::Invalid);
     }
     let mut guard = mnt.lock();
-    guard.unlink(&sub)
+    guard.unlink(&sub).inspect_err(|&e| {
+        error!("vfs_unlink failed: path={} err={:?}", path, e);
+    })
 }
 
 /// stat：获取路径的基本元数据
 pub fn vfs_stat(path: &str) -> Result<VfsStat, VfsFsError> {
-    let (mnt, _abs, sub) = resolve_mount(path)?;
+    let (mnt, abs, sub) = resolve_mount(path)?;
     let mut guard = mnt.lock();
-    guard.stat(&sub)
+    guard.stat(&sub).inspect_err(|&e| {
+        error!("vfs_stat failed: path={} err={:?}", abs, e);
+    })
 }
 
 /// remove：删除给定路径的文件
@@ -316,11 +354,17 @@ pub fn vfs_remove(path: &str) -> Result<(), VfsFsError> {
     match guard.stat(&sub) {
         Ok(st) => {
             if st.file_type == crate::fs::vfs::VFS_DT_DIR {
+                error!("vfs_remove failed: path={} is a directory", abs);
                 Err(VfsFsError::NotSupported)
             } else {
-                guard.unlink(&sub)
+                guard.unlink(&sub).inspect_err(|&e| {
+                    error!("vfs_remove unlink failed: path={} err={:?}", abs, e);
+                })
             }
         }
-        Err(e) => Err(e),
+        Err(e) => {
+            error!("vfs_remove stat failed: path={} err={:?}", abs, e);
+            Err(e)
+        }
     }
 }

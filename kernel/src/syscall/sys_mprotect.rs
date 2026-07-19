@@ -39,7 +39,6 @@ use crate::PAGE_SIZE;
 /// 4. 状态转移：更新受影响 VMA 的 MapAreaFlags
 /// 5. 硬件同步：逐页更新 PTE 中的 R/W/X 位，保留 V/A/D/U/DEV 不变
 /// 6. TLB 刷新：执行 sfence.vma 强制 CPU 放弃旧权限缓存
-
 pub fn sys_mprotect(addr: usize, len: usize, prot: usize) -> isize {
     // 1. 数据清洗：addr 必须按页对齐，len 不能为零
     if !addr.is_multiple_of(PAGE_SIZE) || len == 0 {

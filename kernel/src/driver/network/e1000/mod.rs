@@ -5,6 +5,15 @@
 //! - PCI probe / 中断路径
 //! - 协议头定义
 //! - RX/TX ring 实现
+//!
+//! ## 分层约定
+//!
+//! - `hw`: 设备全局状态、probe、中断屏蔽/确认；
+//! - `packet`: 以太网/ARP/IPv4/ICMP/UDP 头部解析与封包；
+//! - `queue`: RX/TX 描述符环生命周期和 DMA 内存屏障。
+//!
+//! 上层 socket 不应直接操作 `queue`，只通过 packet 层发送或由 IRQ 收包分发。
+//! 本模块保留旧路径兼容导出，避免一次重构牵动现有调用点。
 
 pub mod hw;
 pub mod packet;

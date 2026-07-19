@@ -9,10 +9,14 @@
 //! - `/home/inkbottle/桌面/linux-5.4.29/net/ipv4/udp.c:2049-2087`
 
 use alloc::string::String;
+use alloc::sync::Arc;
 use log::{debug, info, warn};
 
-use crate::driver::network::e1000::agreenment::IPv4Header;
+use crate::driver::network::e1000::agreenment::{IPv4Header, Net16};
 use crate::driver::network::e1000::netbuffer::NetBuffer;
+use crate::network::porttable::PORT_TABLE;
+use crate::network::udpsock::UdpSock;
+use crate::network::NetPort;
 
 use super::header::{UdpHeader, UDP_HEADER_LEN};
 use super::helper::udp_verify_checksum;
@@ -23,7 +27,11 @@ use super::helper::udp_verify_checksum;
 /// `ip_hdr` 为上层 IPv4 头副本, 用于构造伪头校验。
 pub fn udp_receive(mut payload: NetBuffer, ip_hdr: IPv4Header) {
     if payload.data_len() < UDP_HEADER_LEN {
-        warn!("UDP 包长度 {} 不足 {} 字节，丢弃", payload.data_len(), UDP_HEADER_LEN);
+        warn!(
+            "UDP 包长度 {} 不足 {} 字节，丢弃",
+            payload.data_len(),
+            UDP_HEADER_LEN
+        );
         return;
     }
 
@@ -83,4 +91,14 @@ pub fn udp_receive(mut payload: NetBuffer, ip_hdr: IPv4Header) {
         &payload.data_slice()[..preview_len]
     );
 
+    // 发送给绑定该端口的 sock
+    if let Some(sock_arc) = PORT_TABLE.lookup(NetPort(Net16::new(dst_port))) {
+        if let Some(sock) = sock_arc.as_any().downcast_ref::<UdpSock>() {
+            sock.push_rx_buf(payload);
+        } else {
+            warn!("port {} bound to non-UDP file", dst_port);
+        }
+    } else {
+        warn!("find a no bind port packet!");
+    }
 }

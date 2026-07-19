@@ -5,9 +5,9 @@
 //! | 层级 | 类型 | 职责 |
 //! |------|------|------|
 //! | 设备层 | `BlockDevTrait` | 裸扇区读写——驱动实现 |
-//! | 文件层 | `BLOCKDEVFILE` | 包装设备 + 线性映射，对外暴露 VFS `File` |
+//! | 文件层 | `BlockDevFile` | 包装设备 + 线性映射，对外暴露 VFS `File` |
 //!
-//! `BLOCKDEVFILE` 使用 `DmlinerEntry` 做 LBA 偏移翻译，
+//! `BlockDevFile` 使用 `DmlinerEntry` 做 LBA 偏移翻译，
 //! 使得同一个 backing device 上的不同区域可以表现为多个独立的
 //! 块设备文件（`/dev/vda`、`/dev/vda1`、`/dev/vda2` …）。
 
@@ -40,7 +40,7 @@ pub trait BlockDevTrait: Send + Sync {
     ///
     /// 流程：
     /// 1. 文件系统调用 `File::flush()`；
-    /// 2. `BLOCKDEVFILE::flush()` 把请求下推到这里；
+    /// 2. `BlockDevFile::flush()` 把请求下推到这里；
     /// 3. 具体块设备决定是发送硬件 flush 命令，还是在无缓存场景下直接成功。
     fn flush(&mut self) -> Result<(), VfsFsError>;
 
@@ -48,7 +48,7 @@ pub trait BlockDevTrait: Send + Sync {
     fn capacity_in_sectors(&self) -> u64;
 }
 
-// ── BLOCKDEVFILE ──────────────────────────────────────────────
+// ── BlockDevFile ──────────────────────────────────────────────
 
 /// 块设备文件：将一个 `BlockDevTrait` 的一片连续扇区暴露为 VFS `File`。
 ///
@@ -60,10 +60,10 @@ pub trait BlockDevTrait: Send + Sync {
 /// | `lineer_info` | 在 backing device 上的起始扇区和扇区数 |
 /// | `offset` | 文件光标——顺序 `read`/`write`/`lseek` 依赖它 |
 ///
-/// `BLOCKDEVFILE` 同时支持随机读写（`read_at`/`write_at`）
+/// `BlockDevFile` 同时支持随机读写（`read_at`/`write_at`）
 /// 和顺序读写（`read`/`write`/`lseek`）。随机读写不触动 `offset`。
-pub struct BLOCKDEVFILE {
-    /// 底层块设备句柄（与同一设备上的其他 BLOCKDEVFILE 共享）
+pub struct BlockDevFile {
+    /// 底层块设备句柄（与同一设备上的其他 BlockDevFile 共享）
     blockdevice: Arc<Mutex<dyn BlockDevTrait>>,
     /// 本文件对应的扇区区间
     lineer_info: DmlinerEntry,
@@ -71,7 +71,7 @@ pub struct BLOCKDEVFILE {
     offset: SpinMutex<FileOffset>,
 }
 
-impl BLOCKDEVFILE {
+impl BlockDevFile {
     /// 创建一个块设备文件。
     ///
     /// `lineer_info.start_lba` 为 0 时表示从设备起始地址开始
@@ -103,7 +103,11 @@ impl BLOCKDEVFILE {
 
 // ── File impl ─────────────────────────────────────────────────
 
-impl File for BLOCKDEVFILE {
+impl File for BlockDevFile {
+    fn as_any(&self) -> &dyn core::any::Any {
+        self
+    }
+
     fn getdents64(&self, _max_len: usize) -> Result<alloc::vec::Vec<u8>, VfsFsError> {
         Err(VfsFsError::NotSupported)
     }

@@ -25,7 +25,7 @@ pub struct E1000 {
 lazy_static! {
     /// 全局 e1000 设备实例。
     pub static ref E1000_DEV: UPSafeCell<Option<E1000>> =
-        unsafe { UPSafeCell::new(None) };
+        UPSafeCell::new(None);
 }
 
 /// BAR0 MMIO 基址快照，供中断上下文无锁访问。

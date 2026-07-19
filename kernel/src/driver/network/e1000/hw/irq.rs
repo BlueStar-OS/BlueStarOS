@@ -7,8 +7,8 @@ use log::{error, info, warn};
 use crate::driver::network::e1000::agreenment::send_udp_packet;
 use crate::driver::network::e1000::hw::device::{E1000_MMIO_BASE, E1000_RX_INTR_PENDING};
 use crate::driver::network::e1000::hw::regs::{
-    E1000_ICR, E1000_ICR_LSC, E1000_ICR_RXDMT0, E1000_ICR_RXO, E1000_ICR_RXT0, E1000_IMC,
-    E1000_IMS, E1000_IMS_ENABLE_MASK, E1000_STATUS, E1000_STATUS_LU,
+    E1000_ICR, E1000_ICR_LSC, E1000_ICR_RXDMT0, E1000_ICR_RXO, E1000_ICR_RXT0, E1000_ICR_TXDW,
+    E1000_IMC, E1000_IMS, E1000_IMS_ENABLE_MASK, E1000_STATUS, E1000_STATUS_LU,
 };
 use crate::driver::network::e1000::netbuffer::NetBuffer;
 use crate::driver::network::e1000::packet::network_packet_resolve;
@@ -57,36 +57,25 @@ pub fn e1000_intr_handler() {
     }
 
     match icr {
-        E1000_ICR_RXT0=>{
-            
-        while let Some(RxResult::Good(pkt)) =  e1000_poll_rx() {
-            network_packet_resolve(pkt);
-        }
-        // if let Some(RxResult::Good(pkt)) = e1000_poll_rx(){
-        // network_packet_resolve(pkt);
-        // }
-            
-
+        E1000_ICR_RXT0 => {
+            while let Some(RxResult::Good(pkt)) = e1000_poll_rx() {
+                network_packet_resolve(pkt);
+            }
+            if let Some(RxResult::Good(pkt)) = e1000_poll_rx() {
+                network_packet_resolve(pkt);
+            }
 
             let mut buffer = NetBuffer::new();
             buffer.new_data("wo xi huan ni".as_bytes());
-            send_udp_packet([10,0,0,1], 8080, 8080, buffer);
-        
+            send_udp_packet([10, 0, 0, 1], 8080, 8080, buffer);
         }
-        E1000_ICR_TXDW=>{
-            e1000_clean_tx_irq( );
+        E1000_ICR_TXDW => {
+            e1000_clean_tx_irq();
         }
-        _=>{
-
-        }
+        _ => {}
     }
 
-
-
-
-
-
-        e1000_irq_enable();
+    e1000_irq_enable();
 }
 
 /// 启用 e1000 中断。

@@ -11,7 +11,7 @@
 //! - 本项目这一版只对接 Doomgeneric 的极小子集，所以采用更简单的本地命令号，
 //!   但仍保留 `ioctl` 入口形式，后续可平滑升级到 Linux 风格 ABI。
 
-use crate::driver::gpu::vga_console::VgaScreen;
+use crate::driver::gpu::vga_console::vga_screen;
 use crate::fs::component::tty::Stdin;
 use crate::fs::vfs::{File, VfsFsError, VfsStat, VFS_DT_REG};
 use alloc::sync::Arc;
@@ -27,9 +27,9 @@ use spin::Mutex;
 /// - `/home/inkbottle/othersrc/doomgeneric/doomgeneric/doomgeneric_soso.c:28-32`
 #[repr(u32)]
 enum FrameBufferIoctl {
-    GetWidth = 0,
-    GetHeight = 1,
-    GetBitsPerPixel = 2,
+    Width = 0,
+    Height = 1,
+    BitsPerPixel = 2,
 }
 
 impl TryFrom<u32> for FrameBufferIoctl {
@@ -37,9 +37,9 @@ impl TryFrom<u32> for FrameBufferIoctl {
 
     fn try_from(raw_cmd: u32) -> Result<Self, Self::Error> {
         match raw_cmd {
-            0 => Ok(Self::GetWidth),
-            1 => Ok(Self::GetHeight),
-            2 => Ok(Self::GetBitsPerPixel),
+            0 => Ok(Self::Width),
+            1 => Ok(Self::Height),
+            2 => Ok(Self::BitsPerPixel),
             _ => Err(VfsFsError::NotSupported),
         }
     }
@@ -97,7 +97,7 @@ fn with_framebuffer<T>(
     callback: impl FnOnce(*mut u8, usize, usize, usize, usize) -> Result<T, VfsFsError>,
 ) -> Result<T, VfsFsError> {
     unsafe {
-        if VgaScreen.fb_base.is_null() || VgaScreen.width == 0 || VgaScreen.height == 0 {
+        if vga_screen().fb_base.is_null() || vga_screen().width == 0 || vga_screen().height == 0 {
             return Err(VfsFsError::NoDevice);
         }
 
@@ -106,16 +106,16 @@ fn with_framebuffer<T>(
         // `drivers/gpu/drm/bochs/bochs_hw.c:141-154,207-235`。
         let bits_per_pixel = 32usize;
         let bytes_per_pixel = bits_per_pixel / 8;
-        let framebuffer_bytes = VgaScreen
+        let framebuffer_bytes = vga_screen()
             .width
-            .saturating_mul(VgaScreen.height)
+            .saturating_mul(vga_screen().height)
             .saturating_mul(bytes_per_pixel);
 
         callback(
-            VgaScreen.fb_base as *mut u8,
+            vga_screen().fb_base as *mut u8,
             framebuffer_bytes,
-            VgaScreen.width,
-            VgaScreen.height,
+            vga_screen().width,
+            vga_screen().height,
             bits_per_pixel,
         )
     }
@@ -175,6 +175,10 @@ impl FrameBufferDeviceFile {
 }
 
 impl File for FrameBufferDeviceFile {
+    fn as_any(&self) -> &dyn core::any::Any {
+        self
+    }
+
     fn read(&self, user_buffer: &mut [u8]) -> Result<usize, VfsFsError> {
         let current_offset = self.file_offset.lock().0;
         let read_bytes = self.read_bytes_from_framebuffer(current_offset, user_buffer)?;
@@ -230,9 +234,9 @@ impl File for FrameBufferDeviceFile {
         let framebuffer_ioctl = FrameBufferIoctl::try_from(cmd)?;
         with_framebuffer(|_, _, width_pixels, height_pixels, bits_per_pixel| {
             let ioctl_result = match framebuffer_ioctl {
-                FrameBufferIoctl::GetWidth => width_pixels,
-                FrameBufferIoctl::GetHeight => height_pixels,
-                FrameBufferIoctl::GetBitsPerPixel => bits_per_pixel,
+                FrameBufferIoctl::Width => width_pixels,
+                FrameBufferIoctl::Height => height_pixels,
+                FrameBufferIoctl::BitsPerPixel => bits_per_pixel,
             };
             Ok(ioctl_result)
         })
@@ -264,6 +268,10 @@ impl KeyboardDeviceFile {
 }
 
 impl File for KeyboardDeviceFile {
+    fn as_any(&self) -> &dyn core::any::Any {
+        self
+    }
+
     fn read(&self, user_buffer: &mut [u8]) -> Result<usize, VfsFsError> {
         if user_buffer.is_empty() {
             return Ok(0);

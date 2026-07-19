@@ -4,6 +4,7 @@ use crate::arch::task::*;
 use crate::arch::trap::TrapContext;
 use crate::config::*;
 use crate::fs::component::tty::*;
+use crate::fs::semaphore::waitqueue::WaitQueue;
 use crate::fs::vfs::vfs_getdents64;
 use crate::fs::vfs::vfs_open;
 use crate::fs::vfs::File;
@@ -145,55 +146,122 @@ fn build_auxv(elf_data: &[u8], elf_entry: usize) -> Vec<AuxEntry> {
 ///任务上下文
 use crate::sync::UPSafeCell;
 
+/// 任务运行状态。
+///
+/// 对标 Linux `include/linux/sched.h` 中的进程状态机:
+///
+/// | BlueStarOS | Linux 等价 | 含义 |
+/// |------------|-----------|------|
+/// | `Ready` | `TASK_RUNNING` (在就绪队列) | 可被调度器选中执行 |
+/// | `Runing` | `TASK_RUNNING` (正在 CPU 上) | 当前正在 CPU 上执行 |
+/// | `Blocking` | `TASK_INTERRUPTIBLE` | 等待事件 (I/O、信号量等)，不参与调度 |
+/// | `Zombie` | `EXIT_ZOMBIE | EXIT_DEAD` | 已退出，等待父进程 `wait()` 回收 |
+///
+/// ## 状态转换
+///
+/// ```text
+/// Ready ──(stride选中)──> Runing
+/// Runing ──(时间片到)──> Ready
+/// Runing ──(block())──> Blocking
+/// Blocking ──(wake())──> Ready
+/// Runing ──(exit())──> Zombie
+/// ```
 #[derive(Clone, PartialEq, Debug)]
 pub enum TaskStatus {
-    //UnInit,
+    /// 正在 CPU 上执行
     Runing,
+    /// 已退出，等待父进程回收 (保留 pid/exit_code)
     Zombie,
+    /// 阻塞中，等待事件唤醒 (不参与调度)
     Blocking,
+    /// 就绪，在调度队列中等待被选中
     Ready,
 }
 
-///进程id 需要实现回收 rail自动分配
+/// 进程 ID (PID)。
+///
+/// newtype 包装 `i32`，实现 `Drop` 自动回收 PID 到全局分配器。
+/// 对标 Linux `include/linux/types.h` → `pid_t`。
 #[derive(Clone)]
 pub struct ProcessId(pub i32);
 
-///进程id分配器 需要实现分配 [start,end)
+/// PID 分配器。
+///
+/// 采用单调递增 + 回收池策略:
+/// - `alloc_id()`: 优先从 `id_pool` (回收池) 取，否则递增 `current`
+/// - `ProcessId::drop()`: PID 被释放时自动归还到 `id_pool`
+///
+/// 范围: `[start, end)`，初始为 `[1, 10_000_000)`。
 pub struct ProcessIdAlloctor {
-    current: i32, //当前的pid
-    end: i32,     //最高限制的pid，可选
+    /// 当前待分配的 PID (单调递增)
+    current: i32,
+    /// PID 上限 (不含)
+    end: i32,
+    /// 回收池 — 已释放的 PID 等待复用
     id_pool: Vec<ProcessId>,
 }
 
+/// 进程控制块 (PCB)。
+///
+/// 对标 Linux `struct task_struct`，包含一个进程的全部运行时状态。
+/// 生命周期: `new()` → `Ready` → `Runing` ↔ `Blocking` → `Zombie` → `Drop`
 #[derive(Clone)]
 pub struct TaskControlBlock {
+    /// 待处理的信号队列
     pub signal: VecDeque<OsSignal>,
-    pub pid: ProcessId,          //进程id
-    pub memory_set: MapSet,      //程序地址空间
-    pub task_statut: TaskStatus, //程序运行状态
+    /// 进程 ID
+    pub pid: ProcessId,
+    /// 地址空间 (页表 + VMA 映射)
+    pub memory_set: MapSet,
+    /// 当前运行状态
+    pub task_statut: TaskStatus,
+    /// 退出码 (exit 时设置，父进程 wait 回收时读取)
     pub exit_code: isize,
-    pub task_context: TaskContext,                          //任务上下文
-    pub trap_context_ppn: usize,                            //陷阱上下文物理帧
-    pass: usize,                                            //行程
-    stride: usize,                                          //步长
-    ticket: usize,                                          //权重
-    pub file_descriptor: Vec<Option<Arc<dyn File>>>,        //文件描述符表
-    pub cwd: String,                                        //进程工作的路径 默认/
-    pub parent: Option<Weak<UPSafeCell<TaskControlBlock>>>, //父进程弱引用
-    pub childrens: Vec<Arc<UPSafeCell<TaskControlBlock>>>,  //子进程强引用
+    /// 任务上下文 (ra/sp/s0-s11)，__switch 时保存/恢复
+    pub task_context: TaskContext,
+    /// 陷阱上下文的物理页帧号 (TrapContext 映射在此物理地址)
+    pub trap_context_ppn: usize,
+    /// Stride 调度: 累积行程 (pass += stride，每次调度时更新)
+    pass: usize,
+    /// Stride 调度: 步长 (stride = BIG_INT / ticket，权重越大步长越小)
+    stride: usize,
+    /// Stride 调度: 权重 (ticket 越大，获得更多 CPU 时间)
+    ticket: usize,
+    /// 文件描述符表。索引 = fd 号，0=stdin, 1=stdout, 2=stderr
+    pub file_descriptor: Vec<Option<Arc<dyn File>>>,
+    /// 当前工作目录路径 (默认 "/")
+    pub cwd: String,
+    /// 父进程弱引用 (Weak 防止循环引用导致内存泄漏)
+    pub parent: Option<Weak<UPSafeCell<TaskControlBlock>>>,
+    /// 子进程强引用列表 (exit 时过继给 init)
+    pub childrens: Vec<Arc<UPSafeCell<TaskControlBlock>>>,
+    /// 进程的等待队列
+    pub exit_queue: Arc<WaitQueue>,
 }
 
+/// 任务管理器内部状态 (受 `UPSafeCell` 保护)。
+///
+/// - `task_queen`: 全局任务队列，任务阻塞时不移出，仅将状态设为 Blocking
+/// - `current`: 当前正在运行的任务在 `task_queen` 中的索引
 pub struct TaskManagerInner {
-    pub task_queen: VecDeque<Arc<UPSafeCell<TaskControlBlock>>>, // Ready任务队列
-    pub task_blocking: VecDeque<Arc<UPSafeCell<TaskControlBlock>>>, // Blocking 任务队列，不参与调度
-    pub current: usize,                                          //当前任务
+    /// 就绪任务队列 (Ready + Running 状态)
+    pub task_queen: VecDeque<Arc<UPSafeCell<TaskControlBlock>>>,
+    /// 当前正在运行的任务在 `task_queen` 中的索引
+    pub current: usize,
 }
 
-///任务管理器
+/// 全局任务管理器 (单例)。
+///
+/// 对标 Linux `struct rq` (runqueue) + `struct task_struct` 管理。
+/// 单核环境下通过 `UPSafeCell` 实现内部可变性，无 SMP 竞争。
+///
+/// 核心职责:
+/// - 任务调度: Stride 加权公平调度算法
+/// - 任务生命周期: 创建/阻塞/唤醒/退出/回收
+/// - fd 管理: 文件描述符的分配/关闭
 pub struct TaskManager {
-    //单核环境目前无竞争
-    ///注意释放时机
-    pub task_que_inner: UPSafeCell<TaskManagerInner>, //内部可变性
+    /// 内部可变状态 (就绪队列 + 阻塞队列 + current 指针)
+    pub task_que_inner: UPSafeCell<TaskManagerInner>,
 }
 
 impl ProcessIdAlloctor {
@@ -224,21 +292,24 @@ impl ProcessIdAlloctor {
 }
 
 impl Drop for ProcessId {
+    // PID 自动回收: 将自身归还到全局分配器的回收池，等待复用。
     fn drop(&mut self) {
-        ///进程id自动回收 rail思想 需要先初始化全局processidalloctor
-        ProcessId_ALLOCTOR.lock().id_pool.push(ProcessId(self.0)); //实际只需要保存id号
+        ProcessId_ALLOCTOR.lock(|alloc| alloc.id_pool.push(ProcessId(self.0)));
         trace!("Process Id :{} recycled!", self.0)
     }
 }
 
 impl TaskControlBlock {
+    /// 向上对齐到 `align` 的倍数。
+    ///
+    /// 例: `align_up(13, 8) == 16`
     fn align_up(x: usize, align: usize) -> usize {
         (x + align - 1) & !(align - 1)
     }
 
     ///
     /// 把 buf 中 cursor 处对齐到 alignment 边界（填充 0 直至对齐）
-    fn align_slice(buf: &mut Vec<u8>, alignment: usize, cursor: &mut usize) {
+    fn align_slice(buf: &mut [u8], alignment: usize, cursor: &mut usize) {
         while !(*cursor).is_multiple_of(alignment) {
             buf[*cursor] = 0;
             *cursor += 1;
@@ -419,10 +490,12 @@ impl TaskControlBlock {
         self.childrens.push(tlb);
     }
 
+    /// 获取当前工作目录路径引用。
     pub fn get_cwd(&self) -> &str {
         &self.cwd
     }
 
+    /// 设置当前工作目录路径。
     pub fn set_cwd(&mut self, cwd: String) {
         self.cwd = cwd;
     }
@@ -445,6 +518,10 @@ impl TaskControlBlock {
         self.new_exec_task_with_elf(path, argv, argc, &elf_data)
     }
 
+    /// 用已加载的 ELF 数据执行 exec (换血)。
+    ///
+    /// 与 `new_exec_task` 的区别: 不再重复读文件，直接使用传入的 `elf_data`。
+    /// 成功返回 `true`，失败 (ELF 解析错误) 返回 `false`。
     pub fn new_exec_task_with_elf(
         &mut self,
         _path: &str,
@@ -460,7 +537,7 @@ impl TaskControlBlock {
         }
         let (mut memset, elf_entry, user_sp, kernel_sp) = re.expect("Kernel error");
         let task_cx = TaskContext::return_trap_new(kernel_sp);
-        let kernel_satp = KERNEL_SPACE.lock().table.satp_token();
+        let kernel_satp = KERNEL_SPACE.lock(|ks| ks.table.satp_token());
         let user_satp = memset.table.satp_token();
         let trap_cx_ppn = memset
             .table
@@ -509,7 +586,7 @@ impl TaskControlBlock {
         }
         let (mut memset, elf_entry, user_sp, kernel_sp) = re.expect("Kernel error");
         let task_cx = TaskContext::return_trap_new(kernel_sp);
-        let kernel_satp = KERNEL_SPACE.lock().table.satp_token();
+        let kernel_satp = KERNEL_SPACE.lock(|ks| ks.table.satp_token());
         let user_satp = memset.table.satp_token();
         let trap_cx_ppn = memset
             .table
@@ -523,16 +600,16 @@ impl TaskControlBlock {
         let new_user_sp = Self::push_args_to_user_stack(user_satp, user_sp.0, &argv, &mut auxv);
 
         // 初始化文件描述符表：0=stdin, 1=stdout, 2=stderr
-        let mut file_descriptor_table: Vec<Option<Arc<dyn File>>> = Vec::new();
-        file_descriptor_table.push(Some(stdin_file()));
-        file_descriptor_table.push(Some(stdout_file()));
-        file_descriptor_table.push(Some(stderr_file()));
+        let file_descriptor_table: Vec<Option<Arc<dyn File>>> = vec![
+            Some(stdin_file()),
+            Some(stdout_file()),
+            Some(stderr_file()),
+        ];
 
         let task_control_block = TaskControlBlock {
             signal: VecDeque::new(),
             pid: ProcessId_ALLOCTOR
-                .lock()
-                .alloc_id()
+                .lock(|alloc| alloc.alloc_id())
                 .expect("No Process ID Can use"),
             memory_set: memset,
             task_statut: TaskStatus::Ready,
@@ -546,6 +623,7 @@ impl TaskControlBlock {
             cwd: "/".to_string(),
             parent: father,
             childrens: Vec::new(),
+            exit_queue: Arc::new(WaitQueue::new()),
         };
 
         // 初始化 TrapContext
@@ -571,8 +649,7 @@ impl TaskControlBlock {
 impl Drop for TaskControlBlock {
     fn drop(&mut self) {
         for child in self.childrens.iter() {
-            let mut c = child.lock();
-            c.parent = None;
+            child.lock(|c| c.parent = None);
         }
         self.childrens.clear();
     }
@@ -581,100 +658,75 @@ impl Drop for TaskControlBlock {
 impl TaskManager {
     //全局唯一
 
-    /// 把指定blocking的任务放进准备队列
-    pub fn wake_task_from_blocking(&self, pid: i32) {
-        let mut inner = self.task_que_inner.lock();
-        if inner.task_queen.is_empty() {
-            return;
-        }
-        // 在blocing 队列找
-        let target_index = inner
-            .task_blocking
-            .iter()
-            .position(|task| task.lock().pid.0 == pid);
+    /// 阻塞当前任务并切换到下一个就绪任务。
+    ///
+    /// 调用方 (WaitQueue::block) 已将当前 TCB 推入 waiters 并设为 Blocking。
+    /// 本方法负责: 从 task_queen 移除当前任务 → stride 调度选下一个 → __switch。
+    ///
+    /// 若无就绪任务，恢复当前任务为 Ready (避免死锁)。
+    pub fn block_and_switch(&self) {
+        let result = self.task_que_inner.lock(|inner| {
+            let current = inner.current;
+            // stride 选择下一个 Ready 任务 (在 remove 之前调用，索引稳定)
+            let selected = Self::stride_select_task_inner(inner);
+            let (selected_idx, _) = match selected {
+                Some(s) => s,
+                None => {
+                    // 无就绪任务，恢复当前任务避免死锁
+                    inner.task_queen[current].lock(|t| t.task_statut = TaskStatus::Ready);
+                    return None;
+                }
+            };
 
-        if let Some(idx) = target_index {
-            let weak_task = inner.task_blocking.remove(idx);
-            if weak_task.is_none() {
-                return;
+            let swap_out =
+                inner.task_queen[current].lock(|t| &mut t.task_context as *mut TaskContext);
+
+            // 从 task_queen 移除当前任务
+            inner.task_queen.remove(current);
+
+            // 调整 selected_idx (remove 导致后续元素前移)
+            let adjusted = if selected_idx > current {
+                selected_idx - 1
+            } else {
+                selected_idx
+            };
+
+            inner.current = adjusted;
+            let swap_in = inner.task_queen[adjusted].lock(|t| {
+                t.task_statut = TaskStatus::Runing;
+                &mut t.task_context as *mut TaskContext
+            });
+
+            Some((swap_out, swap_in))
+        });
+
+        if let Some((swap_out, swap_in)) = result {
+            unsafe {
+                __switch(swap_out, swap_in);
             }
-            let weak_task = weak_task.expect("Kernel Error");
-            if weak_task.lock().task_statut != TaskStatus::Blocking {
-                return;
-            }
-            weak_task.lock().task_statut = TaskStatus::Ready;
-            inner.task_queen.push_back(weak_task);
-        }
-    }
-
-    /// 阻塞当前任务 调度下一个任务
-    pub fn blocking_current_task_and_run_next(&self) {
-        let mut inner = self.task_que_inner.lock();
-        if inner.task_queen.is_empty() {
-            return;
-        }
-        let current = inner.current;
-        let task = inner.task_queen.remove(current);
-        if task.is_none() {
-            return;
-        }
-        let task = task.expect("Kernel Error");
-        task.lock().task_statut = TaskStatus::Blocking;
-
-        let swap_out = {
-            let out = &mut task.lock().task_context;
-            out as *mut _ as *mut TaskContext
-        };
-
-        // 放进阻塞队列
-        inner.task_blocking.push_back(task.clone());
-        drop(inner);
-        let ts = self.stride_select_task();
-        if ts.is_none() {
-            let mut inner = self.task_que_inner.lock();
-            if let Some(t) = inner.task_blocking.pop_back() {
-                t.lock().task_statut = TaskStatus::Ready;
-                inner.task_queen.push_back(t);
-                inner.current = inner.task_queen.len().saturating_sub(1);
-            }
-            drop(inner);
-            return;
-        }
-        let mut inner = self.task_que_inner.lock();
-
-        let new_ts = ts.expect("Kernel Error").0;
-        inner.current = new_ts;
-        let swap_in = {
-            let out = &mut inner.task_queen[new_ts].lock().task_context;
-            out as *mut _ as *mut TaskContext
-        };
-
-        drop(inner);
-        // 调度下一个任务
-        unsafe {
-            __switch(swap_out, swap_in);
         }
     }
 
     /// 处理当前task的signal
     pub fn resolve_current_task_signal(&self) {
-        let inner = self.task_que_inner.lock();
-        if inner.task_queen.is_empty() {
-            drop(inner);
-            return;
-        }
-        let current = inner.current;
-        if current >= inner.task_queen.len() {
-            drop(inner);
-            return;
-        }
-        let current_task = inner.task_queen[current].clone();
-        drop(inner);
+        let (current_task, pid) = self.task_que_inner.lock(|inner| {
+            if inner.task_queen.is_empty() {
+                return (None, 0);
+            }
+            let current = inner.current;
+            if current >= inner.task_queen.len() {
+                return (None, 0);
+            }
+            let task = inner.task_queen[current].clone();
+            let pid = task.lock(|t| t.pid.0);
+            (Some(task), pid)
+        });
 
-        let pid = current_task.lock().pid.0;
-        let mut task_lock = current_task.lock();
-        let signal: VecDeque<OsSignal> = task_lock.signal.drain(..).collect();
-        drop(task_lock);
+        let Some(current_task) = current_task else {
+            return;
+        };
+
+        let signal: VecDeque<OsSignal> = current_task.lock(|t| t.signal.drain(..).collect());
 
         if signal.is_empty() {
             return;
@@ -700,122 +752,137 @@ impl TaskManager {
         }
     }
 
+    /// 将当前任务标记为 Zombie 状态并记录退出码。
+    ///
+    /// 对标 Linux: `do_exit()` → `EXIT_ZOMBIE`
+    /// 调用后必须立即 `suspend_and_run_task()` 让出 CPU。
     pub fn mark_current_zombie(&self, exit_code: isize) {
-        let inner = self.task_que_inner.lock();
-        if inner.task_queen.is_empty() {
-            drop(inner);
-            panic!("Task Queen is empty!");
-        }
-        let current = inner.current;
-        if current >= inner.task_queen.len() {
-            drop(inner);
-            panic!("TaskManager current index out of range");
-        }
-        {
-            let mut t = inner.task_queen[current].lock();
-            t.task_statut = TaskStatus::Zombie;
-            t.exit_code = exit_code;
-        }
-        drop(inner);
+        self.task_que_inner.lock(|inner| {
+            if inner.task_queen.is_empty() {
+                panic!("Task Queen is empty!");
+            }
+            let current = inner.current;
+            if current >= inner.task_queen.len() {
+                panic!("TaskManager current index out of range");
+            }
+            inner.task_queen[current].lock(|t| {
+                t.task_statut = TaskStatus::Zombie;
+                t.exit_code = exit_code;
+            });
+        });
     }
 
+    /// 将当前任务的所有子进程过继给 init (PID=1)。
+    ///
+    /// 对标 Linux: `forget_original_parent()` → `find_new_reaper()`
+    /// 在进程退出时调用，防止子进程成为孤儿进程。
     pub fn reparent_current_children_to_init(&self) {
-        let inner = self.task_que_inner.lock();
-        if inner.task_queen.is_empty() {
-            drop(inner);
-            return;
-        }
-        let current = inner.current;
-        if current >= inner.task_queen.len() {
-            drop(inner);
-            return;
-        }
-        let current_task = inner.task_queen[current].clone();
-        let init_task = inner
-            .task_queen
-            .iter()
-            .find(|t| t.lock().pid.0 == INIT_PID)
-            .cloned();
-        drop(inner);
+        let (current_task, init_task) = self.task_que_inner.lock(|inner| {
+            if inner.task_queen.is_empty() {
+                return (None, None);
+            }
+            let current = inner.current;
+            if current >= inner.task_queen.len() {
+                return (None, None);
+            }
+            let current_task = inner.task_queen[current].clone();
+            let init_task = inner
+                .task_queen
+                .iter()
+                .find(|t| t.lock(|t| t.pid.0 == INIT_PID))
+                .cloned();
+            (Some(current_task), init_task)
+        });
 
-        let Some(init_task) = init_task else {
+        let Some(current_task) = current_task else {
             return;
         };
-        if current_task.lock().pid.0 == INIT_PID {
+        let Some(init_task) = init_task else { return };
+
+        if current_task.lock(|t| t.pid.0 == INIT_PID) {
             warn!("Init are exit: pid {} ", INIT_PID);
             return;
         }
-        let children = {
-            let mut parent = current_task.lock();
-            core::mem::take(&mut parent.childrens)
-        };
+        let children = current_task.lock(|t| core::mem::take(&mut t.childrens));
         if children.is_empty() {
             return;
         }
         let init_weak = Arc::downgrade(&init_task);
-        {
-            let mut init = init_task.lock();
+        init_task.lock(|init| {
             for child in children.iter() {
                 init.childrens.push(child.clone());
             }
-        }
+        });
         for child in children {
-            let mut c = child.lock();
-            c.parent = Some(init_weak.clone());
+            child.lock(|c| c.parent = Some(init_weak.clone()));
         }
     }
 
+    /// 回收指定 PID 的子进程 Zombie，返回其退出码。
+    ///
+    /// 对标 Linux: `waitpid()` → `wait_task_zombie()`
+    ///
+    /// 前提: `child_pid` 必须是当前进程的子进程且状态为 Zombie。
+    /// 回收后从就绪队列移除，释放 PID 和地址空间。
     pub fn reap_zombie_child(&self, child_pid: i32) -> Option<isize> {
-        let mut inner = self.task_que_inner.lock();
-        let current = inner.current;
-        if inner.task_queen.is_empty() || current >= inner.task_queen.len() {
-            drop(inner);
-            return None;
-        }
-        let current_task = inner.task_queen[current].clone();
+        let result = self.task_que_inner.lock(|inner| {
+            let current = inner.current;
+            if inner.task_queen.is_empty() || current >= inner.task_queen.len() {
+                return None;
+            }
+            let current_task = inner.task_queen[current].clone();
 
-        // 只允许回收当前进程的子进程，防止误回收其他任务的 Zombie。
-        let is_child_of_current = {
-            let parent = current_task.lock();
-            parent.childrens.iter().any(|c| c.lock().pid.0 == child_pid)
-        };
-        if !is_child_of_current {
-            drop(inner);
-            return None;
-        }
+            // 只允许回收当前进程的子进程
+            let is_child = current_task.lock(|parent| {
+                parent
+                    .childrens
+                    .iter()
+                    .any(|c| c.lock(|c| c.pid.0 == child_pid))
+            });
+            if !is_child {
+                return None;
+            }
 
-        let mut zombie_index: Option<usize> = None;
-        let mut exit_code: Option<isize> = None;
-        for (idx, cell) in inner.task_queen.iter().enumerate() {
-            let t = cell.lock();
-            if t.pid.0 == child_pid {
-                if matches!(t.task_statut, TaskStatus::Zombie) {
-                    zombie_index = Some(idx);
-                    exit_code = Some(t.exit_code);
+            let mut zombie_index: Option<usize> = None;
+            let mut exit_code: Option<isize> = None;
+            for (idx, cell) in inner.task_queen.iter().enumerate() {
+                let done = cell.lock(|t| {
+                    if t.pid.0 == child_pid {
+                        if matches!(t.task_statut, TaskStatus::Zombie) {
+                            zombie_index = Some(idx);
+                            exit_code = Some(t.exit_code);
+                        }
+                        true // found target pid
+                    } else {
+                        false
+                    }
+                });
+                if done {
+                    break;
                 }
-                break;
             }
-        }
-        let Some(idx) = zombie_index else {
-            drop(inner);
-            return None;
-        };
+            let idx = zombie_index?;
 
-        inner.task_queen.remove(idx);
-        if !inner.task_queen.is_empty() {
-            if inner.current > idx {
-                inner.current -= 1;
-            } else if inner.current >= inner.task_queen.len() {
-                inner.current = 0;
+            inner.task_queen.remove(idx);
+            if !inner.task_queen.is_empty() {
+                if inner.current > idx {
+                    inner.current -= 1;
+                } else if inner.current >= inner.task_queen.len() {
+                    inner.current = 0;
+                }
             }
-        }
-        drop(inner);
 
-        {
-            let mut parent = current_task.lock();
-            parent.childrens.retain(|c| c.lock().pid.0 != child_pid);
-        }
-        exit_code
+            // 从父进程的 childrens 中移除
+            current_task.lock(|parent| {
+                parent
+                    .childrens
+                    .retain(|c| c.lock(|c| c.pid.0 != child_pid));
+            });
+
+            exit_code
+        });
+
+        result
     }
 
     ///TODO:根据传入路径加载并且new新的taskblock然后add_task进队列
@@ -823,44 +890,56 @@ impl TaskManager {
 
     ///添加任务队列或者归队
     pub fn add_task(self, task: Arc<UPSafeCell<TaskControlBlock>>) {
-        self.task_que_inner.lock().task_queen.push_back(task);
+        self.task_que_inner
+            .lock(|inner| inner.task_queen.push_back(task));
     }
 
     ///根据stride选择一个任务 (index, pass)
     ///
     ///注意：这是一个对外包装，会持锁一次。若调用方已经持有 inner 锁，必须使用
     ///`stride_select_task_inner`，否则会触发 `RefCell already borrowed`。
-    pub fn stride_select_task(&self) -> Option<(usize, usize)> {
-        let inner = self.task_que_inner.lock();
-        Self::stride_select_task_inner(&inner)
+    pub fn stride_select_task(&self, inner: &TaskManagerInner) -> Option<(usize, usize)> {
+        Self::stride_select_task_inner(inner)
     }
 
-    ///在已持有 TaskManagerInner 锁的情况下选择任务（不会再次 lock）。
+    ///在已持有 TaskManagerInner 锁的情况下选择任务（不会再次 lock task_que_inner）。
     fn stride_select_task_inner(inner: &TaskManagerInner) -> Option<(usize, usize)> {
         let current = inner.current;
         let mut selected: Option<(usize, usize)> = None; // (index, pass)
 
-        if inner.task_queen.is_empty() {
-            // block是还有,因为init可能还在里面
-            drop(inner);
-            TASK_MANAER.wake_task_from_blocking(INIT_PID); //尝试唤醒init
+        // 若就绪队列中无 Ready 任务，尝试恢复 init,但是init不能是已经死了！TODO:
+        let has_ready = inner
+            .task_queen
+            .iter()
+            .any(|t| t.lock(|t| t.task_statut == TaskStatus::Ready));
+        if !has_ready {
+            for task in inner.task_queen.iter() {
+                let is_init = task.lock(|t| t.pid.0 == INIT_PID);
+                if is_init {
+                    task.lock(|t| t.task_statut = TaskStatus::Ready);
+                    break;
+                }
+            }
         }
 
         for (idx, cell) in inner.task_queen.iter().enumerate() {
-            let t = cell.lock();
-            if let TaskStatus::Ready = t.task_statut {
-                let pass = t.pass;
-                match selected {
-                    Some((best_idx, best_pass)) => {
-                        if pass < best_pass {
-                            selected = Some((idx, pass));
-                        } else if pass == best_pass && best_idx == current && idx != current {
-                            selected = Some((idx, pass));
+            cell.lock(|t| {
+                if let TaskStatus::Ready = t.task_statut {
+                    let pass = t.pass;
+                    match selected {
+                        Some((best_idx, best_pass)) => {
+                            // pass 更小者优先；pass 相同时，把当前正在运行的任务让给其它就绪任务，
+                            // 避免同 pass 下 current 一直独占，实现公平轮转。
+                            if pass < best_pass
+                                || (pass == best_pass && best_idx == current && idx != current)
+                            {
+                                selected = Some((idx, pass));
+                            }
                         }
+                        None => selected = Some((idx, pass)),
                     }
-                    None => selected = Some((idx, pass)),
                 }
-            }
+            });
         }
         selected
     }
@@ -868,90 +947,72 @@ impl TaskManager {
     ///TODO 内核栈释放
     ///从队列移除当前任务,应该由aplication的exit系统调用来执行 之后必须执行下一个任务 bug修复：应该同时移动指针到任意一个ready的任务
     pub fn remove_current_task(&self) {
-        let mut inner = self.task_que_inner.lock();
-
-        // 先保存要删除的任务索引
-        let task_to_remove = inner.current;
-        debug!(
-            "Removing task at index: {}, queue length before removal: {}",
-            task_to_remove,
-            inner.task_queen.len()
-        );
-
-        let removed_task = inner.task_queen[task_to_remove].clone();
-        let init_task = inner
-            .task_queen
-            .iter()
-            .find(|t| t.lock().pid.0 == INIT_PID)
-            .cloned();
-
-        // 删除任务
-        inner
-            .task_queen
-            .remove(task_to_remove)
-            .expect("Remove Task Control Block Failed!");
-
-        // 删除后更新current指针
-        // VecDeque.remove(i) 会删除索引i的元素，后面的元素索引都会减1
-        // 删除后，如果还有任务，我们需要将current设置为一个有效的任务索引
-        if !inner.task_queen.is_empty() {
-            // 如果删除的是最后一个任务（task_to_remove == 原队列长度-1）
-            // 则删除后 task_to_remove >= 新队列长度，需要回绕到开头
-            if task_to_remove > inner.task_queen.len() {
-                panic!("Task Remove Faild , kernel try to remove a task that index over taskqueen")
-            }
-            if task_to_remove == inner.task_queen.len() {
-                //并且选择一个已经ready的任务，防止执行流错误。
-                let select_task = Self::stride_select_task_inner(&inner);
-                if select_task.is_none() {
-                    error!("After remove,No task can select");
-                    shutdown();
-                } else {
-                    inner.current = select_task.unwrap().0; //current
-                }
-            } else {
-                // 否则，保持current在原位置
-                // 此时current指向的是原来task_to_remove+1位置的任务
-                inner.current = task_to_remove; //防御延迟到调度函数
-            }
+        let (removed_task, init_task) = self.task_que_inner.lock(|inner| {
+            let task_to_remove = inner.current;
             debug!(
-                "After removal: current set to {}, queue length: {}",
-                inner.current,
+                "Removing task at index: {}, queue length before removal: {}",
+                task_to_remove,
                 inner.task_queen.len()
             );
-        }
 
-        drop(inner);
+            let removed_task = inner.task_queen[task_to_remove].clone();
+            let init_task = inner
+                .task_queen
+                .iter()
+                .find(|t| t.lock(|t| t.pid.0 == INIT_PID))
+                .cloned();
+
+            inner
+                .task_queen
+                .remove(task_to_remove)
+                .expect("Remove Task Control Block Failed!");
+
+            if !inner.task_queen.is_empty() {
+                if task_to_remove > inner.task_queen.len() {
+                    panic!(
+                        "Task Remove Faild , kernel try to remove a task that index over taskqueen"
+                    )
+                }
+                if task_to_remove == inner.task_queen.len() {
+                    if let Some(select_task) = Self::stride_select_task_inner(inner) {
+                        inner.current = select_task.0;
+                    } else {
+                        error!("After remove,No task can select");
+                        shutdown();
+                    }
+                } else {
+                    inner.current = task_to_remove;
+                }
+                debug!(
+                    "After removal: current set to {}, queue length: {}",
+                    inner.current,
+                    inner.task_queen.len()
+                );
+            }
+
+            (removed_task, init_task)
+        });
 
         if let Some(init_task) = init_task {
-            if removed_task.lock().pid.0 != INIT_PID {
-                let children = {
-                    let mut parent = removed_task.lock();
-                    core::mem::take(&mut parent.childrens)
-                };
+            if removed_task.lock(|t| t.pid.0) != INIT_PID {
+                let children = removed_task.lock(|t| core::mem::take(&mut t.childrens));
                 if !children.is_empty() {
                     let init_weak = Arc::downgrade(&init_task);
-                    {
-                        let mut init = init_task.lock();
+                    init_task.lock(|init| {
                         for child in children.iter() {
                             init.childrens.push(child.clone());
                         }
-                    }
+                    });
                     for child in children {
-                        let mut c = child.lock();
-                        c.parent = Some(init_weak.clone());
+                        child.lock(|c| c.parent = Some(init_weak.clone()));
                     }
                 }
             }
         } else {
             error!("Can't find init process!,these child process will become foster process");
-            let children = {
-                let mut parent = removed_task.lock();
-                core::mem::take(&mut parent.childrens)
-            };
+            let children = removed_task.lock(|t| core::mem::take(&mut t.childrens));
             for child in children {
-                let mut c = child.lock();
-                c.parent = None;
+                child.lock(|c| c.parent = None);
             }
         }
 
@@ -962,124 +1023,100 @@ impl TaskManager {
     }
     ///根据Stride挑选下个要运行的READY任务,挂起当前任务,把current设置为下个任务的index,然后运行下一个任务 Stride算法：增加运行任务的步长
     pub fn suspend_and_run_task(&self) {
-        //首先应该检查任务是否为空
-
-        //任务列表是否为空?
         if self.task_queen_is_empty() {
             panic!("Task Queen is empty!");
         }
 
-        let mut inner = self.task_que_inner.lock();
-        if inner.task_queen.is_empty() {
-            drop(inner);
-            panic!("Task Queen is empty!");
-        }
-        let current = inner.current;
-        if current >= inner.task_queen.len() {
-            drop(inner);
-            panic!("TaskManager current index out of range");
-        }
-        // warn!("Current task queen :\nReady {:?}\nBlocking:{:?}",inner.task_queen.len(),inner.task_blocking.len());
-        // for t in inner.task_queen.iter().enumerate() {
-        //     let idx = t.1.lock().pid.0;
-        //     warn!("task queen,idx:{} pid:{} task_status:{:?}",t.0,idx,t.1.lock().task_statut);
-        // }
-        {
-            let mut cur = inner.task_queen[current].lock();
-            if !matches!(cur.task_statut, TaskStatus::Zombie) {
-                cur.task_statut = TaskStatus::Ready;
-                cur.pass += cur.stride;
+        // Phase 1: 更新当前任务状态，选出下一个任务
+        let (swap_out, current, task_index) = self.task_que_inner.lock(|inner| {
+            if inner.task_queen.is_empty() {
+                panic!("Task Queen is empty!");
             }
-        }
-
-        // 选择 stride 最小的 READY 任务（注意：这里已持有 inner 锁，不能再次 lock）
-        let selected: Option<(usize, usize)> = Self::stride_select_task_inner(&inner);
-        let task_index = match selected {
-            Some((idx, _)) => idx,
-            None => {
-                warn!("No task can select");
-                shutdown()
-            }
-        };
-
-        if task_index >= inner.task_queen.len() {
-            drop(inner);
-            panic!("Selected task index out of range");
-        }
-        {
-            let task_status;
-            {
-                let t = inner.task_queen[task_index].lock();
-                task_status = t.task_statut.clone();
-                // error!("Select pid:{} idx:{} status:{:?}",t.pid.0,task_index,task_status);
+            let current = inner.current;
+            if current >= inner.task_queen.len() {
+                panic!("TaskManager current index out of range");
             }
 
-            match task_status {
-                TaskStatus::Ready => {}
-                _ => {
-                    drop(inner);
+            // 当前任务非 Zombie 则设为 Ready
+            inner.task_queen[current].lock(|cur| {
+                if !matches!(cur.task_statut, TaskStatus::Zombie) {
+                    cur.task_statut = TaskStatus::Ready;
+                    cur.pass += cur.stride;
+                }
+            });
+
+            // 选择 stride 最小的 READY 任务
+            let selected = Self::stride_select_task_inner(inner);
+            let task_index = match selected {
+                Some((idx, _)) => idx,
+                None => {
+                    warn!("No task can select");
+                    shutdown()
+                }
+            };
+
+            if task_index >= inner.task_queen.len() {
+                panic!("Selected task index out of range");
+            }
+
+            // 校验选中任务状态
+            inner.task_queen[task_index].lock(|t| {
+                if !matches!(t.task_statut, TaskStatus::Ready) {
                     panic!("Selected task is not Ready");
                 }
-            }
-        }
+            });
 
-        //如果切换到同一个任务，直接返回 _switch耗费上下文资源
-        //这可以防止在持有用户态锁时发生任务切换导致的死锁问题（全局锁）
-        if current == task_index {
-            {
-                let mut t = inner.task_queen[task_index].lock();
-                t.task_statut = TaskStatus::Runing;
+            // 如果切换到同一个任务，直接返回
+            if current == task_index {
+                inner.task_queen[task_index].lock(|t| {
+                    t.task_statut = TaskStatus::Runing;
+                });
+                return (core::ptr::null_mut(), current, task_index);
             }
-            drop(inner);
+
+            // 获取 swap_out 指针
+            let swap_out =
+                inner.task_queen[current].lock(|cur| &mut cur.task_context as *mut TaskContext);
+
+            (swap_out, current, task_index)
+        });
+
+        // 同任务切换，直接返回
+        if swap_out.is_null() {
             return;
         }
 
-        // 准备切换：先拿到上下文指针，更新状态，然后释放所有锁再 __switch
-        let swaped_task_cx = {
-            let mut cur = inner.task_queen[current].lock();
-            &mut cur.task_context as *mut TaskContext
-        };
+        // Phase 2: 获取 swap_in 指针，更新 current
+        let swap_in = self.task_que_inner.lock(|inner| {
+            inner.current = task_index;
+            inner.task_queen[task_index].lock(|next| {
+                next.task_statut = TaskStatus::Runing;
+                &mut next.task_context as *mut TaskContext
+            })
+        });
 
-        let need_swap_in = {
-            let mut next = inner.task_queen[task_index].lock();
-            next.task_statut = TaskStatus::Runing;
-            &mut next.task_context as *mut TaskContext
-        };
-
-        inner.current = task_index;
-        drop(inner);
-
-        // 被换出的任务的ra会设置为下一条指令
         unsafe {
-            __switch(swaped_task_cx, need_swap_in);
+            __switch(swap_out, swap_in);
         }
-
-        //任务从这里返回
-
-        // 编译器序言  需要依赖sp恢复寄存器 clone需要特殊处理
     }
 
+    /// 检查就绪队列是否为空。
     pub fn task_queen_is_empty(&self) -> bool {
-        let inner = self.task_que_inner.lock();
-        let result = inner.task_queen.is_empty();
-        drop(inner);
-        result
+        self.task_que_inner
+            .lock(|inner| inner.task_queen.is_empty())
     }
 
     ///运行第一个任务
     pub fn run_first_task(&self) -> ! {
-        let inner = self.task_que_inner.lock(); //记得drop
-        let curren_task_index = inner.current;
-        let task_cx_ptr = {
-            let mut task = inner.task_queen[curren_task_index].lock();
-            // 标记为 running
-            task.task_statut = TaskStatus::Runing;
-            // 增加步长
-            task.pass += task.stride;
-            &mut task.task_context as *mut TaskContext
-        };
+        let task_cx_ptr = self.task_que_inner.lock(|inner| {
+            let idx = inner.current;
+            inner.task_queen[idx].lock(|task| {
+                task.task_statut = TaskStatus::Runing;
+                task.pass += task.stride;
+                &mut task.task_context as *mut TaskContext
+            })
+        });
         let kernel_task_cx = TaskContext::zero_init();
-        drop(inner); //越早越好
 
         // 调试：打印 __switch 参数
         debug!("run_first_task: task_cx_ptr={:#x}", task_cx_ptr as usize);
@@ -1103,27 +1140,24 @@ impl TaskManager {
 
     /// 在删除当前任务后，直接切换到当前 inner.current 指向的任务。
     ///
-    /// 关键点：此时 CPU 仍在“已删除任务”的内核栈/执行流上，不能把当前寄存器保存到
+    /// 关键点：此时 CPU 仍在”已删除任务”的内核栈/执行流上，不能把当前寄存器保存到
     /// 新任务的 `task_context` 里，否则会污染新任务上下文。
     pub fn run_current_task(&self) -> ! {
-        let inner = self.task_que_inner.lock();
-        if inner.task_queen.is_empty() {
-            drop(inner);
-            panic!("Task Queen is empty!");
-        }
-        let current = inner.current;
-        if current >= inner.task_queen.len() {
-            drop(inner);
-            panic!("TaskManager current index out of range");
-        }
-        let task_cx_ptr = {
-            let mut task = inner.task_queen[current].lock();
-            task.task_statut = TaskStatus::Runing;
-            task.pass += task.stride;
-            &mut task.task_context as *mut TaskContext
-        };
+        let task_cx_ptr = self.task_que_inner.lock(|inner| {
+            if inner.task_queen.is_empty() {
+                panic!("Task Queen is empty!");
+            }
+            let current = inner.current;
+            if current >= inner.task_queen.len() {
+                panic!("TaskManager current index out of range");
+            }
+            inner.task_queen[current].lock(|task| {
+                task.task_statut = TaskStatus::Runing;
+                task.pass += task.stride;
+                &mut task.task_context as *mut TaskContext
+            })
+        });
         let dummy = TaskContext::zero_init();
-        drop(inner);
         unsafe {
             __switch(&dummy as *const TaskContext, task_cx_ptr);
         }
@@ -1132,109 +1166,112 @@ impl TaskManager {
 
     ///获取当前任务的页表stap
     pub fn get_current_stap(&self) -> usize {
-        let inner = self.task_que_inner.lock();
-        let current_task: usize = inner.current;
-        let stap = {
-            let mut task = inner.task_queen[current_task].lock();
-            task.memory_set.get_table().satp_token()
-        };
-
-        drop(inner);
-
-        stap
+        self.task_que_inner.lock(|inner| {
+            let current = inner.current;
+            inner.task_queen[current].lock(|task| task.memory_set.get_table().satp_token())
+        })
     }
 
     ///获取当前任务的陷阱上下文可变引用
+    // clippy::mut_from_ref: 此处从 `&self` 产出 `&mut TrapContext` 是有意为之。
+    // 返回的可变引用并非借自 `self`，而是指向当前任务陷入上下文所在的物理页
+    // （由 trap_context_ppn 定位）。该内存在陷入/返回窗口内由内核独占，调用方
+    // 需保证不与其它对同一 TrapContext 的引用并发存在。
+    #[allow(clippy::mut_from_ref)]
     pub fn get_current_trapcx(&self) -> &mut TrapContext {
-        let inner = self.task_que_inner.lock();
-        let curren_task_index = inner.current;
-        let task_trap_ppn = {
-            let task = inner.task_queen[curren_task_index].lock();
-            task.trap_context_ppn
-        };
+        let task_trap_ppn = self.task_que_inner.lock(|inner| {
+            let current = inner.current;
+            inner.task_queen[current].lock(|task| task.trap_context_ppn)
+        });
         let origin_phyaddr = (task_trap_ppn * PAGE_SIZE) as *mut TrapContext;
-        let trap_context = unsafe { &mut *origin_phyaddr };
-
-        drop(inner);
-
-        trap_context
+        unsafe { &mut *origin_phyaddr }
     }
 
     ///获取当前任务的文件描述符
     pub fn get_current_fd(&self, fd: usize) -> Option<Option<Arc<dyn File>>> {
-        let inner = self.task_que_inner.lock();
-        let current_task = inner.current;
-        let result = {
-            let task = inner.task_queen[current_task].lock();
-            task.file_descriptor.get(fd).cloned()
-        };
-        drop(inner);
-        result
+        self.task_que_inner.lock(|inner| {
+            let current = inner.current;
+            inner.task_queen[current].lock(|task| task.file_descriptor.get(fd).cloned())
+        })
     }
 
+    /// 获取当前任务的工作目录路径。
     pub fn get_current_cwd(&self) -> String {
-        if self.task_que_inner.lock().task_queen.is_empty() {
-            return "/".to_string();
-        }
-        let inner = self.task_que_inner.lock();
-        let current_task = inner.current;
-        let cwd = {
-            let task = inner.task_queen[current_task].lock();
-            task.get_cwd().to_string()
-        };
-        drop(inner);
-        cwd
+        self.task_que_inner.lock(|inner| {
+            if inner.task_queen.is_empty() {
+                return "/".to_string();
+            }
+            let current = inner.current;
+            inner.task_queen[current].lock(|task| task.get_cwd().to_string())
+        })
     }
 
+    /// 设置当前任务的工作目录路径。
     pub fn set_current_cwd(&self, cwd: String) {
-        let inner = self.task_que_inner.lock();
-        let current_task = inner.current;
-        {
-            let mut task = inner.task_queen[current_task].lock();
-            task.set_cwd(cwd);
-        }
-        drop(inner);
+        self.task_que_inner.lock(|inner| {
+            let current = inner.current;
+            inner.task_queen[current].lock(|task| {
+                task.set_cwd(cwd);
+            });
+        });
     }
 
+    /// 为当前任务分配一个空闲 fd 并安装文件对象。
+    ///
+    /// 跳过 fd 0/1/2 (stdin/stdout/stderr)。
+    /// 如果所有现有 slot 都已占用，则 push 到末尾。
+    /// 返回分配的 fd 号。
     pub fn alloc_fd_for_current(&self, new_fd: Arc<dyn File>) -> i32 {
-        let inner = self.task_que_inner.lock();
-        let current_task = inner.current;
-        let mut task = inner.task_queen[current_task].lock();
-        if task.file_descriptor.len() < 2 {
-            while task.file_descriptor.len() < 2 {
-                task.file_descriptor.push(None);
-            }
-        }
-        for (i, slot) in task.file_descriptor.iter_mut().enumerate() {
-            if i < 2 {
-                continue;
-            }
-            if slot.is_none() {
-                *slot = Some(new_fd);
-                return i as i32;
-            }
-        }
-        task.file_descriptor.push(Some(new_fd));
-        (task.file_descriptor.len() - 1) as i32
+        self.task_que_inner.lock(|inner| {
+            let current = inner.current;
+            inner.task_queen[current].lock(|task| {
+                if task.file_descriptor.len() < 2 {
+                    while task.file_descriptor.len() < 2 {
+                        task.file_descriptor.push(None);
+                    }
+                }
+                for (i, slot) in task.file_descriptor.iter_mut().enumerate() {
+                    if i < 2 {
+                        continue;
+                    }
+                    if slot.is_none() {
+                        *slot = Some(new_fd);
+                        return i as i32;
+                    }
+                }
+                task.file_descriptor.push(Some(new_fd));
+                (task.file_descriptor.len() - 1) as i32
+            })
+        })
     }
 
+    /// 关闭当前任务的指定 fd。
+    ///
+    /// 返回 0 表示成功，-1 表示 fd 无效或已关闭。
     pub fn close_current_fd(&self, fd: usize) -> isize {
-        let inner = self.task_que_inner.lock();
-        let current_task = inner.current;
-        let mut task = inner.task_queen[current_task].lock();
-        if fd >= task.file_descriptor.len() {
-            return -1;
-        }
-        if task.file_descriptor[fd].is_none() {
-            return -1;
-        }
-        task.file_descriptor[fd].take();
-        if task.file_descriptor[fd].is_none() {
-            0
-        } else {
-            error!("Close fd :{} failed!", fd);
-            -1
-        }
+        self.task_que_inner.lock(|inner| {
+            let current = inner.current;
+            inner.task_queen[current].lock(|task| {
+                if fd >= task.file_descriptor.len() {
+                    return -1;
+                }
+                if task.file_descriptor[fd].is_none() {
+                    return -1;
+                }
+                let fdd = task.file_descriptor[fd].take();
+
+                if !fdd.expect("the fd not exist").close().unwrap() {
+                    error!("The fd close failed!");
+                }
+
+                if task.file_descriptor[fd].is_none() {
+                    0
+                } else {
+                    error!("Close fd :{} failed!", fd);
+                    -1
+                }
+            })
+        })
     }
 
     ///kail当前任务，内核有权调用 调用栈顶必须为TrapHandler! 调用它的地方考虑是否直接return
@@ -1268,7 +1305,6 @@ lazy_static! {
                 return TaskManager {
                     task_que_inner: UPSafeCell::new(TaskManagerInner {
                         task_queen: task_deque,
-                        task_blocking: VecDeque::new(),
                         current: 0
                     })
                 };
@@ -1276,11 +1312,7 @@ lazy_static! {
             let dir = vfs_open("/sd", OpenFlags::DIRECTORY).expect("open /sd error");
             let mut names: Vec<String> = Vec::new();
 
-            loop {
-                let bytes = match vfs_getdents64(&dir, 4096) {
-                    Ok(v) => v,
-                    Err(_) => break,
-                };
+            while let Ok(bytes) = vfs_getdents64(&dir, 4096) {
                 if bytes.is_empty() {
                     break;
                 }
@@ -1290,7 +1322,7 @@ lazy_static! {
                     if off + core::mem::size_of::<LinuxDirent64>() > bytes.len() {
                         break;
                     }
-                    let hdr = unsafe { *(bytes.as_ptr().add(off) as *const LinuxDirent64) };
+                    let hdr = *(bytes.as_ptr().add(off) as *const LinuxDirent64);
                     let reclen = hdr.d_reclen as usize;
                     if reclen == 0 || off + reclen > bytes.len() {
                         break;
@@ -1325,14 +1357,11 @@ lazy_static! {
                 }
             }
 
-            unsafe {
-                TASK_MANAGER_INIT = true;
-            }
+            TASK_MANAGER_INIT = true;
 
             TaskManager {
                 task_que_inner: UPSafeCell::new(TaskManagerInner {
                     task_queen: task_deque,
-                    task_blocking: VecDeque::new(),
                     current: 0  // 初始化为第一个任务
                 })
             }
@@ -1347,21 +1376,20 @@ lazy_static! {
                 task_deque.push_back(Arc::new(UPSafeCell::new(task)));
                 debug!("Application init {} loaded successfully", 0);
 
-            unsafe {
-                TASK_MANAGER_INIT = true;
-            }
+            TASK_MANAGER_INIT = true;
 
             TaskManager {
                 task_que_inner: UPSafeCell::new(TaskManagerInner {
                     task_queen: task_deque,
-                    task_blocking: VecDeque::new(),
                     current: 0  // 初始化为第一个任务
                 })
             }
         }
     };
 }
-///返回单个app的内核栈地址（在内核地址空间）
+/// 获取第一个任务 (app_id=0) 的内核栈顶地址。
+///
+/// 内核栈布局: `[TRAP_BOTTOM_ADDR - (app_id+1)*(KERNEL_STACK_SIZE+PAGE_SIZE), +KERNEL_STACK_SIZE)`
 pub fn getapp_kernel_sapce() -> usize {
     // 现在内核栈在内核空间，需要返回第0个任务的内核栈顶
     let app_id = 0; // 第一个任务
@@ -1369,6 +1397,9 @@ pub fn getapp_kernel_sapce() -> usize {
     kernel_stack_bottom + KERNEL_STACK_SIZE // 返回栈顶
 }
 
+/// 启动第一个任务 (内核入口调用)。
+///
+/// 委托给 `TASK_MANAER.run_first_task()`，永不返回。
 pub fn run_first_task() -> ! {
     TASK_MANAER.run_first_task()
 }

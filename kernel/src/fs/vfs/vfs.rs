@@ -15,7 +15,11 @@
 //! `File` 描述"一个已打开的文件"，`VfsFs` 描述"一类文件系统实例"。
 //! 两者组合完成从路径到字节的完整调用链。
 
+use crate::driver::network::e1000::packet::buffer::NetBuffer;
+use crate::error::BlueErr;
+use crate::fs::semaphore::waitqueue::WaitQueue;
 use crate::fs::vfs::vfserror::VfsFsError;
+use crate::sync::UPSafeCell;
 use alloc::string::String;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
@@ -25,12 +29,6 @@ use spin::Mutex;
 
 /// 挂载点表中每个条目的类型：`Arc<Mutex<dyn VfsFs>>`
 pub type MountFs = Arc<Mutex<dyn VfsFs>>;
-
-/// 目录项类型，用于 `VfsStat::file_type` 和 `getdents64` 返回。
-pub enum EntryType {
-    File,
-    Dir,
-}
 
 // ── 文件打开标志 ──────────────────────────────────────────────
 
@@ -144,7 +142,7 @@ pub struct FileOffset(pub u64);
 /// ## `Any` 超 trait
 ///
 /// `File: Any` 允许调用方通过 `downcast_ref` 将 `&dyn File` 还原为
-/// 具体类型（如 `&BLOCKDEVFILE`），从而访问块设备指针和分区映射信息。
+/// 具体类型（如 `&BlockDevFile`），从而访问块设备指针和分区映射信息。
 pub trait File: Send + Sync + Any {
     /// 从当前光标位置读取，读后光标前移 `n` 字节。
     fn read(&self, buf: &mut [u8]) -> Result<usize, VfsFsError>;
@@ -195,6 +193,11 @@ pub trait File: Send + Sync + Any {
         Ok(())
     }
 
+    /// 自定义文件句柄关闭函数
+    fn close(&self) -> Result<bool, VfsFsError> {
+        Ok(true)
+    }
+
     /// 设备控制接口。
     ///
     /// 普通文件默认不支持 `ioctl`；字符设备/块设备如需暴露额外控制命令，
@@ -207,11 +210,107 @@ pub trait File: Send + Sync + Any {
     ///
     /// 仅在 `Self: Sized` 时可用——即只能对具体类型调用，
     /// 不能对 `dyn File` 直接调用。
-    fn as_any(&self) -> &dyn Any
-    where
-        Self: Sized,
-    {
-        self
+    fn as_any(&self) -> &dyn Any;
+
+    /// 轮询文件状态，检查是否可读/可写/有异常。
+    ///
+    /// 对标 Linux: `struct file_operations.poll` → `__poll_t`
+    ///
+    /// 返回 `PollStatus` 位掩码:
+    /// - `PollStatus::POLLIN` — 可读
+    /// - `PollStatus::POLLOUT` — 可写
+    /// - `PollStatus::POLLERR` / `POLLHUP` — 异常
+    /// - `PollStatus::NONE` — 无事件 (等待中)
+    ///
+    /// ## 语义
+    ///
+    /// `poll` 是非阻塞的: 它只检查当前状态，不等待。
+    /// 配合 `epoll`/`select` 使用时，调用方会:
+    /// 1. 调用 `poll()` 检查就绪状态
+    /// 2. 如果未就绪，将 fd 加入等待队列
+    /// 3. 当事件发生时 (如 socket 收到包)，由中断路径唤醒等待者
+    fn poll(&self) -> PollStatus {
+        PollStatus::NONE
+    }
+}
+
+/// 文件轮询状态位掩码。
+///
+/// 对标 Linux: `__poll_t` (include/uapi/linux/poll.h)
+///
+/// | Linux 常量 | 值 | 含义 |
+/// |------------|------|------|
+/// | `POLLIN` | 0x001 | 可读 |
+/// | `POLLPRI` | 0x002 | 紧急数据 (OOB) |
+/// | `POLLOUT` | 0x004 | 可写 |
+/// | `POLLERR` | 0x008 | 错误条件 |
+/// | `POLLHUP` | 0x010 | 挂起 (对端关闭) |
+/// | `POLLNVAL` | 0x020 | 无效 fd |
+///
+/// `NONE` (值为 0) 表示无事件，需等待。
+bitflags! {
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    pub struct PollStatus: u32 {
+        const NONE    = 0;
+        const POLLIN  = 0x001;
+        const POLLPRI = 0x002;
+        const POLLOUT = 0x004;
+        const POLLERR = 0x008;
+        const POLLHUP = 0x010;
+        const POLLNVAL = 0x020;
+    }
+}
+
+// ── fd_set (select 系统调用) ────────────────────────────────────
+
+/// Linux `FD_SETSIZE` — fd_set 能表示的最大 fd 号。
+///
+/// 参考: include/uapi/linux/posix_types.h
+pub const FD_SETSIZE: usize = 1024;
+
+/// Linux 兼容的 `fd_set` 位图 (1024 bit = 128 字节)。
+///
+/// 布局与 Linux `__FD_SETSIZE` / `fd_set` (`<sys/select.h>`) 一致。
+/// 每个 bit 对应一个 fd 编号，用于 `select()` 系统调用的读/写/异常集合。
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct FdSet {
+    pub bits: [u8; FD_SETSIZE / 8],
+}
+
+impl FdSet {
+    pub const fn new() -> Self {
+        Self {
+            bits: [0u8; FD_SETSIZE / 8],
+        }
+    }
+
+    /// FD_SET: 设置 bit `fd`。
+    pub fn set(&mut self, fd: usize) {
+        if fd < FD_SETSIZE {
+            self.bits[fd / 8] |= 1 << (fd % 8);
+        }
+    }
+
+    /// FD_CLR: 清除 bit `fd`。
+    pub fn clear(&mut self, fd: usize) {
+        if fd < FD_SETSIZE {
+            self.bits[fd / 8] &= !(1 << (fd % 8));
+        }
+    }
+
+    /// FD_ISSET: 测试 bit `fd` 是否置位。
+    pub fn is_set(&self, fd: usize) -> bool {
+        if fd < FD_SETSIZE {
+            self.bits[fd / 8] & (1 << (fd % 8)) != 0
+        } else {
+            false
+        }
+    }
+
+    /// FD_ZERO: 清零所有 bit。
+    pub fn zero(&mut self) {
+        self.bits = [0u8; FD_SETSIZE / 8];
     }
 }
 

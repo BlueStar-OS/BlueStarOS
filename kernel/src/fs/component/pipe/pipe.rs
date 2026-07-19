@@ -160,17 +160,16 @@ impl Pipe {
             return Ok(0);
         }
         loop {
-            let (can_read, write_closed) = {
-                let ring = self.ringbuffer.lock();
-                (ring.can_read(), ring.is_write_end_closed())
-            };
+            let (can_read, write_closed) = self
+                .ringbuffer
+                .lock(|ring| (ring.can_read(), ring.is_write_end_closed()));
             if can_read {
-                let mut ring = self.ringbuffer.lock();
-                return Ok(ring.read(buf));
+                return self.ringbuffer.lock(|ring| Ok(ring.read(buf)));
             }
             if write_closed {
                 return Ok(0);
             }
+            // TODO(racy-wakeup): Lock released before suspend creates a race window. Use WaitQueue with atomic check-and-sleep.
             TASK_MANAER.suspend_and_run_task();
         }
     }
@@ -179,11 +178,12 @@ impl Pipe {
         if !self.writeble {
             return Ok(0);
         }
-        let mut ring = self.ringbuffer.lock();
-        if !ring.can_write() {
-            return Ok(0);
-        }
-        ring.write(buf)
+        self.ringbuffer.lock(|ring| {
+            if !ring.can_write() {
+                return Ok(0);
+            }
+            ring.write(buf)
+        })
     }
 }
 
@@ -191,8 +191,8 @@ pub fn make_pipe() -> (Arc<UPSafeCell<Pipe>>, Arc<UPSafeCell<Pipe>>) {
     let ring = Arc::new(UPSafeCell::new(PipeRingBuffer::new()));
     let read_end = Arc::new(UPSafeCell::new(Pipe::new(true, false, ring.clone())));
     let write_end = Arc::new(UPSafeCell::new(Pipe::new(false, true, ring.clone())));
-    ring.lock().set_write_point(Arc::downgrade(&write_end));
-    ring.lock().set_read_point(Arc::downgrade(&read_end));
+    ring.lock(|r| r.set_write_point(Arc::downgrade(&write_end)));
+    ring.lock(|r| r.set_read_point(Arc::downgrade(&read_end)));
     (read_end, write_end)
 }
 
@@ -207,13 +207,15 @@ impl PipeHandle {
 }
 
 impl File for PipeHandle {
+    fn as_any(&self) -> &dyn core::any::Any {
+        self
+    }
+
     fn read(&self, buf: &mut [u8]) -> Result<usize, VfsFsError> {
-        let pipe = self.end.lock();
-        pipe.read(buf)
+        self.end.lock(|pipe| pipe.read(buf))
     }
 
     fn write(&self, buf: &[u8]) -> Result<usize, VfsFsError> {
-        let pipe = self.end.lock();
-        pipe.write(buf)
+        self.end.lock(|pipe| pipe.write(buf))
     }
 }

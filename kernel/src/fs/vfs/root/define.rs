@@ -13,8 +13,14 @@ lazy_static! {
 }
 
 /// 挂载点路径。
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct MountPath(pub String);
+
+impl PartialOrd for MountPath {
+    fn partial_cmp(&self, other: &Self) -> Option<core::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
 
 impl Ord for MountPath {
     fn cmp(&self, other: &Self) -> core::cmp::Ordering {
@@ -33,6 +39,12 @@ impl Ord for MountPath {
 pub struct RootFs {
     pub mount_poinr: BTreeMap<MountPath, Arc<Mutex<dyn VfsFs>>>,
 }
+
+/// 挂载点解析结果：命中的文件系统句柄 + 该 FS 视角下的剩余相对路径。
+type MountResolved = Option<(Arc<Mutex<dyn VfsFs>>, String)>;
+
+/// 挂载点匹配过程中的最优候选：(匹配得分/前缀长度, 文件系统句柄, 剩余路径)。
+type MountCandidate = Option<(usize, Arc<Mutex<dyn VfsFs>>, String)>;
 
 impl RootFs {
     fn normalize_abs_path(path: &str) -> String {
@@ -81,10 +93,10 @@ impl RootFs {
     pub fn resolve_mount_point(
         &self,
         path: &str,
-    ) -> Result<Option<(Arc<Mutex<dyn VfsFs>>, String)>, VfsFsError> {
+    ) -> Result<MountResolved, VfsFsError> {
         let abs = Self::normalize_abs_path(path);
 
-        let mut best: Option<(usize, Arc<Mutex<dyn VfsFs>>, String)> = None;
+        let mut best: MountCandidate = None;
         for (mp, fs) in self.mount_poinr.iter() {
             let mps = Self::normalize_abs_path(mp.0.as_str());
             if !Self::is_component_prefix(&mps, abs.as_str()) {

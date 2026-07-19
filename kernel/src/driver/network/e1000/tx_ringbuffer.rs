@@ -29,13 +29,20 @@
 //!   e1000_transmit(data)         — 写 desc + wmb + 写 TDT doorbell
 //!   e1000_clean_tx_irq()         — DD=1 回收已发送 buffer (中断或轮询调用)
 //! ```
+//!
+//! ## 所有权约定
+//!
+//! 每次发送都会为 payload 分配一页 DMA buffer，并由 `E1000TxBuffer.frame`
+//! 持有所有权。硬件置 DD 后，`e1000_clean_tx_irq()` 取走并 drop 该 frame。
+//! 因此提交 TX 描述符后，上层只需要保留自己的 `NetBuffer` 语义，不持有 DMA
+//! 页生命周期。
 
 use alloc::vec::Vec;
 use log::{debug, info, warn};
 
 use crate::config::PAGE_SIZE;
-use crate::driver::network::e1000::E1000_DEV;
 use crate::driver::network::e1000::netbuffer::NetBuffer;
+use crate::driver::network::e1000::E1000_DEV;
 use crate::driver::pcie::BarSpace;
 use crate::memory::{alloc_contiguous_frames, alloc_frame, FramTracker};
 
@@ -303,8 +310,8 @@ pub fn e1000_setup_link(bar: &BarSpace, full_duplex: bool) {
         10 // DEFAULT_82542_TIPG_IPGT (半双工)
     };
     let tipg = (tipg_ipgt & 0x3FF)                      // IPGT
-        | ((8 as u32) & 0x3FF) << E1000_TIPG_IPGR1_SHIFT // IPGR1 = 8
-        | ((6 as u32) & 0x3FF) << E1000_TIPG_IPGR2_SHIFT; // IPGR2 = 6
+        | (8u32 & 0x3FF) << E1000_TIPG_IPGR1_SHIFT // IPGR1 = 8
+        | (6u32 & 0x3FF) << E1000_TIPG_IPGR2_SHIFT; // IPGR2 = 6
     bar.write_32(E1000_TIPG, tipg);
 
     // 4. 初始化流控制寄存器
@@ -370,7 +377,7 @@ pub fn e1000_setup_tx_resources(ring: &mut E1000TxRing, count: usize) {
     // 参考: e1000_main.c:1778-1783
     let desc_len = core::mem::size_of::<E1000TxDesc>();
     let ring_bytes = count * desc_len;
-    let pages_needed = (ring_bytes + PAGE_SIZE - 1) / PAGE_SIZE;
+    let pages_needed = ring_bytes.div_ceil(PAGE_SIZE);
 
     let frames = alloc_contiguous_frames(pages_needed)
         .expect("e1000: failed to allocate contiguous frames for tx desc ring");
@@ -461,43 +468,44 @@ pub fn e1000_configure_tx(bar: &BarSpace, ring: &E1000TxRing) {
 /// - 中断处理程序中检测到 TXDW (TX Descriptor Done) 事件时
 /// - 发送前检查是否有可用槽位时
 pub fn e1000_clean_tx_irq() -> usize {
-    let mut e1000 = E1000_DEV.lock();
-    let dev =(*e1000).as_mut().expect("no dev");
-    let bar =&dev.bar;
-    let ring = &mut dev.tx_ring;
-    let hw_head = bar.read_32(E1000_TDH) as usize;
-    let mut i = ring.next_to_clean;
-    let mut cleaned = 0;
+    E1000_DEV.lock(|e1000| {
+        let dev = (*e1000).as_mut().expect("no dev");
+        let bar = &dev.bar;
+        let ring = &mut dev.tx_ring;
+        let hw_head = bar.read_32(E1000_TDH) as usize;
+        let mut i = ring.next_to_clean;
+        let mut cleaned = 0;
 
-    // 遍历所有 TDH 已经越过的描述符
-    while i != hw_head {
-        // SAFETY: i 在 [0, count) 范围内
-        let status = unsafe { core::ptr::read_volatile(&(*ring.desc.add(i)).status) };
-        if (status & E1000_TXD_STAT_DD) == 0 {
-            break; // 硬件还没发送完成
+        // 遍历所有 TDH 已经越过的描述符
+        while i != hw_head {
+            // SAFETY: i 在 [0, count) 范围内
+            let status = unsafe { core::ptr::read_volatile(&(*ring.desc.add(i)).status) };
+            if (status & E1000_TXD_STAT_DD) == 0 {
+                break; // 硬件还没发送完成
+            }
+
+            // 释放 DMA 缓冲区物理页
+            if let Some(frame) = ring.buffer_info[i].frame.take() {
+                let _ = frame;
+                // frame dropped here → dealloc_frame
+            }
+            ring.buffer_info[i].data = core::ptr::null_mut();
+            ring.buffer_info[i].dma = 0;
+            ring.buffer_info[i].len = 0;
+
+            i = (i + 1) % ring.count;
+            cleaned += 1;
         }
 
-        // 释放 DMA 缓冲区物理页
-        if let Some(frame) = ring.buffer_info[i].frame.take() {
-            let _ = frame;
-            // frame dropped here → dealloc_frame
+        ring.next_to_clean = i;
+
+        if cleaned > 0 {
+            // TODO(TX): 唤醒等待发送的任务
+            debug!("e1000: tx cleaned {} descriptors", cleaned);
         }
-        ring.buffer_info[i].data = core::ptr::null_mut();
-        ring.buffer_info[i].dma = 0;
-        ring.buffer_info[i].len = 0;
 
-        i = (i + 1) % ring.count;
-        cleaned += 1;
-    }
-
-    ring.next_to_clean = i;
-
-    if cleaned > 0 {
-        // TODO(TX): 唤醒等待发送的任务
-        debug!("e1000: tx cleaned {} descriptors", cleaned);
-    }
-
-    cleaned
+        cleaned
+    })
 }
 
 /// 提交一帧数据到 TX 描述符环

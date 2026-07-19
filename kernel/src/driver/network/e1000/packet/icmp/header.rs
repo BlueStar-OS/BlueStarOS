@@ -304,10 +304,16 @@ impl IcmpHeader {
     }
 
     /// 以大端序返回 ICMP 头部字节切片。
+    // clippy::wrong_self_convention: 返回的切片借自 `self` 自身内存，必须按 `&self`
+    // 借用；若按值接收 `self`，返回的切片会指向已销毁的临时量，造成悬垂引用。
+    #[allow(clippy::wrong_self_convention)]
     pub fn to_be_bytes(&self) -> &[u8] {
         // SAFETY: `IcmpHeader` 为 packed 且固定 8 字节。
         unsafe {
-            core::slice::from_raw_parts(self as *const Self as *const u8, core::mem::size_of::<Self>())
+            core::slice::from_raw_parts(
+                self as *const Self as *const u8,
+                core::mem::size_of::<Self>(),
+            )
         }
     }
 

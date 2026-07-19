@@ -29,12 +29,7 @@ use super::helper::udp_checksum;
 ///
 /// 数据流:
 /// `payload(data only)` -> `push UdpHeader` -> `fill checksum` -> `send_ipv4_packet()`
-pub fn send_udp_packet(
-    target_ip: [u8; 4],
-    src_port: u16,
-    dst_port: u16,
-    payload: NetBuffer,
-) {
+pub fn send_udp_packet(target_ip: [u8; 4], src_port: u16, dst_port: u16, payload: NetBuffer) {
     let payload_len = payload.data_len() as u16;
     let udp_total_len = 8 + payload_len;
 

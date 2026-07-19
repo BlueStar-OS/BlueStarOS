@@ -42,9 +42,8 @@ impl Log for SimpleLogger {
 /// initiate logger
 pub fn init() {
     static LOGGER: SimpleLogger = SimpleLogger;
-    let err = log::set_logger(&LOGGER).err();
-    if err.is_some() {
-        kprintln!("Error Occuput :{} ", err.unwrap());
+    if let Some(err) = log::set_logger(&LOGGER).err() {
+        kprintln!("Error Occuput :{} ", err);
     }
     log::set_max_level(match option_env!("LOG") {
         Some("ERROR") => LevelFilter::Error,

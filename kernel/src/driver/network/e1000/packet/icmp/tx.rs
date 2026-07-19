@@ -44,12 +44,7 @@ fn finalize_icmp_and_send(target_ip: [u8; 4], mut payload: NetBuffer, icmp_hdr: 
 ///
 /// 数据流:
 /// `payload(data only)` -> `push IcmpHeader` -> `send_ipv4_packet()`
-pub fn send_icmp_packet(
-    target_ip: [u8; 4],
-    kind: IcmpKind,
-    rest_host: u32,
-    payload: NetBuffer,
-) {
+pub fn send_icmp_packet(target_ip: [u8; 4], kind: IcmpKind, rest_host: u32, payload: NetBuffer) {
     let icmp_hdr = IcmpHeader::new(kind, rest_host);
     finalize_icmp_and_send(target_ip, payload, icmp_hdr);
 }
@@ -58,12 +53,7 @@ pub fn send_icmp_packet(
 ///
 /// `payload` 只包含 Echo 的附加数据区，不包含现成 ICMP 头。
 /// `ident` 和 `sequence` 会被编码进 ICMP 固定头的 `rest` 4 字节。
-pub fn send_icmp_echo_request(
-    target_ip: [u8; 4],
-    ident: u16,
-    sequence: u16,
-    payload: NetBuffer,
-) {
+pub fn send_icmp_echo_request(target_ip: [u8; 4], ident: u16, sequence: u16, payload: NetBuffer) {
     let icmp_hdr = IcmpHeader::new_echo(IcmpKind::EchoRequest, ident, sequence);
     finalize_icmp_and_send(target_ip, payload, icmp_hdr);
 }
@@ -76,12 +66,7 @@ pub fn send_icmp_echo_request(
 ///
 /// 对齐 Linux `icmp_echo()` 的处理语义：
 /// `/home/inkbottle/桌面/linux-5.4.29/net/ipv4/icmp.c:917-941`
-pub fn send_icmp_echo_reply(
-    target_ip: [u8; 4],
-    ident: u16,
-    sequence: u16,
-    payload: NetBuffer,
-) {
+pub fn send_icmp_echo_reply(target_ip: [u8; 4], ident: u16, sequence: u16, payload: NetBuffer) {
     let icmp_hdr = IcmpHeader::new_echo(IcmpKind::EchoReply, ident, sequence);
     finalize_icmp_and_send(target_ip, payload, icmp_hdr);
 }

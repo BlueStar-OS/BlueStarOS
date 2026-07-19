@@ -37,7 +37,5 @@ pub fn register_kernel_mmio(range: VirNumRange, flags: MapAreaFlags) {
         start_addr.0,
         end_addr.0
     );
-    KERNEL_MEMORY_SPACE_LIST
-        .lock()
-        .push(PreFlectMemory::new(range, flags));
+    KERNEL_MEMORY_SPACE_LIST.lock(|list| list.push(PreFlectMemory::new(range, flags)));
 }

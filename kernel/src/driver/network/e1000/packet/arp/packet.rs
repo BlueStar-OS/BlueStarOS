@@ -46,6 +46,9 @@ unsafe impl NetHeader for ArpHeader {
 
 impl ArpHeader {
     /// 构造一个 ARP 报文头。
+    // clippy::too_many_arguments: 这些入参一一对应 ARP 报文头的各个协议字段，
+    // 是硬件/协议定义的固有形状，聚合成结构体只会引入一层无意义的中间类型。
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         hw_type: u16,
         proto_type: u16,
@@ -71,6 +74,7 @@ impl ArpHeader {
     }
 
     /// 返回网络字节序视图。
+    #[allow(clippy::wrong_self_convention)]
     pub fn to_be_bytes(&self) -> &[u8] {
         // SAFETY: `ArpHeader` 为 packed 且线速布局固定 28 字节。
         unsafe { core::slice::from_raw_parts(self as *const Self as *const u8, 28) }

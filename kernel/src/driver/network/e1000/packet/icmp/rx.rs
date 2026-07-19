@@ -15,7 +15,7 @@ use crate::driver::network::e1000::packet::icmp::send_icmp_echo_reply;
 use crate::driver::network::e1000::packet::ipv4::config::MY_IPV4;
 
 /// 处理一个已经剥离 IPv4 头的 ICMP 报文。
-pub fn icmp_receive(mut payload: NetBuffer,ethheader:EthHead,iphead:IPv4Header) {
+pub fn icmp_receive(mut payload: NetBuffer, ethheader: EthHead, iphead: IPv4Header) {
     if payload.data_len() < ICMP_HEADER_LEN {
         warn!("ICMP 包长度不足 {} 字节，直接丢弃", ICMP_HEADER_LEN);
         return;
@@ -57,7 +57,10 @@ pub fn icmp_receive(mut payload: NetBuffer,ethheader:EthHead,iphead:IPv4Header) 
             );
         }
         IcmpKind::DestUnreach(code) => {
-            debug!("ICMP Destination Unreachable {:?}，当前仅保留分发框架", code);
+            debug!(
+                "ICMP Destination Unreachable {:?}，当前仅保留分发框架",
+                code
+            );
         }
         IcmpKind::TimeExceeded(code) => {
             debug!("ICMP Time Exceeded {:?}，当前仅保留分发框架", code);

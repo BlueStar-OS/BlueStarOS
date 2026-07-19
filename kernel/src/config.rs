@@ -42,6 +42,8 @@ extern "C" {
     pub fn utraper();
     pub fn app_start(); //测试应用地址
     pub fn app_end(); //测试应用地址
+    /// secondary hart 入口地址 (entry.asm)
+    pub fn _blue_secondary_start();
 }
 
 /// consent mode
@@ -89,7 +91,5 @@ pub const ARCHITECTURE: &str = "riscv64";
 use crate::{sync::UPSafeCell, MapSet};
 use lazy_static::lazy_static;
 lazy_static! {
-        pub static ref KERNEL_SPACE:UPSafeCell<MapSet> =unsafe {
-            UPSafeCell::new( MapSet::new_kernel())//内核地址空间，必须持有,从来不会丢弃
-        };
+        pub static ref KERNEL_SPACE:UPSafeCell<MapSet> =UPSafeCell::new( MapSet::new_kernel()); //内核地址空间，必须持有,从来不会丢弃
 }

@@ -38,19 +38,21 @@ fn virtio_device_name(device_id: u32) -> &'static str {
 }
 
 fn record_virtio_mmio_device(device: VirtioMmioDevice) {
-    let mut devices = VIRTIO_MMIO_DEVICES.lock();
-    if devices.iter().any(|existing| existing.base == device.base) {
-        return;
-    }
-    devices.push(device);
+    VIRTIO_MMIO_DEVICES.lock(|devices| {
+        if devices.iter().any(|existing| existing.base == device.base) {
+            return;
+        }
+        devices.push(device);
+    });
 }
 
 fn find_virtio_mmio_device(device_id: u32) -> Option<VirtioMmioDevice> {
-    let devices = VIRTIO_MMIO_DEVICES.lock();
-    devices
-        .iter()
-        .copied()
-        .find(|device| device.device_id == device_id)
+    VIRTIO_MMIO_DEVICES.lock(|devices| {
+        devices
+            .iter()
+            .copied()
+            .find(|device| device.device_id == device_id)
+    })
 }
 
 fn virtio_mmio_probe(node: &DeviceNode, _compatible: &str) -> Result<(), &'static str> {
@@ -172,17 +174,17 @@ unsafe impl Sync for VirtBlk {}
 
 impl crate::fs::vfs::BlockDevTrait for VirtBlk {
     fn read_block(&mut self, lba: usize, buf: &mut [u8]) -> Result<(), crate::fs::vfs::VfsFsError> {
-        self.0
-            .lock()
-            .read_block(lba, buf)
-            .map_err(|_| crate::fs::vfs::VfsFsError::IO)
+        self.0.lock(|blk| {
+            blk.read_block(lba, buf)
+                .map_err(|_| crate::fs::vfs::VfsFsError::IO)
+        })
     }
 
     fn write_block(&mut self, lba: usize, buf: &[u8]) -> Result<(), crate::fs::vfs::VfsFsError> {
-        self.0
-            .lock()
-            .write_block(lba, buf)
-            .map_err(|_| crate::fs::vfs::VfsFsError::IO)
+        self.0.lock(|blk| {
+            blk.write_block(lba, buf)
+                .map_err(|_| crate::fs::vfs::VfsFsError::IO)
+        })
     }
 
     /// 当前 virtio-blk 适配层没有单独维护写回缓存。
@@ -243,22 +245,23 @@ impl Hal for VirtioHal {
             core::slice::from_raw_parts_mut(base_addr.0 as *mut u8, len).fill(0);
         }
 
-        QUEUE_FRAMES.lock().push((base_addr.0, frames));
+        QUEUE_FRAMES.lock(|q| q.push((base_addr.0, frames)));
         base_addr.0
     }
 
     fn dma_dealloc(paddr: virtio_drivers::PhysAddr, pages: usize) -> i32 {
-        let mut q = QUEUE_FRAMES.lock();
-        if let Some(pos) = q
-            .iter()
-            .position(|(base, v)| *base == paddr && v.len() == pages)
-        {
-            let (_, frames) = q.remove(pos);
-            drop(frames);
-            0
-        } else {
-            -1
-        }
+        QUEUE_FRAMES.lock(|q| {
+            if let Some(pos) = q
+                .iter()
+                .position(|(base, v)| *base == paddr && v.len() == pages)
+            {
+                let (_, frames) = q.remove(pos);
+                drop(frames);
+                0
+            } else {
+                -1
+            }
+        })
     }
 
     fn phys_to_virt(paddr: virtio_drivers::PhysAddr) -> virtio_drivers::VirtAddr {

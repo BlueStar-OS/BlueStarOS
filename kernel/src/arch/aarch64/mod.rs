@@ -51,7 +51,7 @@ pub fn arch_init() {
     debug!("Kernel init success!");
 
     set_kernel_trap_handler();
-    KERNEL_SPACE.lock().activate();
+    KERNEL_SPACE.lock(|ks| ks.activate());
     disable_timer_interrupt();
     gicd::gic_init();
     keyboard::enable_uart_rx_interrupt();

@@ -4,7 +4,7 @@ use crate::fs::fs_backend::RamFs;
 use crate::fs::partition::gpt::{parsing_gpt_entries, parsing_gpt_header, GptPartitionName};
 use crate::fs::partition::mbr::{parsing_mbr_partition, MbrPartitionType};
 use crate::fs::vfs::dm_liner::DmlinerEntry;
-use crate::fs::vfs::{global_block_devices, BlockDevTrait, File, VfsFsError, BLOCKDEVFILE};
+use crate::fs::vfs::{global_block_devices, BlockDevTrait, File, VfsFsError, BlockDevFile};
 use alloc::{string::String, sync::Arc, vec::Vec};
 use log::{debug, warn};
 use spin::Mutex;
@@ -61,7 +61,7 @@ impl RootFs {
             total_sectors.saturating_mul(SECTOR_SIZE as u64)
         );
 
-        let whole = Arc::new(BLOCKDEVFILE::new(
+        let whole = Arc::new(BlockDevFile::new(
             blk.clone(),
             DmlinerEntry::new(0, total_sectors),
         )) as Arc<dyn crate::fs::vfs::File>;
@@ -112,7 +112,7 @@ impl RootFs {
                     entry.start_lba,
                     entry.sectors
                 );
-                let dev = Arc::new(BLOCKDEVFILE::new(
+                let dev = Arc::new(BlockDevFile::new(
                     blk.clone(),
                     DmlinerEntry::new(entry.start_lba, entry.sectors),
                 )) as Arc<dyn crate::fs::vfs::File>;
@@ -182,7 +182,7 @@ impl RootFs {
                 gp.start_lba,
                 gp.sectors
             );
-            let dev = Arc::new(BLOCKDEVFILE::new(
+            let dev = Arc::new(BlockDevFile::new(
                 blk.clone(),
                 DmlinerEntry::new(gp.start_lba, gp.sectors),
             )) as Arc<dyn crate::fs::vfs::File>;
@@ -212,7 +212,7 @@ impl RootFs {
             let dev_path = Self::block_device_name(idx);
             let total_sectors = blk.lock().capacity_in_sectors();
 
-            let raw = Arc::new(BLOCKDEVFILE::new(
+            let raw = Arc::new(BlockDevFile::new(
                 blk.clone(),
                 DmlinerEntry::new(0, total_sectors),
             )) as Arc<dyn File>;
@@ -240,7 +240,7 @@ impl RootFs {
                 } else {
                     for (part_idx, entry) in parts.into_iter().enumerate() {
                         let part_path = alloc::format!("{}{}", dev_path, part_idx + 1);
-                        let part = Arc::new(BLOCKDEVFILE::new(
+                        let part = Arc::new(BlockDevFile::new(
                             blk.clone(),
                             DmlinerEntry::new(entry.start_lba, entry.sectors),
                         )) as Arc<dyn File>;
@@ -290,7 +290,7 @@ impl RootFs {
             {
                 let part_path = alloc::format!("{}{}", dev_path, part_idx + 1);
                 let is_gpt_rootfs = matches!(&entry.metadata.name, GptPartitionName::Named(name) if name == "rootfs");
-                let part = Arc::new(BLOCKDEVFILE::new(
+                let part = Arc::new(BlockDevFile::new(
                     blk.clone(),
                     DmlinerEntry::new(entry.start_lba, entry.sectors),
                 )) as Arc<dyn File>;
@@ -307,12 +307,14 @@ impl RootFs {
 
     /// 扫描全部已注册块设备，并在根 ramfs 下创建块设备节点。
     pub fn scan_and_build_vblock_device() -> Result<(), VfsFsError> {
-        let root = ROOTFS.lock();
-        let root = root.as_ref().ok_or(VfsFsError::IO)?;
-        let (fs, sub) = root.resolve_mount_point("/")?.ok_or(VfsFsError::NotFound)?;
-        if sub != "/" {
-            return Err(VfsFsError::IO);
-        }
+        let (fs, sub) = ROOTFS.lock(|root| {
+            let root = root.as_ref().ok_or(VfsFsError::IO)?;
+            let (fs, sub) = root.resolve_mount_point("/")?.ok_or(VfsFsError::NotFound)?;
+            if sub != "/" {
+                return Err(VfsFsError::IO);
+            }
+            Ok((fs, sub))
+        })?;
 
         let mut guard = fs.lock();
         let ramfs = guard

@@ -55,7 +55,7 @@ pub fn sys_rt_sigprocmask(how: i32, nset: usize, oset: usize, sigsetsize: usize)
     }
 
     // how 参数校验（include/uapi/asm-generic/signal-defs.h:7-15）
-    if how < 0 || how > 2 {
+    if !(0..=2).contains(&how) {
         return -crate::error::BlueErr::EINVAL.as_isize();
     }
 

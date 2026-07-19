@@ -98,7 +98,8 @@ pub struct Console {
     pub state: AnsiState,              // ANSI 解析状态 (不公开)
 }
 
-pub static mut VgaScreen: Console = Console {
+// TODO(concurrency): VGA_SCREEN accessed from Stdout::write and Stdin::ioctl without lock. Concurrent access corrupts cursor/buffer state.
+pub static mut VGA_SCREEN: Console = Console {
     fb_base: core::ptr::null_mut(),
     soft_buffer: Vec::new(),
     width: 0,
@@ -112,6 +113,25 @@ pub static mut VgaScreen: Console = Console {
     bold: false,
     state: AnsiState::Normal,
 };
+
+/// 获取全局 VGA 控制台的共享引用。
+///
+/// # Safety
+/// 调用方必须保证在返回引用的存活期间，没有其它代码对 `VGA_SCREEN` 进行可变访问。
+/// 当前内核尚未对该全局加锁（见上方 `TODO(concurrency)`），并发访问会破坏光标/缓冲区状态。
+pub unsafe fn vga_screen() -> &'static Console {
+    // SAFETY: 先经 `addr_of!` 取址再解引用，避免对 `static mut` 直接建引用（static_mut_refs）。
+    unsafe { &*core::ptr::addr_of!(VGA_SCREEN) }
+}
+
+/// 获取全局 VGA 控制台的可变引用。
+///
+/// # Safety
+/// 语义同 [`vga_screen`]，且额外要求同一时刻仅存在这一个可变引用，不与任何共享引用并存。
+pub unsafe fn vga_screen_mut() -> &'static mut Console {
+    // SAFETY: 先经 `addr_of_mut!` 取址再解引用，避免对 `static mut` 直接建引用（static_mut_refs）。
+    unsafe { &mut *core::ptr::addr_of_mut!(VGA_SCREEN) }
+}
 
 impl Console {
     /// 向终端输出一个字符，自动识别 ANSI 转义序列并改变颜色。
@@ -286,8 +306,7 @@ impl Console {
         let pixel_x = self.cursor_x * self.font_x as usize;
         let pixel_y = self.cursor_y * self.font_y as usize;
 
-        for row in 0..self.font_y as usize {
-            let row_data = font_data[row];
+        for (row, &row_data) in font_data.iter().take(self.font_y as usize).enumerate() {
             for col in 0..self.font_x as usize {
                 let color = if (row_data >> (7 - col)) & 1 == 1 {
                     self.foreground
@@ -433,12 +452,12 @@ impl Console {
     }
 
     /// 字符列数。
-    fn cols(&self) -> usize {
+    pub fn cols(&self) -> usize {
         core::cmp::max(1, self.width / self.font_x as usize)
     }
 
     /// 字符行数。
-    fn rows(&self) -> usize {
+    pub fn rows(&self) -> usize {
         core::cmp::max(1, self.height / self.font_y as usize)
     }
 

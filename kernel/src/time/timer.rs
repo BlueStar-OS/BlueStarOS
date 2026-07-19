@@ -50,7 +50,7 @@ pub fn get_time_ns() -> usize {
 /// 不在此函数内做额外耗时检查，因为定时器中断处理路径要求极低延迟。
 /// 即使因调用延迟导致计算值 < 当前 mtime，硬件会立即触发一次中断，
 /// 等价于提前触发，无副作用。
-pub fn set_next_timeInterupt() {
+pub fn set_next_time_interupt() {
     let next_time = get_time_tick() + CPU_CIRCLE / TIME_FREQUENT;
     set_next_timetriger(next_time);
 }

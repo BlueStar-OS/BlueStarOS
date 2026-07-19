@@ -7,10 +7,11 @@ use crate::arch::TrapContext;
 use crate::config::{__kernel_refume, __kernel_trap, TRAP_BOTTOM_ADDR, TRAP_CONTEXT_ADDR};
 use crate::syscall::syscall_handler;
 use crate::task::TASK_MANAER;
-use crate::time::set_next_timeInterupt;
-use crate::trap::pagefaultHandler::PageFaultHandler;
+use crate::time::set_next_time_interupt;
+use crate::trap::pagefault_handler::page_fault_handler;
 use crate::trap::recycle_pending_kstacks;
 use core::arch::asm;
+use log::debug;
 use log::error;
 use riscv::register::satp;
 use riscv::register::scause::Interrupt;
@@ -96,23 +97,22 @@ pub extern "C" fn kernel_trap_handler() {
         }
         Trap::Exception(Exception::InstructionPageFault) => {
             log_user_fault_detail("User InstructionPageFault");
-            PageFaultHandler(VirAddr(stval_val), scauses);
+            page_fault_handler(VirAddr(stval_val), scauses);
         }
         Trap::Exception(Exception::LoadPageFault) => {
             log_user_fault_detail("User LoadPageFault");
-            PageFaultHandler(VirAddr(stval_val), scauses);
+            page_fault_handler(VirAddr(stval_val), scauses);
         }
         Trap::Exception(Exception::StorePageFault) => {
             log_user_fault_detail("User StorePageFault");
-            PageFaultHandler(VirAddr(stval_val), scauses);
+            page_fault_handler(VirAddr(stval_val), scauses);
         }
         Trap::Interrupt(Interrupt::SupervisorTimer) => {
-            set_next_timeInterupt();
+            set_next_time_interupt();
             TASK_MANAER.resolve_current_task_signal();
             TASK_MANAER.suspend_and_run_task();
         }
         Trap::Interrupt(Interrupt::SupervisorExternal) => {
-            error!("用户态外部中断");
             driver::plic::dispatch_irq();
         }
         _ => {

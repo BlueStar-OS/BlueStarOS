@@ -1,4 +1,5 @@
 pub mod driver;
+pub mod ipi;
 pub mod memory;
 pub mod panic;
 pub mod sbi;
@@ -13,9 +14,15 @@ use crate::init_frame_allocator_from_dtb;
 use crate::kernel_info_debug;
 use crate::kprintln;
 use crate::logger;
-use crate::set_next_timeInterupt;
+use crate::memory::KERNEL_MAIN_MEMORY;
+use crate::set_next_time_interupt;
+use crate::task::run_first_task;
+use crate::time::kernel_sleep;
 pub use core::arch::asm;
 use core::arch::global_asm;
+use core::sync::atomic::fence;
+use core::sync::atomic::Ordering::Release;
+use core::sync::atomic::{compiler_fence, Ordering};
 use log::debug;
 pub use riscv::register::satp;
 use riscv::register::sie;
@@ -41,16 +48,20 @@ pub fn arch_init() {
     allocator_init();
     dtb::init();
 
+    fence(Release);
+
     kprintln!("Logger start inited");
     logger::init();
     kprintln!("Logger inited");
     kprintln!("Inital Physical Memory Alloctor");
+
     init_frame_allocator_from_dtb(ekernel as *const () as usize);
     dtb::run_device_probes();
     kernel_info_debug();
 
     driver::plic::plic_init();
     keyboard::enable_uart_rx_interrupt();
+
     enable_external_interrupt();
 
     kprintln!("Welcome to BlueStarOS!");
@@ -61,11 +72,11 @@ pub fn arch_init() {
     // 开启内核中断
     enable_irq();
 
-    KERNEL_SPACE.lock().activate();
+    KERNEL_SPACE.lock(|ks| ks.activate());
 
     rather_global_interrupt();
     enable_timer_interrupt();
-    set_next_timeInterupt();
+    set_next_time_interupt();
 }
 
 pub fn set_kernel_trap_handler() {

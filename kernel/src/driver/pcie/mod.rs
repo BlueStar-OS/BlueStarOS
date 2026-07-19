@@ -86,8 +86,7 @@ impl BarSpace {
             return 0;
         }
         unsafe {
-            let value = read_volatile(addr as *const u16);
-            return value;
+            read_volatile(addr as *const u16)
         }
     }
     pub fn write_16(&self, offset: usize, value: u16) {
@@ -121,8 +120,7 @@ impl BarSpace {
             return 0;
         }
         unsafe {
-            let value = read_volatile(addr as *const u32);
-            return value;
+            read_volatile(addr as *const u32)
         }
     }
     pub fn write_32(&self, offset: usize, value: u32) {
@@ -156,8 +154,7 @@ impl BarSpace {
             return 0;
         }
         unsafe {
-            let value = read_volatile(addr as *const u64);
-            return value;
+            read_volatile(addr as *const u64)
         }
     }
     pub fn write_64(&self, offset: usize, value: u64) {
@@ -239,52 +236,52 @@ lazy_static! {
 ///
 /// 如果同一个 BDF 被重复注册，则使用新结果覆盖旧结果，避免重扫后保留旧快照。
 pub fn register_pcie_device(device_info: PcieDeviceInfo) {
-    let mut devices = PCIE_DEVICES.lock();
-    if let Some(existing_device) = devices.iter_mut().find(|existing_device| {
-        existing_device.bus_number == device_info.bus_number
-            && existing_device.device_number == device_info.device_number
-            && existing_device.function_number == device_info.function_number
-    }) {
-        *existing_device = device_info;
-        return;
-    }
-
-    devices.push(device_info);
+    PCIE_DEVICES.lock(|devices| {
+        if let Some(existing_device) = devices.iter_mut().find(|existing_device| {
+            existing_device.bus_number == device_info.bus_number
+                && existing_device.device_number == device_info.device_number
+                && existing_device.function_number == device_info.function_number
+        }) {
+            *existing_device = device_info;
+            return;
+        }
+        devices.push(device_info);
+    });
 }
 
 /// 清空全局 PCIe 设备注册表。
 ///
 /// 每次从根总线重新扫描前都应调用，避免旧的枚举结果残留。
 pub fn clear_pcie_devices() {
-    PCIE_DEVICES.lock().clear();
+    PCIE_DEVICES.lock(|d| d.clear());
 }
 
 /// 获取当前全部 PCIe 设备的快照。
 ///
 /// 返回副本而不是直接暴露全局表，避免调用方长期持有全局锁。
 pub fn collect_pcie_devices() -> Vec<PcieDeviceInfo> {
-    PCIE_DEVICES.lock().iter().cloned().collect()
+    PCIE_DEVICES.lock(|d| d.to_vec())
 }
 
 /// 按目标筛选器收集 PCIe 设备。
 pub fn collect_pcie_devices_by_target<Target: PcieDeviceTarget>() -> Vec<PcieDeviceInfo> {
-    PCIE_DEVICES
-        .lock()
-        .iter()
-        .filter(|device_info| Target::matches(device_info))
-        .cloned()
-        .collect()
+    PCIE_DEVICES.lock(|d| {
+        d.iter()
+            .filter(|device_info| Target::matches(device_info))
+            .cloned()
+            .collect()
+    })
 }
 
 /// 按 vendor/device id 查找第一个匹配设备。
 pub fn find_pcie_device(vendor_id: u16, device_id: u16) -> Option<PcieDeviceInfo> {
-    PCIE_DEVICES
-        .lock()
-        .iter()
-        .find(|device_info| {
-            device_info.vendor_id == vendor_id && device_info.device_id == device_id
-        })
-        .cloned()
+    PCIE_DEVICES.lock(|d| {
+        d.iter()
+            .find(|device_info| {
+                device_info.vendor_id == vendor_id && device_info.device_id == device_id
+            })
+            .cloned()
+    })
 }
 
 /// 按 BDF 精确查找一个 PCIe 功能。
@@ -293,15 +290,15 @@ pub fn find_pcie_device_by_bdf(
     device_number: u8,
     function_number: u8,
 ) -> Option<PcieDeviceInfo> {
-    PCIE_DEVICES
-        .lock()
-        .iter()
-        .find(|device_info| {
-            device_info.bus_number == bus_number
-                && device_info.device_number == device_number
-                && device_info.function_number == function_number
-        })
-        .cloned()
+    PCIE_DEVICES.lock(|d| {
+        d.iter()
+            .find(|device_info| {
+                device_info.bus_number == bus_number
+                    && device_info.device_number == device_number
+                    && device_info.function_number == function_number
+            })
+            .cloned()
+    })
 }
 
 // ─── 总线号 newtype ───────────────────────────────────────────────────
@@ -473,10 +470,14 @@ fn is_qemu_edu_device(vendor_id: u16, device_id: u16) -> bool {
 // ─── 全局状态 ────────────────────────────────────────────────────────
 
 /// ECAM 基地址，设备树探测后填入
+// TODO(soundness): static mut written at boot, read later. Use OnceLock or UPSafeCell.
 static mut PCIE_ECAM_ADDR: usize = 0;
 
 // ─── 日志宏 ──────────────────────────────────────────────────────────
 
+/// 输出 PCIe 子系统的日志信息。
+///
+/// 用法: `pcie_log!("device {} probed", vid);`
 #[macro_export]
 macro_rules! pcie_log {
     ($fmt: literal $(, $($arg: tt)+)?) => {
@@ -499,7 +500,6 @@ pub fn pci_enable_device(bus: u8, dev: u8, func: u8, command_value: u16) {
             "[PCIE]: command set error, expect {:#x} real {:#x}",
             command_value, new_cmd
         );
-        return;
     }
     // TODO(dirinkbottle): 如果后续要做更细粒度的设备初始化，
     // 可以把 command bit 的打开拆成“按资源类型逐步打开”。
@@ -915,9 +915,14 @@ fn first_memory_bar_base_addr(probed_bars: &[PcieBarInfo]) -> Option<PhysiAddr> 
 /// 参考 Linux 5.4 的设备发现顺序：
 /// 1. `pci_setup_device()` 先读取 header/class/BAR 等基础信息；
 /// 2. 后续桥扫描和具体驱动绑定都消费这份“已经解析好的设备描述”。
+///
 /// 参考文件：
 ///   - `/home/inkbottle/桌面/linux-5.4.29/drivers/pci/probe.c:1792-1854`
 ///   - `/home/inkbottle/桌面/linux-5.4.29/drivers/pci/probe.c:320-335`
+// clippy::too_many_arguments: 这些参数分别来自一次枚举中读到的 header/class/BAR
+// 等独立字段，语义上就是设备描述的原始输入，聚合成结构体反而会在唯一调用点引入
+// 一次多余的中间构造，收益不大。
+#[allow(clippy::too_many_arguments)]
 fn build_pcie_device_info(
     bus: BusNo,
     dev: u8,
@@ -959,41 +964,44 @@ fn collect_stage1_bridge_memory_window(
     secondary_bus: BusNo,
     subordinate_bus: BusNo,
 ) -> BridgeMemoryWindowCollection {
-    let devices = PCIE_DEVICES.lock();
-    let mut raw_window_start_addr = u64::MAX;
-    let mut raw_window_end_addr_inclusive = 0u64;
+    PCIE_DEVICES.lock(|devices| {
+        let mut raw_window_start_addr = u64::MAX;
+        let mut raw_window_end_addr_inclusive = 0u64;
 
-    for device_info in devices.iter().filter(|device_info| {
-        device_info.bus_number >= secondary_bus.value()
-            && device_info.bus_number <= subordinate_bus.value()
-    }) {
-        for bar_info in device_info.bars.iter().filter(|bar_info| {
-            bar_info.size != 0
-                && matches!(
-                    bar_info.space,
-                    PcieBarSpace::Memory32 | PcieBarSpace::Memory64
-                )
+        for device_info in devices.iter().filter(|device_info| {
+            device_info.bus_number >= secondary_bus.value()
+                && device_info.bus_number <= subordinate_bus.value()
         }) {
-            raw_window_start_addr = raw_window_start_addr.min(bar_info.base_addr);
-            raw_window_end_addr_inclusive =
-                raw_window_end_addr_inclusive.max(bar_info.base_addr + bar_info.size - 1);
+            for bar_info in device_info.bars.iter().filter(|bar_info| {
+                bar_info.size != 0
+                    && matches!(
+                        bar_info.space,
+                        PcieBarSpace::Memory32 | PcieBarSpace::Memory64
+                    )
+            }) {
+                raw_window_start_addr = raw_window_start_addr.min(bar_info.base_addr);
+                raw_window_end_addr_inclusive =
+                    raw_window_end_addr_inclusive.max(bar_info.base_addr + bar_info.size - 1);
+            }
         }
-    }
 
-    if raw_window_start_addr == u64::MAX {
-        return BridgeMemoryWindowCollection::Empty;
-    }
+        if raw_window_start_addr == u64::MAX {
+            return BridgeMemoryWindowCollection::Empty;
+        }
 
-    match BridgeMemoryWindow32::from_device_span(
-        raw_window_start_addr,
-        raw_window_end_addr_inclusive,
-    ) {
-        Some(bridge_memory_window) => BridgeMemoryWindowCollection::Window32(bridge_memory_window),
-        None => BridgeMemoryWindowCollection::Unsupported64BitRange {
-            raw_start_addr: raw_window_start_addr,
-            raw_end_addr_inclusive: raw_window_end_addr_inclusive,
-        },
-    }
+        match BridgeMemoryWindow32::from_device_span(
+            raw_window_start_addr,
+            raw_window_end_addr_inclusive,
+        ) {
+            Some(bridge_memory_window) => {
+                BridgeMemoryWindowCollection::Window32(bridge_memory_window)
+            }
+            None => BridgeMemoryWindowCollection::Unsupported64BitRange {
+                raw_start_addr: raw_window_start_addr,
+                raw_end_addr_inclusive: raw_window_end_addr_inclusive,
+            },
+        }
+    })
 }
 
 /// 把当前阶段收集到的 32 位普通 memory window 编码进桥配置空间。
@@ -1229,7 +1237,7 @@ fn pci_probe_callback(node: &DeviceNode, _compatible: &str) -> Result<(), &'stat
     let _ = crate::driver::nvme::probe_registered_pcie_nvme_devices();
 
     // e1000探测
-    let _ = crate::driver::network::e1000::probe_registered_e1000();
+    crate::driver::network::e1000::probe_registered_e1000();
 
     Ok(())
 }

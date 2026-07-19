@@ -63,7 +63,7 @@ lazy_static! {
     /// 全局 IRQ → handler 映射表
     /// 索引 = IRQ 号, None = 未注册
     static ref PLIC_HANDLERS: UPSafeCell<[Option<IrqHandler>; MAX_IRQ]> =
-        unsafe { UPSafeCell::new([None; MAX_IRQ]) };
+        UPSafeCell::new([None; MAX_IRQ]);
 }
 
 /// 注册中断处理函数
@@ -102,7 +102,7 @@ pub fn register_irq(irq: u32, handler: IrqHandler, priority: u8) {
     }
 
     // 3. 注册 handler 到全局表
-    PLIC_HANDLERS.lock()[irq as usize] = Some(handler);
+    PLIC_HANDLERS.lock(|x| x[irq as usize] = Some(handler));
 }
 
 /// 中断分发入口
@@ -122,7 +122,7 @@ pub fn dispatch_irq() {
         return;
     }
 
-    let handler = PLIC_HANDLERS.lock()[irq as usize];
+    let handler = PLIC_HANDLERS.lock(|x| x[irq as usize]);
     match handler {
         Some(h) => h(),
         None => warn!("plic: unregistered IRQ {}", irq),

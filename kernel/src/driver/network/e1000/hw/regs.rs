@@ -3,6 +3,7 @@
 //! 参考 Linux:
 //! - drivers/net/ethernet/intel/e1000/e1000_hw.h
 //! - drivers/net/ethernet/intel/e1000/e1000_main.c
+#![allow(clippy::upper_case_acronyms, clippy::enum_variant_names)]
 
 /// e1000 支持的 PCI device id 列表。
 /// 参考 Linux: drivers/net/ethernet/intel/e1000/e1000_main.c:24-64

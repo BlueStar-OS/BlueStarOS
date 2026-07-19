@@ -241,6 +241,9 @@ impl IPv4Header {
         }
     }
 
+    // clippy::wrong_self_convention: 返回的切片借自 `self` 自身内存，必须按 `&self`
+    // 借用；若按值接收 `self`，返回的切片会指向已销毁的临时量，造成悬垂引用。
+    #[allow(clippy::wrong_self_convention)]
     pub fn to_be_bytes(&self) -> &[u8] {
         // SAFETY: `IPv4Header` 为 packed 且固定 20 字节。
         unsafe { core::slice::from_raw_parts(self as *const Self as *const u8, 20) }
@@ -249,20 +252,19 @@ impl IPv4Header {
     pub fn checksum_rfc_for_self(&mut self) {
         self.checksum = Net16::ZERO;
         let mut sum: u32 = 0;
-        let base = self as *const Self as *const u16;
-        for i in 0..10 {
-            sum = sum.wrapping_add(unsafe { u16::from_be(base.add(i).read_unaligned()) } as u32);
+        let bytes = self.to_be_bytes();
+        for chunk in bytes.chunks_exact(2) {
+            sum = sum.wrapping_add(u16::from_be_bytes([chunk[0], chunk[1]]) as u32);
         }
         while sum >> 16 != 0 {
             sum = (sum & 0xFFFF) + (sum >> 16);
         }
         self.checksum = Net16::new(!(sum as u16));
     }
-    pub fn checksum_cloc(&self) -> Net16{
+    pub fn checksum_cloc(&self) -> Net16 {
         let mut sum: u32 = 0;
-        let base = self as *const Self as *const u16;
-        for i in 0..10 {
-            sum = sum.wrapping_add(unsafe { base.add(i).read_unaligned() } as u32);
+        for chunk in self.to_be_bytes().chunks_exact(2) {
+            sum = sum.wrapping_add(u16::from_ne_bytes([chunk[0], chunk[1]]) as u32);
         }
         while sum >> 16 != 0 {
             sum = (sum & 0xFFFF) + (sum >> 16);
