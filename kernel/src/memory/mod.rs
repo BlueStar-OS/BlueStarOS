@@ -2,11 +2,14 @@ use alloc::vec::Vec;
 
 mod frame_allocator;
 pub mod memorymodel;
-mod memset;
+// 目录名沿用 `MemorySpace`（用户约定），但模块标识用 snake_case 以满足
+// `#![deny(non_snake_case)]`；通过 `#[path]` 把二者衔接起来。
+#[path = "MemorySpace/mod.rs"]
+mod memory_space;
 
 pub use frame_allocator::*;
 pub use memorymodel::*;
-pub use memset::*;
+pub use memory_space::*;
 
 use crate::sync::UPSafeCell;
 use lazy_static::lazy_static;
