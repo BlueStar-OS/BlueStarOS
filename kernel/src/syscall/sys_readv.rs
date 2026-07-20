@@ -24,7 +24,6 @@ use crate::arch::memory::*;
 use crate::syscall::sys_read::sys_read;
 use crate::task::TASK_MANAER;
 use core::mem::size_of;
-use core::mem::size_of_val;
 use log::debug;
 
 /// iovec 结构（与 Linux include/uapi/linux/uio.h:17 一致）

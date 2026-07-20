@@ -55,7 +55,6 @@
 //! 参考: POSIX.1-2008 (非 POSIX 标准，Linux-specific)
 //! 参考: gettid(2) man page
 
-use crate::task::TASK_MANAER;
 
 /// sys_gettid() -> 当前线程 ID
 ///

@@ -17,7 +17,6 @@
 
 use crate::memory::CloneFlags;
 use crate::syscall::sys_fork::sys_fork;
-use crate::syscall::syscall::*;
 
 pub fn sys_clone(flags: usize, stack: usize, ptid: usize, tls: usize, ctid: usize) -> isize {
     let upper = flags & !0xffusize;

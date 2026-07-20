@@ -18,7 +18,7 @@ mod ui {
     }
 
     pub fn prompt() {
-        print!("BlueStarOS> ");
+        print!("\nBlueStarOS> ");
     }
 }
 
@@ -188,8 +188,8 @@ mod console {
 mod command {
     use alloc::vec::Vec;
     use user_lib::{
-        chdir, getcwd, print, println, sys_exec_args, sys_exit, sys_fork, sys_wait, sys_waitpid,
-        String,
+        chdir, getcwd, print, println, sys_close, sys_exec_args, sys_exit, sys_fork,
+        sys_getdents64, sys_open, sys_wait, sys_waitpid, String, O_DIRECTORY, O_RDONLY,
     };
     fn clear_screen() {
         // ANSI: clear screen + move cursor to home
@@ -355,6 +355,58 @@ mod command {
     pub fn handle_tab(_line: String) {
         //ls获取当前目录获取所有条目然后分割成vec
         //分割当前已经输入的命令，以最后一个为准，使用withprefix匹配条目并且补全。如果有多个匹配就选取最后一个
+        use alloc::vec;
+
+        let cwd = match getcwd() {
+            Some(s) => s,
+            None => return,
+        };
+
+        let mut path = cwd;
+        path.push('\0');
+        let fd = sys_open(&path, O_RDONLY | O_DIRECTORY);
+        if fd < 0 {
+            return;
+        }
+
+        let mut entries: Vec<String> = vec![];
+        let mut buf: Vec<u8> = vec![0u8; 4096];
+
+        loop {
+            let n = sys_getdents64(fd as usize, buf.as_mut_ptr() as usize, buf.len());
+            if n <= 0 {
+                break;
+            }
+
+            let mut off = 0usize;
+            while off < n as usize {
+                if off + 19 > n as usize {
+                    break;
+                }
+                let reclen = u16::from_le_bytes([buf[off + 16], buf[off + 17]]) as usize;
+                if reclen == 0 || off + reclen > n as usize {
+                    break;
+                }
+
+                let name_off = off + 19;
+                let name_end = off + reclen;
+                let mut z = name_off;
+                while z < name_end && buf[z] != 0 {
+                    z += 1;
+                }
+                if z > name_off {
+                    if let Ok(name) = core::str::from_utf8(&buf[name_off..z]) {
+                        if !name.is_empty() && name != "." && name != ".." {
+                            entries.push(String::from(name));
+                        }
+                    }
+                }
+                off += reclen;
+            }
+        }
+
+        let _ = sys_close(fd as usize);
+        // entries 现在包含当前目录所有条目（不含 . 和 ..）
     }
 }
 
@@ -374,10 +426,12 @@ pub fn main() -> usize {
 
         ui::prompt();
         let line = console::read_line();
+        
         if console::take_tab_triggered() {
             command::handle_tab(line);
             continue;
         }
+
         console::history_push(line.clone());
         command::handle_line(line);
     }

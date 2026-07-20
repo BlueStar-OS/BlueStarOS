@@ -14,8 +14,8 @@ use crate::driver::network::e1000::tx_ringbuffer::{e1000_transmit, E1000TxRing};
 use crate::driver::network::e1000::E1000_DEV;
 
 /// 处理一个 ARP payload。
-pub fn arp_receive(payload: NetBuffer, eth_hdr: EthHead) {
-    let mut netb = payload;
+pub fn arp_receive(payload: NetBuffer, _eth_hdr: EthHead) {
+    let netb = payload;
     if netb.data_len() < core::mem::size_of::<ArpHeader>() {
         warn!("Bad ARP Packet, so short packet len,drop");
         return;

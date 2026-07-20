@@ -78,8 +78,6 @@ use crate::root::RootFs;
 use crate::task::run_first_task;
 use crate::time::*;
 use core::arch::global_asm;
-use core::ptr::read_volatile;
-use core::ptr::write_volatile;
 use log::*;
 pub use sbi::*;
 

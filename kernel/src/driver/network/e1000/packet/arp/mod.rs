@@ -8,6 +8,5 @@ pub mod cache;
 pub mod packet;
 pub mod rx;
 
-pub use cache::{ArpTable, ARP_TABLE};
-pub use packet::{ArpHeader, ARP_OPCODE_REPLY, ARP_OPCODE_REQUEST};
+pub use cache::ARP_TABLE;
 pub use rx::{arp_receive, send_arp_packet};

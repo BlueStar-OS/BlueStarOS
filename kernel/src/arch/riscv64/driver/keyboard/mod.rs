@@ -7,7 +7,6 @@ use crate::task::signal::{push_signal, OsSignal};
 use crate::task::{Signal, TASK_MANAER};
 use alloc::collections::vec_deque::VecDeque;
 use lazy_static::lazy_static;
-use log::error;
 /// 输入字符缓冲区（非信号字符存这里，供 TTY 消费）
 lazy_static! {
     static ref INPUT_BUF: UPSafeCell<VecDeque<u8>> = UPSafeCell::new(VecDeque::with_capacity(256));

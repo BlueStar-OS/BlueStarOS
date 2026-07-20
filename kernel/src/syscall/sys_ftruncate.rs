@@ -56,14 +56,13 @@
 //! `open(path, O_WRONLY)` + `ftruncate(fd, length)` + `close(fd)` 实现。
 //! 参考: glibc/sysdeps/posix/truncate.c
 
-use crate::error::BlueErr;
 
 /// sys_ftruncate(fd, length) -> 0 或 -errno
 ///
 /// 将打开的文件截断/扩展到指定长度。
 ///
 /// TODO: 用户自行实现
-pub fn sys_ftruncate(fd: usize, length: usize) -> isize {
+pub fn sys_ftruncate(_fd: usize, _length: usize) -> isize {
     // TODO: 实现步骤
     // 1. 通过 TASK_MANAER 获取 fd 对应的 Arc<dyn File>
     // 2. 检查文件是否可写 (O_ACCMODE)

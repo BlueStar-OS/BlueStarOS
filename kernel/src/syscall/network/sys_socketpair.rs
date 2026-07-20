@@ -88,7 +88,6 @@
 //! 参考: POSIX.1-2017, socketpair(3p)
 //! 参考: net/socket.c:__sys_socketpair
 
-use crate::error::BlueErr;
 
 /// AF_UNIX 协议族。
 pub const AF_UNIX: usize = 1;
@@ -98,7 +97,7 @@ pub const AF_UNIX: usize = 1;
 /// 创建一对相互连接的 socket，用于进程间通信。
 ///
 /// TODO: 用户自行实现
-pub fn sys_socketpair(domain: usize, type_: usize, protocol: usize, sv: usize) -> isize {
+pub fn sys_socketpair(_domain: usize, _type_: usize, _protocol: usize, _sv: usize) -> isize {
     // TODO: 实现步骤
     // 1. 验证 domain == AF_UNIX
     // 2. 创建两个 pipe 或内部 socket 实例

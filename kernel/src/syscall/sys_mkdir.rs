@@ -16,7 +16,6 @@
 //! 降级实现。
 
 use crate::syscall::sys_mkdirat::sys_mkdirat;
-use crate::syscall::syscall::*;
 
 pub fn sys_mkdir(path_ptr: usize) -> isize {
     sys_mkdirat(-100, path_ptr, 0)

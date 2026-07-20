@@ -1,7 +1,6 @@
 use crate::arch::memory::{PhysiAddr, VirAddr};
 use crate::driver::pcie::bar::*;
 use crate::driver::pcie::pci_ids::*;
-use crate::driver::pcie::pcie_helper::*;
 use crate::dtb::DeviceNode;
 use crate::dtb_probe;
 use crate::error::BlueErr;
@@ -14,7 +13,7 @@ use core::fmt;
 use core::ptr::{read_volatile, write_volatile};
 use core::sync::atomic::{AtomicU8, Ordering};
 use lazy_static::lazy_static;
-use log::{debug, error, info, warn};
+use log::{error, warn};
 
 mod bar;
 pub mod pci_ids;

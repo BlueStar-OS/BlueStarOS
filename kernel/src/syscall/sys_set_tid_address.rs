@@ -16,7 +16,6 @@
 //! Stub 降级实现。
 
 use crate::syscall::sys_getpid::sys_getpid;
-use crate::syscall::syscall::*;
 
 pub fn sys_set_tid_address(_tidptr: usize) -> isize {
     // simple implent

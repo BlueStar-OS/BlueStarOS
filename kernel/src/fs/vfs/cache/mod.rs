@@ -8,6 +8,3 @@
 mod cacheblkmanager;
 mod file_cache;
 
-pub use cacheblkmanager::{
-    flush_file_page_cache, populate_frame_from_file_page_cache, sync_frame_into_file_page_cache,
-};

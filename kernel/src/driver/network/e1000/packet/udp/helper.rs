@@ -18,7 +18,7 @@
 //! - `/home/inkbottle/桌面/linux-5.4.29/arch/x86/include/asm/checksum_64.h:87-99`
 
 use crate::driver::network::e1000::{
-    agreenment::{UdpHeader, UdpPrseHeader},
+    agreenment::UdpPrseHeader,
     packet::net_endian::Net16,
 };
 

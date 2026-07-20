@@ -7,8 +7,7 @@
 
 use log::{info, warn};
 
-use crate::{
-    driver::network::e1000::{
+use crate::driver::network::e1000::{
         agreenment::{
             DestIp, DstMac, EthHead, EtherType, IPv4Header, Ipv4Addr, Ipv4Protocol, SourceIp,
             SourceMac,
@@ -17,9 +16,7 @@ use crate::{
         netbuffer::NetBuffer,
         tx_ringbuffer::{e1000_transmit, E1000TxRing},
         E1000_DEV,
-    },
-    time::kernel_sleep,
-};
+    };
 
 use super::config::MY_IPV4;
 

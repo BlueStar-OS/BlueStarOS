@@ -70,14 +70,13 @@
 //! 参考: POSIX.1-2017, listen(3p)
 //! 参考: net/socket.c:__sys_listen
 
-use crate::error::BlueErr;
 
 /// sys_listen(sockfd, backlog) -> 0 或 -errno
 ///
 /// 将 socket 标记为被动监听状态，准备接受连接。
 ///
 /// TODO: 用户自行实现
-pub fn sys_listen(sockfd: usize, backlog: usize) -> isize {
+pub fn sys_listen(_sockfd: usize, _backlog: usize) -> isize {
     // TODO: 实现步骤
     // 1. 通过 TASK_MANAER 获取 fd 对应的 Arc<dyn File>
     // 2. downcast 到具体 socket 类型 (TcpSock?)

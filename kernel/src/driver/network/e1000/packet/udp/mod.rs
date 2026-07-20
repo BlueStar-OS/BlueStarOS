@@ -10,7 +10,6 @@ pub mod helper;
 pub mod rx;
 pub mod tx;
 
-pub use header::{DestPort, SourcePort, UdpHeader, UdpPrseHeader, UDP_HEADER_LEN};
-pub use helper::{udp_checksum, udp_verify_checksum};
+pub use header::UdpPrseHeader;
 pub use rx::udp_receive;
 pub use tx::send_udp_packet;

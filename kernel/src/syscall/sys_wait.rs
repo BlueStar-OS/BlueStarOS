@@ -16,7 +16,6 @@
 //! 降级实现。
 
 use crate::syscall::sys_wait4::sys_wait4;
-use crate::syscall::syscall::*;
 
 pub fn sys_wait(exit_code_ptr: usize) -> isize {
     // wait4(pid=-1, wstatus, options=1)  WNOHANG == 1

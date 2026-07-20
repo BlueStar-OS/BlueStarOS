@@ -19,9 +19,8 @@ pub mod hw;
 pub mod packet;
 pub mod queue;
 
-pub use hw::device::{E1000, E1000_DEV, E1000_RX_INTR_PENDING};
-pub use hw::irq::{e1000_intr_handler, e1000_irq_disable, e1000_irq_enable};
-pub use hw::probe::{probe_registered_e1000, E1000PcieDeviceTarget};
+pub use hw::device::E1000_DEV;
+pub use hw::probe::probe_registered_e1000;
 
 /// 兼容旧路径：`e1000::agreenment::*`
 pub mod agreenment {

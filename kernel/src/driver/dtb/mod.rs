@@ -36,7 +36,6 @@ use lazy_static::lazy_static;
 use log::{debug, warn};
 
 use crate::kprintln;
-use crate::memory::KERNEL_MAIN_MEMORY;
 use crate::sync::UPSafeCell;
 
 // Import DTB pointer from assembly (defined in entry.asm)

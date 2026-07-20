@@ -5,7 +5,7 @@ use core::sync::atomic::Ordering;
 use log::{debug, error, info, warn};
 
 use crate::driver::network::e1000::hw::device::{E1000, E1000_DEV, E1000_MMIO_BASE};
-use crate::driver::network::e1000::hw::irq::{e1000_intr_handler, e1000_irq_enable};
+use crate::driver::network::e1000::hw::irq::e1000_irq_enable;
 use crate::driver::network::e1000::hw::regs::{
     ReadMacRaw, E1000_CTRL, E1000_CTRL_RST, E1000_DEVICE_IDS, E1000_EERD, E1000_EERD_ADDR_SHIFT,
     E1000_EERD_DATA_SHIFT, E1000_EERD_DONE, E1000_EERD_START, E1000_ICR, E1000_IMC,

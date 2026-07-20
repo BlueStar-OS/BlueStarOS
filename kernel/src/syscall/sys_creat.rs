@@ -16,7 +16,6 @@
 //! 降级实现。
 
 use crate::syscall::sys_open::sys_open;
-use crate::syscall::syscall::*;
 
 pub fn sys_creat(path_ptr: usize) -> isize {
     let flags_bits = (1 << 6) | (1 << 9) | 1;

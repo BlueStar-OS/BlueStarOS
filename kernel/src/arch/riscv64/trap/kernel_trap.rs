@@ -1,6 +1,5 @@
-use crate::arch::{driver, enable_irq};
+use crate::arch::driver;
 use crate::time::set_next_time_interupt;
-use log::{debug, error};
 use riscv::register::scause::{self, Trap};
 use riscv::register::scause::{Exception, Interrupt};
 use riscv::register::{sepc, stval};

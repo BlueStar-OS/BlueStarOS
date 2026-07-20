@@ -5,7 +5,6 @@
 //! - `e1000::packet::protocol::*`
 
 pub use crate::driver::network::e1000::packet::ethernet::*;
-pub use crate::driver::network::e1000::packet::icmp::*;
 pub use crate::driver::network::e1000::packet::ipv4::header::*;
 pub use crate::driver::network::e1000::packet::net_endian::*;
 pub use crate::driver::network::e1000::packet::udp::*;

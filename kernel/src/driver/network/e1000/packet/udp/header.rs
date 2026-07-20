@@ -5,8 +5,7 @@
 
 use core::fmt;
 
-use crate::driver::network::e1000::agreenment::Net8;
-use crate::driver::network::e1000::ipv4::{Ipv4Addr, Ipv4Protocol};
+use crate::driver::network::e1000::ipv4::Ipv4Protocol;
 use crate::driver::network::e1000::netbuffer::NetHeader;
 use crate::driver::network::e1000::packet::net_endian::Net16;
 

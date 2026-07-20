@@ -62,7 +62,7 @@ pub fn sys_read(fd_target: usize, source_buffer: usize, buffer_len: usize) -> is
         let mut pt = PageTable::crate_table_from_satp(user_satp);
         match pt.translate(VirAddr(source_buffer)) {
             Some(pa) => {
-                let val = unsafe { *(pa.0 as *const u8) };
+                let _val = unsafe { *(pa.0 as *const u8) };
             }
             None => {
                 error!(

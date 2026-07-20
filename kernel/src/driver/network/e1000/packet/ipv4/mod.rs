@@ -10,7 +10,6 @@ pub mod header;
 pub mod rx;
 pub mod tx;
 
-pub use config::MY_IPV4;
 pub use header::*;
 pub use rx::ipv4_receive;
 pub use tx::send_ipv4_packet;

@@ -12,4 +12,4 @@ pub mod tx;
 
 pub use helper::*;
 pub use rx::icmp_receive;
-pub use tx::{send_icmp_echo_reply, send_icmp_echo_request, send_icmp_packet};
+pub use tx::send_icmp_echo_reply;

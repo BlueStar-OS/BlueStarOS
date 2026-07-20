@@ -15,11 +15,7 @@
 //! `File` 描述"一个已打开的文件"，`VfsFs` 描述"一类文件系统实例"。
 //! 两者组合完成从路径到字节的完整调用链。
 
-use crate::driver::network::e1000::packet::buffer::NetBuffer;
-use crate::error::BlueErr;
-use crate::fs::semaphore::waitqueue::WaitQueue;
 use crate::fs::vfs::vfserror::VfsFsError;
-use crate::sync::UPSafeCell;
 use alloc::string::String;
 use alloc::sync::Arc;
 use alloc::vec::Vec;

@@ -173,7 +173,7 @@ pub fn sys_recvfrom(
                 core::mem::size_of::<SockAddrIn>(),
             )
         };
-        let mut tb = PageTable::crate_table_from_satp(user_satp);
+        let _tb = PageTable::crate_table_from_satp(user_satp);
         let mut slices =
             PageTable::get_mut_slice_from_satp(user_satp, sa_bytes.len(), VirAddr(addr));
         let mut off = 0;

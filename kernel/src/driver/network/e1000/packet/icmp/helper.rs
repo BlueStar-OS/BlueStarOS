@@ -3,7 +3,7 @@
 //! 参考 Linux:
 //! - `/home/inkbottle/桌面/linux-5.4.29/net/ipv4/icmp.c:996-1040`
 
-use crate::driver::network::e1000::{icmp::header::IcmpHeader, packet::net_endian::Net16};
+use crate::driver::network::e1000::packet::net_endian::Net16;
 
 /// 计算 ICMP 报文校验和。
 ///

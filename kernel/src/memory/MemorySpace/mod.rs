@@ -23,8 +23,5 @@ mod mmap_entry;
 mod vir_num_range;
 
 pub use flags::*;
-pub use kernel_stack::*;
-pub use map_area::*;
 pub use map_set::*;
-pub use mmap_entry::*;
 pub use vir_num_range::*;

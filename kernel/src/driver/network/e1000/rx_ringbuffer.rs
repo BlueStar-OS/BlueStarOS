@@ -39,7 +39,7 @@ use alloc::vec::Vec;
 use log::{info, warn};
 
 use crate::driver::network::e1000::netbuffer::NetBuffer;
-use crate::driver::network::e1000::{E1000, E1000_DEV};
+use crate::driver::network::e1000::E1000_DEV;
 use crate::memory::FramTracker;
 
 // ============================================================================

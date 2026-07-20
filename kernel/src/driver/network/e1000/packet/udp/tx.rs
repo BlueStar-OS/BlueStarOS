@@ -47,7 +47,7 @@ fn finalize_udp_and_send(
     target_ip: [u8; 4],
     udp_total_len: u16,
     mut payload: NetBuffer,
-    mut udp_hdr: UdpHeader,
+    udp_hdr: UdpHeader,
 ) {
     // 压入 UDP 头到 payload 前部
     payload.new_agreement_head(&udp_hdr);

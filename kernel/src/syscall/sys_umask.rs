@@ -67,14 +67,13 @@
 //!
 //! 参考: POSIX.1-2017, umask(3p)
 
-use crate::task::TASK_MANAER;
 
 /// sys_umask(mask) -> 旧的 umask 值
 ///
 /// 设置进程的文件创建掩码，返回旧值。
 ///
 /// TODO: 用户自行实现
-pub fn sys_umask(mask: usize) -> isize {
+pub fn sys_umask(_mask: usize) -> isize {
     // TODO: 当前返回 0022 (默认 umask)。
     // 实现时:
     // 1. 从当前任务的 cred 结构读取旧 umask

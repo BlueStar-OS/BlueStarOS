@@ -1,5 +1,4 @@
 use crate::arch::driver;
-use crate::arch::enable_irq;
 use crate::arch::memory::VirAddr;
 use crate::arch::set_kernel_trap;
 use crate::arch::set_kernel_trap_handler;
@@ -11,7 +10,6 @@ use crate::time::set_next_time_interupt;
 use crate::trap::pagefault_handler::page_fault_handler;
 use crate::trap::recycle_pending_kstacks;
 use core::arch::asm;
-use log::debug;
 use log::error;
 use riscv::register::satp;
 use riscv::register::scause::Interrupt;

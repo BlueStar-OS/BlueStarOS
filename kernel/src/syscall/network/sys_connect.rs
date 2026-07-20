@@ -82,14 +82,13 @@
 //! 参考: POSIX.1-2017, connect(3p)
 //! 参考: net/socket.c:__sys_connect
 
-use crate::error::BlueErr;
 
 /// sys_connect(sockfd, addr, addrsz) -> 0 或 -errno
 ///
 /// 向目标地址发起连接 (TCP: 三次握手; UDP: 记录默认地址)。
 ///
 /// TODO: 用户自行实现
-pub fn sys_connect(sockfd: usize, addr: usize, addrsz: usize) -> isize {
+pub fn sys_connect(_sockfd: usize, _addr: usize, _addrsz: usize) -> isize {
     // TODO: 实现步骤
     // 1. 获取 sockfd 对应的 socket
     // 2. 从用户空间拷贝 sockaddr_in (验证 addrsz)

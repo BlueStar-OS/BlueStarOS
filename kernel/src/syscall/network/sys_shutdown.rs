@@ -79,7 +79,6 @@
 //! 参考: POSIX.1-2017, shutdown(3p)
 //! 参考: net/socket.c:__sys_shutdown
 
-use crate::error::BlueErr;
 
 /// 关闭方式常量。
 pub const SHUT_RD: usize = 0;
@@ -91,7 +90,7 @@ pub const SHUT_RDWR: usize = 2;
 /// 关闭 socket 的读端、写端或两端。
 ///
 /// TODO: 用户自行实现
-pub fn sys_shutdown(sockfd: usize, how: usize) -> isize {
+pub fn sys_shutdown(_sockfd: usize, _how: usize) -> isize {
     // TODO: 实现步骤
     // 1. 获取 sockfd 对应的 socket
     // 2. match how {

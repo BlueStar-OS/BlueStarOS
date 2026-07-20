@@ -9,7 +9,6 @@
 //! - `/home/inkbottle/桌面/linux-5.4.29/net/ipv4/udp.c:2049-2087`
 
 use alloc::string::String;
-use alloc::sync::Arc;
 use log::{debug, info, warn};
 
 use crate::driver::network::e1000::agreenment::{IPv4Header, Net16};

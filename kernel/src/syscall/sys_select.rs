@@ -100,12 +100,9 @@
 //!   // 返回前将未就绪的 bit 从 fd_set 中清除 (value-result 语义)
 //! ```
 
-use log::{debug, error};
 
 use crate::arch::memory::*;
-use crate::error::BlueErr;
-use crate::fs::vfs::{FdSet, PollStatus, FD_SETSIZE};
-use crate::task::TASK_MANAER;
+use crate::fs::vfs::{FdSet, FD_SETSIZE};
 
 /// Linux `struct timeval` 布局。
 ///
@@ -131,11 +128,11 @@ struct Timeval {
 /// - `exceptfds`: 用户空间 `fd_set*`，监视异常事件 (NULL = 不关心)
 /// - `timeout`: 用户空间 `struct timeval*` (NULL = 永久阻塞, {0,0} = 非阻塞)
 pub fn sys_select(
-    nfds: usize,
-    readfds: usize,
-    writefds: usize,
-    exceptfds: usize,
-    timeout: usize,
+    _nfds: usize,
+    _readfds: usize,
+    _writefds: usize,
+    _exceptfds: usize,
+    _timeout: usize,
 ) -> isize {
     // TODO: 用户自行实现核心逻辑
     //

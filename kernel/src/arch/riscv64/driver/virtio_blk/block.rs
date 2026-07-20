@@ -124,7 +124,7 @@ pub fn init_gpu() {
 
     let mut gpu = VirtIOGpu::<VirtioHal>::new(header).expect("Failed to create GPU driver");
     let raw_ref = &mut gpu as *mut VirtIOGpu<VirtioHal>;
-    let mut fb = gpu
+    let fb = gpu
         .setup_framebuffer()
         .expect("Failed to setup framebuffer");
 

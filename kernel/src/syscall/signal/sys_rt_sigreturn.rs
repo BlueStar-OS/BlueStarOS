@@ -82,7 +82,6 @@
 //! 参考: arch/riscv/kernel/signal.c:sys_rt_sigreturn
 //! 参考: include/uapi/asm-generic/signal.h
 
-use crate::error::BlueErr;
 
 /// sys_rt_sigreturn() -> (不正常返回)
 ///

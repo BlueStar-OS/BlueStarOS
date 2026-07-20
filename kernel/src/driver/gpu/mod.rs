@@ -8,7 +8,6 @@ use crate::{
         gpu::vga_console::{vga_screen_mut, Console},
         pcie::find_pcie_device,
     },
-    fs::fs_backend::new_ext4fs,
     memory::alloc_frame,
 };
 

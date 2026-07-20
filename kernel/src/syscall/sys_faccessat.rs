@@ -65,7 +65,6 @@
 //! POSIX `access(path, mode)` 在用户库中通过 `faccessat(AT_FDCWD, path, mode, 0)` 实现。
 //! 参考: glibc/sysdeps/unix/sysv/linux/access.c
 
-use crate::error::BlueErr;
 
 /// `faccessat` 的 mode 位。
 ///
@@ -86,7 +85,7 @@ pub const AT_SYMLINK_NOFOLLOW: usize = 0x100;
 /// 检查调用进程是否有权限以指定模式访问给定路径。
 ///
 /// TODO: 用户自行实现
-pub fn sys_faccessat(dfd: usize, filename: usize, mode: usize, flags: usize) -> isize {
+pub fn sys_faccessat(_dfd: usize, _filename: usize, _mode: usize, _flags: usize) -> isize {
     // TODO: 实现步骤
     // 1. 从用户空间拷贝路径字符串 (dfd + filename)
     // 2. 路径解析 (跟随符号链接，除非 AT_SYMLINK_NOFOLLOW)

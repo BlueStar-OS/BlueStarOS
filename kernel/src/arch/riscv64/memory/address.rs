@@ -8,13 +8,10 @@ use crate::PAGE_SIZE_BITS;
 use alloc::vec;
 use alloc::vec::Vec;
 use bitflags::bitflags;
-use core::ptr::read_volatile;
 use core::sync::atomic::compiler_fence;
 use core::sync::atomic::Ordering;
-use log::debug;
 use log::warn;
 use riscv::register::scause::Scause;
-use riscv::register::scause::Trap;
 bitflags! {
     #[derive(Debug,Clone, Copy)]
     pub struct PTEFlags: usize {

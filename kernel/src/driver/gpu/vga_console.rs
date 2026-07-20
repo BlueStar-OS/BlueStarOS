@@ -1,10 +1,8 @@
-use core::cell::UnsafeCell;
 
-use alloc::{boxed::Box, vec::Vec};
+use alloc::vec::Vec;
 use log::warn;
 
 use crate::{
-    config::PAGE_SIZE,
     driver::gpu::{get_font_bitmap, put_pixel},
     memory::FramTracker,
 };

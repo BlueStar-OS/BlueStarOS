@@ -5,7 +5,7 @@
 //! - [`MmapProt`]/[`MmapFlags`]：`mmap` 系统调用的保护位与行为标志；
 //! - [`CloneFlags`]：`clone` 系统调用的语义标志（放在此处统一管理位标志类型）；
 //! - [`MapType`]：区分“恒等映射”与“普通映射”。
-//! 以及 `MapAreaFlags -> PTEFlags` 的转换实现。
+//!   以及 `MapAreaFlags -> PTEFlags` 的转换实现。
 
 use crate::arch::memory::PTEFlags;
 use bitflags::bitflags;

@@ -14,7 +14,6 @@ use crate::driver::network::e1000::netbuffer::NetBuffer;
 use crate::driver::network::e1000::packet::network_packet_resolve;
 use crate::driver::network::e1000::rx_ringbuffer::{e1000_poll_rx, RxResult};
 use crate::driver::network::e1000::tx_ringbuffer::e1000_clean_tx_irq;
-use crate::driver::pcie::BarSpace;
 
 /// e1000 中断处理函数。
 ///

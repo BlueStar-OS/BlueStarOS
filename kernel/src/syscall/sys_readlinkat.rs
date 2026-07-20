@@ -57,14 +57,13 @@
 //! `readlinkat(AT_FDCWD, path, buf, bufsiz)` 实现。
 //! 参考: glibc/sysdeps/unix/sysv/linux/readlink.c
 
-use crate::error::BlueErr;
 
 /// sys_readlinkat(dfd, pathname, buf, bufsiz) -> 读取字节数 或 -errno
 ///
 /// 读取符号链接的目标路径到用户缓冲区。
 ///
 /// TODO: 用户自行实现
-pub fn sys_readlinkat(dfd: usize, pathname: usize, buf: usize, bufsiz: usize) -> isize {
+pub fn sys_readlinkat(_dfd: usize, _pathname: usize, _buf: usize, _bufsiz: usize) -> isize {
     // TODO: 实现步骤
     // 1. 从用户空间拷贝路径字符串 (dfd + pathname)
     // 2. 路径解析，定位到符号链接 inode (不跟随最后一级)

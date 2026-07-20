@@ -1,5 +1,4 @@
 use crate::arch::memory::*;
-use crate::arch::set_kernel_trap_handler;
 use crate::arch::task::*;
 use crate::arch::trap::TrapContext;
 use crate::config::*;
@@ -1028,7 +1027,7 @@ impl TaskManager {
         }
 
         // Phase 1: 更新当前任务状态，选出下一个任务
-        let (swap_out, current, task_index) = self.task_que_inner.lock(|inner| {
+        let (swap_out, _current, task_index) = self.task_que_inner.lock(|inner| {
             if inner.task_queen.is_empty() {
                 panic!("Task Queen is empty!");
             }

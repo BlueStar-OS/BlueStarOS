@@ -307,7 +307,7 @@ impl RootFs {
 
     /// 扫描全部已注册块设备，并在根 ramfs 下创建块设备节点。
     pub fn scan_and_build_vblock_device() -> Result<(), VfsFsError> {
-        let (fs, sub) = ROOTFS.lock(|root| {
+        let (fs, _sub) = ROOTFS.lock(|root| {
             let root = root.as_ref().ok_or(VfsFsError::IO)?;
             let (fs, sub) = root.resolve_mount_point("/")?.ok_or(VfsFsError::NotFound)?;
             if sub != "/" {

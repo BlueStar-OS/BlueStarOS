@@ -67,7 +67,6 @@
 //! F_GETFL 返回的低 2 bit 是访问模式 (O_RDONLY=0, O_WRONLY=1, O_RDWR=2)。
 //! F_SETFL 不能修改访问模式，只能修改 O_APPEND/O_NONBLOCK 等状态标志。
 
-use crate::error::BlueErr;
 
 /// 文件描述符标志。
 pub const FD_CLOEXEC: usize = 1;
@@ -113,7 +112,7 @@ pub const F_UNLCK: i16 = 2;
 /// 对文件描述符执行控制操作。
 ///
 /// TODO: 用户自行实现
-pub fn sys_fcntl(fd: usize, cmd: usize, arg: usize) -> isize {
+pub fn sys_fcntl(_fd: usize, _cmd: usize, _arg: usize) -> isize {
     // TODO: 实现步骤
     // match cmd {
     //     F_DUPFD => 从 fd 复制，找到 >= arg 的最小可用 fd

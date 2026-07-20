@@ -6,7 +6,6 @@ use crate::fs::vfs::{File, OpenFlags, VfsFsError};
 use crate::task::TASK_MANAER;
 use alloc::sync::Arc;
 use core::fmt::{self, Write};
-use log::error;
 pub const FD_TYPE_STDIN: usize = 0;
 pub const FD_TYPE_STDOUT: usize = 1;
 pub const FD_TYPE_STDERR: usize = 2;

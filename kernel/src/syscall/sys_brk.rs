@@ -22,7 +22,7 @@ pub fn sys_brk(new_brk: VirAddr) -> isize {
     let new_brkaddr = new_brk.0;
 
     let satp = TASK_MANAER.get_current_stap();
-    let mut tb = PageTable::crate_table_from_satp(satp);
+    let _tb = PageTable::crate_table_from_satp(satp);
 
     let current_task = TASK_MANAER
         .task_que_inner
