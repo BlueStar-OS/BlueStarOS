@@ -1,7 +1,7 @@
 use crate::error::BlueErr;
 use crate::{arch::memory::*, task::TASK_MANAER};
 use log::{error, warn};
-// Linux riscv64 syscall numbers (subset used by the oscomp test suite)
+// Linux RISC-V 64 syscall numbers used by the current userspace ABI.
 pub const SYS_GETCWD: usize = 17;
 pub const SYS_IOCTL: usize = 29;
 pub const SYS_UNLINKAT: usize = 35;
@@ -45,8 +45,7 @@ pub const SYS_DUP: usize = 23;
 pub const SYS_DUP3: usize = 24;
 pub const SYS_MPROTECT: usize = 226;
 
-// ── 新增系统调用 (Linux riscv64 ABI) ─────────────────────────
-// 参考: include/uapi/asm-generic/unistd.h
+// Linux RISC-V 64 ABI additions. Reference: include/uapi/asm-generic/unistd.h
 pub const SYS_FACCESSAT: usize = 48;
 pub const SYS_READLINKAT: usize = 78;
 pub const SYS_FTRUNCATE: usize = 46;
@@ -210,6 +209,7 @@ use crate::syscall::signal::sys_kill::sys_kill;
 use crate::syscall::signal::sys_rt_sigreturn::*;
 use crate::syscall::signal::sys_tgkill::sys_tgkill;
 use crate::syscall::signal::sys_tkill::sys_tkill;
+
 #[inline]
 /// log x0-x31
 fn log_x_regs(stage: &str, id: usize, trap_cx: &[usize; 32]) {
@@ -251,9 +251,10 @@ fn log_x_regs(stage: &str, id: usize, trap_cx: &[usize; 32]) {
         trap_cx[31],
     );
 }
-///id: 系统调用号
-///args:接受1个usize参数
-///返回值：通过 x10 (a0) 寄存器返回给用户态
+
+/// id: 系统调用号
+/// args: 最多 6 个 usize 参数
+/// 返回值通过 x10 (a0) 寄存器返回给用户态
 pub fn syscall_handler(id: usize, arg: [usize; 6]) -> isize {
     if id == SYS_MMAP {
         let current_task = TASK_MANAER.get_current_trapcx();
@@ -285,8 +286,8 @@ pub fn syscall_handler(id: usize, arg: [usize; 6]) -> isize {
             }
         }
 
-        // NOTE: oscomp user/lib/syscall.c implements open() via openat(AT_FDCWD,...)
-        // We currently ignore dirfd/mode and reuse sys_open's semantics.
+        // openat currently reuses the path-based sys_open implementation.
+        // dirfd/mode semantics are not fully implemented yet.
         SYS_OPENAT => sys_open(arg[1], arg[2]),
 
         SYS_CLOSE => sys_close(arg[0]),
@@ -304,8 +305,7 @@ pub fn syscall_handler(id: usize, arg: [usize; 6]) -> isize {
         SYS_CLOCK_GETTIME => sys_clock_gettime(arg[0], arg[1]),
         SYS_TIMES => sys_times(arg[0]),
 
-        // mkdirat(dirfd, pathname, mode)
-        // oscomp user/lib/syscall.c implements mkdir() via mkdirat(AT_FDCWD,...,mode)
+        // mkdirat(dirfd, pathname, mode); dirfd/mode support is still partial.
         SYS_MKDIRAT => sys_mkdirat(arg[0] as isize, arg[1], arg[2]),
         SYS_UNLINKAT => sys_unlink(arg[1]),
 
@@ -343,7 +343,7 @@ pub fn syscall_handler(id: usize, arg: [usize; 6]) -> isize {
 
         SYS_SELECT => sys_select(arg[0], arg[1], arg[2], arg[3], arg[4]),
 
-        // ── 新增系统调用 ──────────────────────────────────────
+        // ── 其它系统调用 ──────────────────────────────────────
         SYS_FACCESSAT => sys_faccessat(arg[0], arg[1], arg[2], arg[3]),
         SYS_READLINKAT => sys_readlinkat(arg[0], arg[1], arg[2], arg[3]),
         SYS_FCNTL => sys_fcntl(arg[0], arg[1], arg[2]),

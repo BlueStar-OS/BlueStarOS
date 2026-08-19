@@ -1,26 +1,16 @@
-//! sys_mkdirat — 创建目录。
-//!
-//! ## 作用
-//! 创建目录。
+//! `mkdirat` 系统调用。
 //!
 //! ## 参数
-//! `dirfd` 起始目录 fd；`path_ptr` 路径；`mode` 权限。
+//! `dirfd` 为起始目录 fd，`path_ptr` 为用户态路径指针，`mode` 为权限位。
 //!
-//! ## 注意事项
-//! dirfd/mode 当前忽略，权限位未落地。
-//!
-//! ## Linux 参考版本
-//! K3 Linux 6.18.3 (/home/inkbottle/othersrc/k3/spacemit-k3-linux-6.18)，参考: fs/namei.c:4501
-//!
-//! ## 实现情况
-//! 降级实现。
+//! 当前实现暂未解释 `dirfd` 与权限位，路径创建由 VFS 处理。
+//! 行为参考 Linux `fs/namei.c` 中的目录创建路径。
 
 use crate::fs::vfs::vfs_mkdir;
 use crate::syscall::syscall::*;
 
 pub fn sys_mkdirat(dirfd: isize, path_ptr: usize, _mode: usize) -> isize {
-    // NOTE: oscomp uses mkdir() implemented via mkdirat(AT_FDCWD,...,mode).
-    // We currently ignore dirfd/mode and rely on VFS/ext4 without permission bits.
+    // 当前 VFS 仍按绝对/当前工作目录路径工作，因此暂时忽略 dirfd 和 mode。
     let _ = dirfd;
     let path = match read_c_string_from_user(path_ptr) {
         Ok(p) => p,
