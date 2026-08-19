@@ -1,110 +1,80 @@
 mod process;
 pub mod signal;
 mod task;
-use crate::config::{app_end, app_start};
+
 use crate::fs::vfs::{vfs_open, OpenFlags};
-use alloc::vec;
 use alloc::vec::Vec;
 use bitflags::bitflags;
 use log::{debug, error, warn};
 
 bitflags! {
-    /// 信号结构体 posix
-    #[derive(Debug,Clone, Copy,PartialEq, Eq)]
-
-    pub struct Signal:usize{
-        const SIGHUP    = 1usize << 0;  // 1  挂起（控制终端断开/会话结束）
-        const SIGINT    = 1usize << (2  - 1);  // 2  中断（通常是 Ctrl+C）
-        const SIGQUIT   = 1usize << (3  - 1);  // 3  退出（通常是 Ctrl+\\，可产生 core）
-        const SIGILL    = 1usize << (4  - 1);  // 4  非法指令
-        const SIGTRAP   = 1usize << (5  - 1);  // 5  断点/跟踪陷阱
-        const SIGABRT   = 1usize << (6  - 1);  // 6  中止（abort）
-        const SIGBUS    = 1usize << (7  - 1);  // 7  总线错误（对齐/物理访问错误等）
-        const SIGFPE    = 1usize << (8  - 1);  // 8  浮点异常（除零/溢出等）
-        const SIGKILL   = 1usize << (9  - 1);  // 9  强制杀死（不可捕获/不可忽略）
-        const SIGUSR1   = 1usize << (10 - 1);  // 10 用户自定义信号 1
-        const SIGSEGV   = 1usize << (11 - 1);  // 11 段错误（非法内存访问）
-        const SIGUSR2   = 1usize << (12 - 1);  // 12 用户自定义信号 2
-        const SIGPIPE   = 1usize << (13 - 1);  // 13 管道破裂（写入无读端的 pipe/socket）
-        const SIGALRM   = 1usize << (14 - 1);  // 14 定时器超时（alarm）
-        const SIGTERM   = 1usize << (15 - 1);  // 15 终止（默认终止，可捕获/可清理）
-        const SIGSTKFLT = 1usize << (16 - 1);  // 16 协处理器栈故障（历史/很少用）
-        const SIGCHLD   = 1usize << (17 - 1);  // 17 子进程状态改变（退出/停止/继续）
-        const SIGCONT   = 1usize << (18 - 1);  // 18 继续（从停止状态恢复）
-        const SIGSTOP   = 1usize << (19 - 1);  // 19 停止（不可捕获/不可忽略）
-        const SIGTSTP   = 1usize << (20 - 1);  // 20 终端停止（Ctrl+Z）
-        const SIGTTIN   = 1usize << (21 - 1);  // 21 后台进程读终端
-        const SIGTTOU   = 1usize << (22 - 1);  // 22 后台进程写终端
-        const SIGURG    = 1usize << (23 - 1);  // 23 紧急数据到达（socket）
-        const SIGXCPU   = 1usize << (24 - 1);  // 24 CPU 时间限制超出
-        const SIGXFSZ   = 1usize << (25 - 1);  // 25 文件大小限制超出
-        const SIGVTALRM = 1usize << (26 - 1);  // 26 虚拟定时器超时
-        const SIGPROF   = 1usize << (27 - 1);  // 27 性能分析定时器超时
-        const SIGWINCH  = 1usize << (28 - 1);  // 28 窗口大小变化
-        const SIGIO     = 1usize << (29 - 1);  // 29 I/O 就绪（异步 I/O）
-        const SIGPWR    = 1usize << (30 - 1);  // 30 电源故障（历史/平台相关）
-        const SIGSYS    = 1usize << (31 - 1);  // 31 错误的系统调用（bad syscall）
+    /// POSIX 风格信号集合。
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    pub struct Signal: usize {
+        const SIGHUP    = 1usize << 0;
+        const SIGINT    = 1usize << (2  - 1);
+        const SIGQUIT   = 1usize << (3  - 1);
+        const SIGILL    = 1usize << (4  - 1);
+        const SIGTRAP   = 1usize << (5  - 1);
+        const SIGABRT   = 1usize << (6  - 1);
+        const SIGBUS    = 1usize << (7  - 1);
+        const SIGFPE    = 1usize << (8  - 1);
+        const SIGKILL   = 1usize << (9  - 1);
+        const SIGUSR1   = 1usize << (10 - 1);
+        const SIGSEGV   = 1usize << (11 - 1);
+        const SIGUSR2   = 1usize << (12 - 1);
+        const SIGPIPE   = 1usize << (13 - 1);
+        const SIGALRM   = 1usize << (14 - 1);
+        const SIGTERM   = 1usize << (15 - 1);
+        const SIGSTKFLT = 1usize << (16 - 1);
+        const SIGCHLD   = 1usize << (17 - 1);
+        const SIGCONT   = 1usize << (18 - 1);
+        const SIGSTOP   = 1usize << (19 - 1);
+        const SIGTSTP   = 1usize << (20 - 1);
+        const SIGTTIN   = 1usize << (21 - 1);
+        const SIGTTOU   = 1usize << (22 - 1);
+        const SIGURG    = 1usize << (23 - 1);
+        const SIGXCPU   = 1usize << (24 - 1);
+        const SIGXFSZ   = 1usize << (25 - 1);
+        const SIGVTALRM = 1usize << (26 - 1);
+        const SIGPROF   = 1usize << (27 - 1);
+        const SIGWINCH  = 1usize << (28 - 1);
+        const SIGIO     = 1usize << (29 - 1);
+        const SIGPWR    = 1usize << (30 - 1);
+        const SIGSYS    = 1usize << (31 - 1);
     }
 }
 
+/// 检查 ELF 魔数。
 pub fn have_elf_header(data: [u8; 4]) -> bool {
     data == [0x7f, b'E', b'L', b'F']
 }
-/// 文件加载器，根据 app_id 从文件系统 /test 目录加载对应的 ELF 文件
-/// app_id 从 0 开始
-/// 自动elf过滤
+
+/// 从 VFS 加载一个 ELF 文件。
 pub fn file_loader(file_path: &str) -> Vec<u8> {
-    debug!("Eter in loader");
-
-    // 比赛内联init
-    if file_path == "/cinit" {
-        let start = app_start as *const () as usize;
-        let end = app_end as *const () as usize;
-        if end <= start {
-            return vec![];
-        }
-        let bytes = unsafe { core::slice::from_raw_parts(start as *const u8, end - start) };
-        return bytes.to_vec();
-    }
-
-    // rk3588 临时内联
-    // if file_path == "/test/init" {
-    //     let start = app_start as usize;
-    //     let end = app_end as usize;
-    //     if end <= start {
-    //         return vec![];
-    //     }
-    //     let bytes = unsafe { core::slice::from_raw_parts(start as *const u8, end - start) };
-    //     return bytes.to_vec();
-    // }
+    debug!("Enter file loader: {}", file_path);
 
     let fd = match vfs_open(file_path, OpenFlags::empty()) {
         Ok(res) => res,
-        Err(_) => {
-            warn!("Open Application faild,can't open it");
-            return vec![]; //提前结束
+        Err(e) => {
+            warn!("file_loader: open {} failed: {}", file_path, e);
+            return Vec::new();
         }
     };
-    debug!("open file success");
 
-    let mut out: Vec<u8> = Vec::new();
-
-    // elf校验
+    let mut out = Vec::new();
     let mut tmp = [0u8; 512];
     let n = match fd.read(&mut tmp) {
         Ok(n) => n,
         Err(e) => {
-            error!(
-                "file_loader: fd.read failed: path={} err={:?}",
-                file_path, e
-            );
-            return vec![];
+            error!("file_loader: read {} failed: {:?}", file_path, e);
+            return Vec::new();
         }
     };
 
-    if !have_elf_header([tmp[0], tmp[1], tmp[2], tmp[3]]) {
-        warn!("Valid elf file");
-        return vec![];
+    if n < 4 || !have_elf_header([tmp[0], tmp[1], tmp[2], tmp[3]]) {
+        warn!("file_loader: {} is not a valid ELF file", file_path);
+        return Vec::new();
     }
 
     out.extend_from_slice(&tmp[..n]);
@@ -113,11 +83,8 @@ pub fn file_loader(file_path: &str) -> Vec<u8> {
         let n = match fd.read(&mut tmp) {
             Ok(n) => n,
             Err(e) => {
-                error!(
-                    "file_loader: fd.read failed: path={} err={:?}",
-                    file_path, e
-                );
-                return vec![];
+                error!("file_loader: read {} failed: {:?}", file_path, e);
+                return Vec::new();
             }
         };
         if n == 0 {
@@ -125,8 +92,8 @@ pub fn file_loader(file_path: &str) -> Vec<u8> {
         }
         out.extend_from_slice(&tmp[..n]);
     }
-    debug!("Load app for {} success!", file_path);
 
+    debug!("Loaded application {}", file_path);
     out
 }
 

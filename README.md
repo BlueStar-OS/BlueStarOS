@@ -1,119 +1,169 @@
 # BlueStarOS
 
-![Rust](https://img.shields.io/badge/rust-latest-brightgreen)
+![Rust](https://img.shields.io/badge/Rust-nightly-orange)
 ![License](https://img.shields.io/badge/license-MIT-blue)
-![Lines of Code](https://img.shields.io/badge/LoC-51K-orange)
 ![Status](https://img.shields.io/badge/status-active-success)
 
-一个用纯 Rust 从零开发的操作系统内核，支持 RISC-V 64 和 AArch64 双架构。
+BlueStarOS 是一个使用 Rust 编写的实验性操作系统内核，目标是从内核基础设施、文件系统、设备驱动到用户态运行环境逐步构建一套可理解、可扩展的完整系统。目前主要支持 **RISC-V 64** 与 **AArch64**。
 
-## 特性
+> 项目仍处于快速开发阶段，接口、驱动和构建方式可能继续调整。
+
+## 功能概览
 
 ### 进程与调度
 
-- 多进程管理: fork / exec / exit / wait / signal
-- Stride 调度算法, 支持优先级权重
-- 进程间信号 (SIGKILL / SIGINT / SIGTERM / SIGTSTP)
-- 84 个系统调用, 兼容 musl libc 用户态程序
+- 多进程管理：`fork` / `exec` / `exit` / `wait`
+- Stride 加权调度
+- 基础 POSIX 风格信号支持
+- Linux RISC-V/AArch64 风格系统调用接口
+- 可运行静态链接的 musl libc 用户程序
 
 ### 内存管理
 
-- SV39 / AArch64 4K 页表, 用户/内核地址空间隔离
-- Buddy System 物理页分配器
-- 内核堆动态分配 (buddy_system_allocator)
-- mmap 匿名映射
+- RISC-V SV39 与 AArch64 4 KiB 页表
+- 用户态 / 内核态地址空间隔离
+- Buddy System 物理页分配
+- 内核动态内存分配
+- 用户地址空间与 `mmap` / `munmap` 支持
 
 ### 文件系统
 
-- VFS 抽象层 + dentry/inode 缓存
-- **ext4** (rsext4 crate, ~18K 行): extent tree, JBD2 事务日志, htree 目录索引, mkfs
-- FAT32 / ramfs
-- pipe, tty
+- VFS 抽象层与 dentry/inode 缓存
+- ext4：extent tree、JBD2、htree、mkfs 等实现位于 `kernel/dependencies/rsext4`
+- FAT32 与 ramfs
+- pipe、TTY 与设备文件
+- GPT 分区扫描与 ext4 根文件系统挂载
 
 ### 设备驱动
 
-- **PCIe**: 枚举, BAR 解析, MSI 中断
-- **NVMe**: 块设备驱动 (替代 virtio-blk)
-- **e1000 网卡**: RX/TX DMA 环形队列, 中断驱动
+- PCIe：枚举、BAR 解析、中断能力
+- NVMe 块设备驱动
+- Intel e1000 网卡驱动
 - virtio-blk / virtio-gpu
-- DTB (设备树) 解析
+- framebuffer / keyboard
+- DTB（设备树）解析
+- RISC-V PLIC 与 AArch64 GIC
 
-### 网络协议栈 (进行中)
+### 网络协议栈
 
-- L2: 以太网帧收发
-- L3: IPv4 头解析/校验, ICMP Echo Request/Reply
-- L4: UDP 头 + 伪头校验和
-- ARP 协议 (请求/应答/缓存)
+当前已包含基础网络路径：
 
-### 双架构支持
+- Ethernet
+- ARP
+- IPv4
+- ICMP
+- UDP
 
-- `arch/riscv64`: QEMU virt 机器, PLIC 中断控制器
-- `arch/aarch64`: QEMU virt + OrangePi 5 Plus (RK3588), GIC 中断控制器
+Socket 用户接口与更完整的传输层支持仍在继续完善。
 
-## 目录结构
+## 支持平台
+
+| 架构 | 平台 | 状态 |
+| --- | --- | --- |
+| RISC-V 64 | QEMU `virt` | 主要开发平台 |
+| AArch64 | QEMU `virt` | 支持 |
+| AArch64 | Orange Pi 5 Plus / RK3588 | 实验性支持 |
+
+## 仓库结构
 
 ```text
-kernel/
-├── src/
-│   ├── arch/              # 架构相关 (riscv64, aarch64)
-│   │   ├── */driver/      # UART, PLIC/GIC, virtio
-│   │   ├── */memory/      # 地址空间, 页表
-│   │   ├── */task/        # 上下文切换
-│   │   └── */trap/        # 陷阱处理
-│   ├── driver/
-│   │   ├── network/e1000/ # e1000 网卡驱动 + 协议栈
-│   │   ├── nvme/          # NVMe 块设备驱动
-│   │   ├── pcie/          # PCIe 枚举与 BAR
-│   │   └── gpu/           # VGA 帧缓冲
-│   ├── fs/
-│   │   ├── vfs/           # VFS 抽象层 + 缓存
-│   │   ├── fs_backend/    # ext4, FAT32, ramfs
-│   │   └── component/     # pipe, tty
-│   ├── memory/            # 物理/虚拟内存管理
-│   ├── task/              # 进程控制块, 调度器
-│   ├── syscall/           # 系统调用分发
-│   └── sync/              # 同步原语
-├── dependencies/
-│   └── rsext4/            # 自研 ext4 文件系统 (~18K 行)
-└── Cargo.toml
+BlueStarOS/
+├── kernel/                 # 内核主体
+│   ├── src/
+│   │   ├── arch/           # riscv64 / aarch64 架构相关代码
+│   │   ├── driver/         # PCIe、NVMe、网络、GPU 等驱动
+│   │   ├── fs/             # VFS、文件系统与设备文件
+│   │   ├── memory/         # 物理/虚拟内存管理
+│   │   ├── syscall/        # 系统调用
+│   │   ├── task/           # 进程、调度与信号
+│   │   └── sync/           # 同步原语
+│   ├── dependencies/
+│   │   └── rsext4/         # ext4 实现
+│   └── TestOS.mk           # 内核自测构建入口
+├── user/                   # 用户态 Rust/C 程序与根文件系统镜像构建
+├── test/                   # 独立内核测试用例
+├── docs/                   # 架构、驱动和实现文档
+└── Makefile                # 顶层构建入口
+```
+
+## 构建环境
+
+推荐在 Linux 环境下构建。主要依赖：
+
+- Rust nightly
+- `rust-src`、`llvm-tools-preview`
+- `cargo-binutils`
+- GNU Make
+- QEMU
+- RISC-V musl 交叉编译器（构建 RISC-V C 用户程序时需要）
+- `losetup`、`parted`、`mkfs.ext4`、`mkfs.vfat`（生成磁盘镜像时需要）
+
+首次配置 Rust 目标与工具：
+
+```bash
+cd kernel
+make env
 ```
 
 ## 快速开始
 
-**前置依赖**
-
-- Rust nightly 工具链
-- QEMU (7.0+)
-- GNU Make
-
-**构建与运行**
-
 ```bash
-# 克隆
-git clone https://github.com/Dirinkbottle/BlueStarOS.git
+git clone https://github.com/BlueStar-OS/BlueStarOS.git
 cd BlueStarOS/kernel
 
-# RISC-V (默认)
-make run LOG=TRACE
+# RISC-V 64
+make run LOG=INFO
 
 # AArch64
-make run ARCH=aarch64 LOG=TRACE
+make run ARCH=aarch64 LOG=INFO
 ```
 
-## 开发计划
+RISC-V QEMU 默认配置包含 e1000 + TAP 网络设备；如果本机没有 `tap0`，请先配置 TAP，或根据需要调整 `kernel/Makefile` 中的 QEMU 网络参数。
 
-- [ ] 网络: socket syscall, 用户态 UDP/TCP
-- [x] 同步: 信号量, Mutex, condvar (WaitQueue 骨架已就位)
+只构建用户态与内核镜像可使用：
+
+```bash
+make build
+```
+
+## 测试
+
+仓库内的 `test/` 与 `kernel/TestOS.mk` 用于维护独立测试用例。目前可以构建 syscall 测试与测试 rootfs：
+
+```bash
+cd kernel
+make test_syscall
+make testfs
+```
+
+测试 rootfs 的自动 QEMU 执行仍在完善中。
+
+## 可选用户程序
+
+`user/Makefile` 提供可选的 DoomGeneric 构建入口，但不会参与默认镜像构建。需要时显式指定源码目录：
+
+```bash
+cd user
+make build-doom DOOM_DIR=/path/to/doomgeneric
+make img
+```
+
+## 开发方向
+
+- [ ] 完善 socket syscall 与用户态 UDP/TCP
 - [ ] SMP 多核支持
-- [x] 用户态 shell
-- [x] ext4 写入支持完善
+- [ ] 完善系统调用兼容性与错误语义
+- [ ] 扩展真实硬件平台驱动
+- [ ] 持续完善测试与自动化验证
+
+## 文档
+
+实现笔记与驱动文档位于 [`docs/`](docs/)，包括 AArch64 中断/页表、e1000、NVMe、PCIe 与存储相关内容。
 
 ## 许可证
 
-MIT License. 详见 [LICENSE](LICENSE)。
+BlueStarOS 使用 [MIT License](LICENSE)。
 
-## 联系方式
+## 参与开发
 
-- 邮箱: <2909128143@qq.com>
-- GitHub: [BlueStarOS](https://github.com/Dirinkbottle/BlueStarOS/)
-- Issues: [提交问题或建议](https://github.com/Dirinkbottle/BlueStarOS/issues)
+欢迎通过 [Issues](https://github.com/BlueStar-OS/BlueStarOS/issues) 提交问题、改进建议或讨论实现方案。

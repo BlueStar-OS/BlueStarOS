@@ -1,25 +1,23 @@
-# Building
-ARCH  ?= riscv64
+# BlueStarOS kernel build.
+
+ARCH ?= riscv64
 MODE := release
 QEMU_MACHINE ?= virt
 QEMU_PLAT ?=
 USER_DIR := ../user
 LOG ?= DEBUG
 
-# Architecture-specific settings
 ifeq ($(ARCH), riscv64)
 TARGET := riscv64gc-unknown-none-elf
 KERNEL_ENTRY_PA := 0x80200000
 BOOTLOADER := ./bootloader/rustsbi-prototyper-jump.bin
 QEMU_CPU :=
-QEMU_BIOS := 
+QEMU_BIOS :=
 QEMU_KERNEL = -kernel $(KERNEL_ELF)
 QEMU_DEBUG_BOOT = -bios $(BOOTLOADER) -device loader,file=$(KERNEL_BIN),addr=$(KERNEL_ENTRY_PA)
 GDB_SET_ARCH = -ex 'set arch riscv:rv64'
-# 驱动 features
 DRIVER_FEATURES ?= qemu_plat
 
-	
 QEMU_DEVICE_ARGS = \
 	-drive file=disk.img,format=raw,if=none,id=nv0 \
 	-drive file=emmc.img,format=raw,if=none,id=nv1 \
@@ -34,7 +32,7 @@ QEMU_DEVICE_ARGS = \
 	-device nvme,serial=bsosnvme0,drive=nv0,bus=rp2 \
 	-device nvme,serial=bsosnvme1,drive=nv1,bus=rp3 \
 	-device e1000,bus=rp4,netdev=net0
-	
+
 else ifeq ($(ARCH), aarch64)
 TARGET := aarch64-unknown-none-softfloat
 KERNEL_ENTRY_PA := 0x40080000
@@ -44,17 +42,14 @@ QEMU_BIOS :=
 QEMU_KERNEL = -kernel $(KERNEL_BIN)
 QEMU_DEBUG_BOOT = $(QEMU_BIOS) $(QEMU_KERNEL)
 GDB_SET_ARCH = -ex 'set arch aarch64'
-# 驱动 features
 DRIVER_FEATURES ?= qemu_plat
 
-
 QEMU_DEVICE_ARGS = \
-	-machine virt,gic-version=3  \
+	-machine virt,gic-version=3 \
 	-drive file=emmc.img,format=raw,if=none,id=x0 \
 	-net none \
 	-device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0 \
-	-device virtio-gpu-device,bus=virtio-mmio-bus.1 
-
+	-device virtio-gpu-device,bus=virtio-mmio-bus.1
 
 else
 $(error Unsupported ARCH=$(ARCH). Supported: riscv64, aarch64)
@@ -64,48 +59,39 @@ KERNEL_ELF := target/$(TARGET)/$(MODE)/os
 KERNEL_BIN := $(KERNEL_ELF).bin
 DISASM_TMP := target/$(TARGET)/$(MODE)/asm
 
-# Building mode argument
 ifeq ($(MODE), release)
-	MODE_ARG := --release
+MODE_ARG := --release
 endif
 
-# Driver features argument
 ifneq ($(DRIVER_FEATURES),)
-	FEATURES_ARG := --features "$(DRIVER_FEATURES)"
+FEATURES_ARG := --features "$(DRIVER_FEATURES)"
 else
-	FEATURES_ARG :=
+FEATURES_ARG :=
 endif
 
 ifneq ($(QEMU_DTB),)
-	QEMU_DTB_ARG := -dtb $(QEMU_DTB)
+QEMU_DTB_ARG := -dtb $(QEMU_DTB)
 else
-	QEMU_DTB_ARG :=
+QEMU_DTB_ARG :=
 endif
 
-
-
-# Binutils
 OBJDUMP := rust-objdump --arch-name=$(ARCH)
 OBJCOPY := rust-objcopy --binary-architecture=$(ARCH)
-
-# Disassembly
 DISASM ?= -x
 
-# 代码风格检查：要求所有 Rust 文件已经过 rustfmt 格式化
+.PHONY: build fmt-check clippy-check env clean user-makeimg run run-inner debug gdbserver gdbclient test test_all test_syscall testfs test_clean
+
 fmt-check:
 	@cargo fmt --all --check
 
-# 严格静态检查：任何 warning 都视为错误
 clippy-check:
 	@LOG=$(LOG) cargo clippy --target $(TARGET) $(MODE_ARG) $(FEATURES_ARG) --all-targets -- -D warnings
 
-# 总是重新构建：每次 build 都先通过格式化与 clippy 检查，再跑 cargo build 和 objcopy
 build: user-makeimg
 	@cargo clean
 	@cargo clippy -p os
 	@rm -f $(KERNEL_ELF) $(KERNEL_BIN) src/BlueStarOS.elf src/BlueStarOS.bin
 	@LOG=$(LOG) cargo build --target $(TARGET) $(MODE_ARG) $(FEATURES_ARG)
-	@# 从 ELF 提取内核符号表，生成 src/kernel_symbols.txt（用于 backtrace 函数名解析）
 	@rust-nm --demangle -n $(KERNEL_ELF) 2>/dev/null | grep ' [tT] ' | grep -v '^[0-9a-f]* t \.L' | awk '{addr=$$1; $$1=""; $$2=""; gsub(/^ +/, ""); print addr " " $$0}' > src/kernel_symbols.txt
 	$(OBJCOPY) $(KERNEL_ELF) --strip-all -O binary $(KERNEL_BIN)
 	@cp $(KERNEL_ELF) src/BlueStarOS.elf
@@ -117,29 +103,20 @@ user-makeimg:
 	@cp $(USER_DIR)/../kernel/disk.img $(USER_DIR)/../kernel/emmc.img
 	@echo "Synced disk.img -> emmc.img"
 
-user-consent-img:
-	$(MAKE) -C $(USER_DIR) consent_img ARCH=$(ARCH)
-
 env:
 	(rustup target list | grep "$(TARGET) (installed)") || rustup target add $(TARGET)
 	cargo install cargo-binutils
 	rustup component add rust-src
 	rustup component add llvm-tools-preview
 
-
 clean:
 	@echo "==> Cleaning build artifacts..."
 	@cargo clean
 	@cd $(USER_DIR) && cargo clean
-	@rm -f $(APP_ASM)
 	@echo "✓ Clean complete"
-
 
 run: run-inner
 
-run_consent: run-consent-inner
-
-# run-inner: 保留图形窗口，同时把 serial0 绑定到当前终端
 run-inner: build
 	@$(QEMU_PLAT)qemu-system-$(ARCH) \
 		-machine $(QEMU_MACHINE) \
@@ -152,24 +129,7 @@ run-inner: build
 		-monitor none \
 		-serial stdio \
 		-s \
-		$(QEMU_DEVICE_ARGS) \
-
-run-consent-inner: user-consent-img
-	@cargo build --target $(TARGET) $(MODE_ARG) $(FEATURES_ARG)
-	@$(QEMU_PLAT)qemu-system-$(ARCH) --version \
-	
-	@$(QEMU_PLAT)qemu-system-$(ARCH) \
-		-machine virt \
-		-kernel $(KERNEL_BIN) \
-		$(QEMU_DTB_ARG) \
-		-m 128M \
-		-nographic \
-		-smp 2 \
-		-bios $(BOOTLOADER) \
-		-drive file=sdcard.img,if=none,format=raw,id=x0 \
-		-device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0 \
-		-device virtio-net-device,netdev=net \
-		-netdev user,id=net
+		$(QEMU_DEVICE_ARGS)
 
 debug: build
 	@tmux new-session -d \
@@ -178,11 +138,9 @@ debug: build
 		tmux -2 attach-session -d
 
 gdbserver: build
-	@$(QEMU_PLAT)qemu-system-$(ARCH) -machine $(QEMU_MACHINE) $(QEMU_CPU) -m 256m -nographic $(QEMU_DEBUG_BOOT) $(QEMU_DTB_ARG) $(QEMU_DEVICE_ARGS) -s 
+	@$(QEMU_PLAT)qemu-system-$(ARCH) -machine $(QEMU_MACHINE) $(QEMU_CPU) -m 256m -nographic $(QEMU_DEBUG_BOOT) $(QEMU_DTB_ARG) $(QEMU_DEVICE_ARGS) -s
 
 gdbclient:
 	@$(ARCH)-unknown-elf-gdb -ex 'file $(KERNEL_ELF)' $(GDB_SET_ARCH) -ex 'target remote localhost:1234'
-
-.PHONY: build fmt-check clippy-check env kernel clean user user-apps disasm disasm-vim run-inner run-consent-inner run_consent gdbserver gdbclient list-apps regen-asm
 
 -include TestOS.mk

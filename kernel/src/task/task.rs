@@ -4,12 +4,7 @@ use crate::arch::trap::TrapContext;
 use crate::config::*;
 use crate::fs::component::tty::*;
 use crate::fs::semaphore::waitqueue::WaitQueue;
-use crate::fs::vfs::vfs_getdents64;
-use crate::fs::vfs::vfs_open;
 use crate::fs::vfs::File;
-use crate::fs::vfs::LinuxDirent64;
-use crate::fs::vfs::OpenFlags;
-use crate::fs::vfs::VFS_DT_REG;
 use crate::kernel_trap_handler;
 use crate::memory::*;
 use crate::shutdown;
@@ -89,12 +84,9 @@ fn build_auxv(elf_data: &[u8], elf_entry: usize) -> Vec<AuxEntry> {
     let ehdr = elf.header;
     let ph_count = ehdr.pt2.ph_count() as usize;
     let ph_entry_size = ehdr.pt2.ph_entry_size() as usize;
-    // 头表文件偏移与范围
     let ph_offset = ehdr.pt2.ph_offset() as usize;
     let phdr_end = ph_offset + ph_count * ph_entry_size;
 
-    // AT_PHDR = base + ph_offset，base = 第一个覆盖 PHDR 的 LOAD 段虚拟基址
-    // 如果没有 LOAD 段覆盖 PHDR 表，at_phdr 保持 0（musl/glibc 会跳过 PHDR 逻辑）
     let mut at_phdr = 0;
     for i in 0..ph_count {
         let ph = elf.program_header(i as u16).unwrap();
@@ -117,154 +109,99 @@ fn build_auxv(elf_data: &[u8], elf_entry: usize) -> Vec<AuxEntry> {
     }
 
     vec![
-        // ── 进程基础信息 ──
-        AuxEntry::new(AuxKey(AT_PAGESZ), AuxValue(PAGE_SIZE)), // ✅ 系统页大小
-        AuxEntry::new(AuxKey(AT_PHDR), AuxValue(at_phdr)),     // ✅ 程序头表地址
-        AuxEntry::new(AuxKey(AT_PHENT), AuxValue(ph_entry_size)), // ✅ 程序头表项大小
-        AuxEntry::new(AuxKey(AT_PHNUM), AuxValue(ph_count)),   // ✅ 程序头表项数
-        AuxEntry::new(AuxKey(AT_ENTRY), AuxValue(elf_entry)),  // ✅ 入口地址
-        AuxEntry::new(AuxKey(AT_BASE), AuxValue(0)),           // 动态链接器基址（静态链接 = 0）
-        // ── 时钟与安全 ──
-        AuxEntry::new(AuxKey(AT_CLKTCK), AuxValue(TIME_FREQUENT)), // ✅ times() ticks/sec (=100)
-        AuxEntry::new(AuxKey(AT_SECURE), AuxValue(0)), // setuid 安全模式（无多用户 = 0）
-        // ── RISC-V 硬件能力 ──
-        AuxEntry::new(AuxKey(AT_HWCAP), AuxValue(0)), // TODO: RISC-V ISA 扩展位掩码
-        // ── 随机性与 vDSO ──
-        AuxEntry::new(AuxKey(AT_RANDOM), AuxValue(0)), // TODO: 16 字节随机数（栈 canary），musl 回退用 sp
-        AuxEntry::new(AuxKey(AT_SYSINFO_EHDR), AuxValue(0)), // vDSO ELF 头地址（暂无 vDSO）
-        // ── UID/GID（无多用户 = 全 root） ──
-        AuxEntry::new(AuxKey(AT_UID), AuxValue(0)), // TODO: 真实 UID
-        AuxEntry::new(AuxKey(AT_EUID), AuxValue(0)), // TODO: 有效 UID
-        AuxEntry::new(AuxKey(AT_GID), AuxValue(0)), // TODO: 真实 GID
-        AuxEntry::new(AuxKey(AT_EGID), AuxValue(0)), // TODO: 有效 GID
-        // ── 终止符（musl 解析到此停止） ──
+        AuxEntry::new(AuxKey(AT_PAGESZ), AuxValue(PAGE_SIZE)),
+        AuxEntry::new(AuxKey(AT_PHDR), AuxValue(at_phdr)),
+        AuxEntry::new(AuxKey(AT_PHENT), AuxValue(ph_entry_size)),
+        AuxEntry::new(AuxKey(AT_PHNUM), AuxValue(ph_count)),
+        AuxEntry::new(AuxKey(AT_ENTRY), AuxValue(elf_entry)),
+        AuxEntry::new(AuxKey(AT_BASE), AuxValue(0)),
+        AuxEntry::new(AuxKey(AT_CLKTCK), AuxValue(TIME_FREQUENT)),
+        AuxEntry::new(AuxKey(AT_SECURE), AuxValue(0)),
+        AuxEntry::new(AuxKey(AT_HWCAP), AuxValue(0)),
+        AuxEntry::new(AuxKey(AT_RANDOM), AuxValue(0)),
+        AuxEntry::new(AuxKey(AT_SYSINFO_EHDR), AuxValue(0)),
+        AuxEntry::new(AuxKey(AT_UID), AuxValue(0)),
+        AuxEntry::new(AuxKey(AT_EUID), AuxValue(0)),
+        AuxEntry::new(AuxKey(AT_GID), AuxValue(0)),
+        AuxEntry::new(AuxKey(AT_EGID), AuxValue(0)),
         AuxEntry::new(AuxKey(AT_NULL), AuxValue(0)),
     ]
 }
 
-///任务上下文
 use crate::sync::UPSafeCell;
 
 /// 任务运行状态。
-///
-/// 对标 Linux `include/linux/sched.h` 中的进程状态机:
-///
-/// | BlueStarOS | Linux 等价 | 含义 |
-/// |------------|-----------|------|
-/// | `Ready` | `TASK_RUNNING` (在就绪队列) | 可被调度器选中执行 |
-/// | `Runing` | `TASK_RUNNING` (正在 CPU 上) | 当前正在 CPU 上执行 |
-/// | `Blocking` | `TASK_INTERRUPTIBLE` | 等待事件 (I/O、信号量等)，不参与调度 |
-/// | `Zombie` | `EXIT_ZOMBIE | EXIT_DEAD` | 已退出，等待父进程 `wait()` 回收 |
-///
-/// ## 状态转换
-///
-/// ```text
-/// Ready ──(stride选中)──> Runing
-/// Runing ──(时间片到)──> Ready
-/// Runing ──(block())──> Blocking
-/// Blocking ──(wake())──> Ready
-/// Runing ──(exit())──> Zombie
-/// ```
 #[derive(Clone, PartialEq, Debug)]
 pub enum TaskStatus {
     /// 正在 CPU 上执行
     Runing,
-    /// 已退出，等待父进程回收 (保留 pid/exit_code)
+    /// 已退出，等待父进程回收
     Zombie,
-    /// 阻塞中，等待事件唤醒 (不参与调度)
+    /// 阻塞中，等待事件唤醒
     Blocking,
     /// 就绪，在调度队列中等待被选中
     Ready,
 }
 
-/// 进程 ID (PID)。
-///
-/// newtype 包装 `i32`，实现 `Drop` 自动回收 PID 到全局分配器。
-/// 对标 Linux `include/linux/types.h` → `pid_t`。
+/// 进程 ID。
 #[derive(Clone)]
 pub struct ProcessId(pub i32);
 
 /// PID 分配器。
-///
-/// 采用单调递增 + 回收池策略:
-/// - `alloc_id()`: 优先从 `id_pool` (回收池) 取，否则递增 `current`
-/// - `ProcessId::drop()`: PID 被释放时自动归还到 `id_pool`
-///
-/// 范围: `[start, end)`，初始为 `[1, 10_000_000)`。
 pub struct ProcessIdAlloctor {
-    /// 当前待分配的 PID (单调递增)
     current: i32,
-    /// PID 上限 (不含)
     end: i32,
-    /// 回收池 — 已释放的 PID 等待复用
     id_pool: Vec<ProcessId>,
 }
 
-/// 进程控制块 (PCB)。
-///
-/// 对标 Linux `struct task_struct`，包含一个进程的全部运行时状态。
-/// 生命周期: `new()` → `Ready` → `Runing` ↔ `Blocking` → `Zombie` → `Drop`
+/// 进程控制块。
 #[derive(Clone)]
 pub struct TaskControlBlock {
     /// 待处理的信号队列
     pub signal: VecDeque<OsSignal>,
     /// 进程 ID
     pub pid: ProcessId,
-    /// 地址空间 (页表 + VMA 映射)
+    /// 地址空间
     pub memory_set: MapSet,
     /// 当前运行状态
     pub task_statut: TaskStatus,
-    /// 退出码 (exit 时设置，父进程 wait 回收时读取)
+    /// 退出码
     pub exit_code: isize,
-    /// 任务上下文 (ra/sp/s0-s11)，__switch 时保存/恢复
+    /// 任务上下文
     pub task_context: TaskContext,
-    /// 陷阱上下文的物理页帧号 (TrapContext 映射在此物理地址)
+    /// 陷阱上下文物理页帧号
     pub trap_context_ppn: usize,
-    /// Stride 调度: 累积行程 (pass += stride，每次调度时更新)
     pass: usize,
-    /// Stride 调度: 步长 (stride = BIG_INT / ticket，权重越大步长越小)
     stride: usize,
-    /// Stride 调度: 权重 (ticket 越大，获得更多 CPU 时间)
     ticket: usize,
-    /// 文件描述符表。索引 = fd 号，0=stdin, 1=stdout, 2=stderr
+    /// 文件描述符表
     pub file_descriptor: Vec<Option<Arc<dyn File>>>,
-    /// 当前工作目录路径 (默认 "/")
+    /// 当前工作目录
     pub cwd: String,
-    /// 父进程弱引用 (Weak 防止循环引用导致内存泄漏)
+    /// 父进程
     pub parent: Option<Weak<UPSafeCell<TaskControlBlock>>>,
-    /// 子进程强引用列表 (exit 时过继给 init)
+    /// 子进程列表
     pub childrens: Vec<Arc<UPSafeCell<TaskControlBlock>>>,
-    /// 进程的等待队列
+    /// 进程退出等待队列
     pub exit_queue: Arc<WaitQueue>,
 }
 
-/// 任务管理器内部状态 (受 `UPSafeCell` 保护)。
-///
-/// - `task_queen`: 全局任务队列，任务阻塞时不移出，仅将状态设为 Blocking
-/// - `current`: 当前正在运行的任务在 `task_queen` 中的索引
+/// 任务管理器内部状态。
 pub struct TaskManagerInner {
-    /// 就绪任务队列 (Ready + Running 状态)
+    /// 全局任务队列
     pub task_queen: VecDeque<Arc<UPSafeCell<TaskControlBlock>>>,
-    /// 当前正在运行的任务在 `task_queen` 中的索引
+    /// 当前任务索引
     pub current: usize,
 }
 
-/// 全局任务管理器 (单例)。
-///
-/// 对标 Linux `struct rq` (runqueue) + `struct task_struct` 管理。
-/// 单核环境下通过 `UPSafeCell` 实现内部可变性，无 SMP 竞争。
-///
-/// 核心职责:
-/// - 任务调度: Stride 加权公平调度算法
-/// - 任务生命周期: 创建/阻塞/唤醒/退出/回收
-/// - fd 管理: 文件描述符的分配/关闭
+/// 全局任务管理器。
 pub struct TaskManager {
-    /// 内部可变状态 (就绪队列 + 阻塞队列 + current 指针)
+    /// 内部任务队列状态
     pub task_que_inner: UPSafeCell<TaskManagerInner>,
 }
 
 impl ProcessIdAlloctor {
-    ///初始化进程id分配器 start:起始分配pid end:限制最大的pid
+    /// 初始化进程 ID 分配器。
     pub fn initial_processid_alloctor(start: i32, end: i32) -> Self {
         let id_pool: Vec<ProcessId> = Vec::new();
         ProcessIdAlloctor {
@@ -274,24 +211,20 @@ impl ProcessIdAlloctor {
         }
     }
 
-    ///分配进程id
+    /// 分配进程 ID。
     pub fn alloc_id(&mut self) -> Option<ProcessId> {
-        //首先检查pool是否有可用process
         if !self.id_pool.is_empty() {
             return self.id_pool.pop();
         }
-        //检查边界 ，先把currentid+1，然后返回
         if self.current < self.end {
             self.current += 1;
             return Some(ProcessId(self.current - 1));
         }
-
         None
     }
 }
 
 impl Drop for ProcessId {
-    // PID 自动回收: 将自身归还到全局分配器的回收池，等待复用。
     fn drop(&mut self) {
         ProcessId_ALLOCTOR.lock(|alloc| alloc.id_pool.push(ProcessId(self.0)));
         trace!("Process Id :{} recycled!", self.0)
@@ -299,15 +232,10 @@ impl Drop for ProcessId {
 }
 
 impl TaskControlBlock {
-    /// 向上对齐到 `align` 的倍数。
-    ///
-    /// 例: `align_up(13, 8) == 16`
     fn align_up(x: usize, align: usize) -> usize {
         (x + align - 1) & !(align - 1)
     }
 
-    ///
-    /// 把 buf 中 cursor 处对齐到 alignment 边界（填充 0 直至对齐）
     fn align_slice(buf: &mut [u8], alignment: usize, cursor: &mut usize) {
         while !(*cursor).is_multiple_of(alignment) {
             buf[*cursor] = 0;
@@ -315,90 +243,59 @@ impl TaskControlBlock {
         }
     }
 
-    /// TODO：Not support envp
+    /// 将 argv 与 auxv 写入用户初始栈。
     fn push_args_to_user_stack(
         satp: usize,
         user_sp: usize,
         argv: &[String],
         auxv: &mut [AuxEntry],
     ) -> usize {
-        // ── 用户初始栈布局（高地址 → 低地址）──
-        // 参考 Linux fs/binfmt_elf.c:create_elf_tables()
-        //
-        //  高地址 (初始 user_sp)
-        //  ┌─────────────────────────────┐
-        //  │ 字符串数据 （argv/envp/随机数）│ ← AT_RANDOM/AT_EXECFN 等指针指向这里
-        //  ├─────────────────────────────┤
-        //  │ 对齐填充 (16 bytes align)   │
-        //  ├─────────────────────────────┤
-        //  │ auxv[...]                  │ ← 辅助向量表，从后往前写
-        //  │ AT_NULL (终止符)            │
-        //  ├─────────────────────────────┤
-        //  │ NULL (envp 终止)            │
-        //  ├─────────────────────────────┤
-        //  │ argv[0..argc-1] (字符串指针) │ ← char *argv[]
-        //  ├─────────────────────────────┤
-        //  │ argc (参数个数)              │ ← 低地址（返回的 SP）
-        //  └─────────────────────────────┘
-        //  低地址 (new_sp = user_sp - total_size)
         let mut tb = PageTable::crate_table_from_satp(satp);
-        let mut total_size: usize = 0; // 栈 blob 总大小（元数据 + 字符串 + 对齐填充）
-        let mut cursor: usize = 0; // 当前写入 stack_blob 的偏移
+        let mut total_size: usize = 0;
+        let mut cursor: usize = 0;
         let atranom_size = size_of::<[u8; 16]>();
         let usize_size = core::mem::size_of::<usize>();
-        total_size = total_size.saturating_add(usize_size); // argc
-        total_size = total_size.saturating_add(argv.len() * usize_size); // string ptr
-        total_size = total_size.saturating_add(usize_size * 2); // NULL  (envp NULL)
-        total_size = total_size.saturating_add(auxv.len() * AUX_ENTRY_SIZE); // auxv + AT_NULL
+        total_size = total_size.saturating_add(usize_size);
+        total_size = total_size.saturating_add(argv.len() * usize_size);
+        total_size = total_size.saturating_add(usize_size * 2);
+        total_size = total_size.saturating_add(auxv.len() * AUX_ENTRY_SIZE);
 
-        let mut str_area_off: usize = total_size; // stack_blob 内字符串区起始偏移
-
-        // 在字符串结尾再写，所以先设置str_area_off
-        total_size = total_size.saturating_add(atranom_size); // AT_RANDOM
+        let mut str_area_off: usize = total_size;
+        total_size = total_size.saturating_add(atranom_size);
 
         for arg in argv.iter() {
-            //string size
             let align_size = Self::align_up(arg.len() + 1, usize_size);
             total_size = total_size.saturating_add(align_size);
         }
 
-        // 16 字节栈对齐（POSIX ABI 要求）
         let align_pad = (16 - total_size % 16) % 16;
         total_size = total_size.saturating_add(align_pad);
 
-        let mut str_usr_addr = user_sp - total_size + str_area_off; // 字符串区在用户栈的实际地址
+        let mut str_usr_addr = user_sp - total_size + str_area_off;
+        let mut stack_blob: Vec<u8> = vec![0u8; total_size];
 
-        let mut stack_blob: Vec<u8> = vec![0u8; total_size]; // 待拷贝到用户栈的完整数据块
-                                                             // write argc
         cursor += core::mem::size_of::<usize>();
         stack_blob[0..cursor].copy_from_slice(&argv.len().to_le_bytes());
         Self::align_slice(&mut stack_blob, usize_size, &mut cursor);
 
-        // write str pointer and str
         for arg in argv.iter() {
             let mut real_arg = arg.clone();
             real_arg.push(0 as char);
             let byte_len = arg.len() + 1;
-            // pointer
             stack_blob[cursor..cursor + usize_size].copy_from_slice(&str_usr_addr.to_le_bytes());
             cursor += usize_size;
-            // str
             stack_blob[str_area_off..str_area_off + byte_len].copy_from_slice(real_arg.as_bytes());
 
-            str_usr_addr += Self::align_up(byte_len, usize_size); // next str pointer
-            str_area_off += Self::align_up(byte_len, usize_size); // next str
+            str_usr_addr += Self::align_up(byte_len, usize_size);
+            str_area_off += Self::align_up(byte_len, usize_size);
         }
-        // argv end NULL + envp end NULL（缓冲区已零初始化，仅推进偏移）
         cursor += usize_size * 2;
 
-        //写AT_RANDOM 16字节,必须在auxv数组前面
-        // 构造随机数，这里将时间拿来再加个魔法小数字就行了
         let magic_number: usize = 1314;
         let time = get_time_ns();
-        let last_random = time.saturating_sub(magic_number) / 2 + 8; //随便写的算法
+        let last_random = time.saturating_sub(magic_number) / 2 + 8;
         let at_random: [u8; 16] = {
-            // 将 last_random 的 8 个字节各 +1，循环填充 16 字节
-            let src = last_random.to_ne_bytes(); // [u8; 8]
+            let src = last_random.to_ne_bytes();
             let mut buf = [0u8; 16];
             let mut i = 0;
             while i < 16 {
@@ -407,11 +304,10 @@ impl TaskControlBlock {
             }
             buf
         };
-        let at_random_start = str_area_off; //在字符串结尾写
-        let at_random_usr_adr = str_usr_addr; //AT_RANDOM在用户的地址
+        let at_random_start = str_area_off;
+        let at_random_usr_adr = str_usr_addr;
         stack_blob[at_random_start..at_random_start + 16].copy_from_slice(&at_random);
 
-        // 修正AT_RANDOM指针
         auxv.iter_mut()
             .find(|auxv| auxv.key.0 == AT_RANDOM)
             .iter_mut()
@@ -419,45 +315,35 @@ impl TaskControlBlock {
                 (uv.value.0) = at_random_usr_adr;
             });
 
-        // write auxv：通过指针转换将 &[AuxEntry] 视为 &[u8]
         let auxv_raw: &[u8] = unsafe {
             core::slice::from_raw_parts(auxv.as_ptr() as *const u8, auxv.len() * AUX_ENTRY_SIZE)
         };
         stack_blob[cursor..cursor + auxv_raw.len()].copy_from_slice(auxv_raw);
 
-        // 将 stack_blob 拷贝到用户栈页面
-        let pages_needed = stack_blob.len() / PAGE_SIZE; // stack_blob 占用的页面数
-        let stack_pages_max = KERNEL_STACK_SIZE / PAGE_SIZE; // 栈可用的最大页面数
-        let mut page_list: Vec<&mut [u8; PAGE_SIZE]> = Vec::new(); // 收集到的用户栈页面列表
+        let pages_needed = stack_blob.len() / PAGE_SIZE;
+        let stack_pages_max = KERNEL_STACK_SIZE / PAGE_SIZE;
+        let mut page_list: Vec<&mut [u8; PAGE_SIZE]> = Vec::new();
         let first_page = match tb.get_mut_byte(VirAddr(user_sp - total_size).into()) {
             Some(page) => page,
-            None => {
-                return user_sp;
-            }
+            None => return user_sp,
         };
         page_list.push(first_page);
         if pages_needed > 1 {
-            // 跨页
             if pages_needed > stack_pages_max {
-                // stack over flow!
                 return user_sp;
             }
-            // usersp是页对齐的
             for i in 1..pages_needed {
-                // 补齐剩余页面
                 let next_page = match tb
                     .get_mut_byte(VirAddr(user_sp - total_size + PAGE_SIZE * i + 1).into())
                 {
                     Some(page) => page,
-                    None => {
-                        return user_sp;
-                    }
+                    None => return user_sp,
                 };
                 page_list.push(next_page);
             }
         }
 
-        let mut page_idx = 0; // 当前写入 page_list 的索引
+        let mut page_idx = 0;
         for chunk in stack_blob.chunks(PAGE_SIZE) {
             if chunk.is_empty() {
                 break;
@@ -479,48 +365,37 @@ impl TaskControlBlock {
         user_sp - total_size
     }
 
-    ///设置父亲进程引用
+    /// 设置父进程引用。
     pub fn set_father(&mut self, father: &Arc<UPSafeCell<TaskControlBlock>>) {
         self.parent = Some(Arc::downgrade(father));
     }
 
-    ///添加子进程引用
+    /// 添加子进程。
     pub fn add_children(&mut self, tlb: Arc<UPSafeCell<TaskControlBlock>>) {
         self.childrens.push(tlb);
     }
 
-    /// 获取当前工作目录路径引用。
+    /// 获取当前工作目录。
     pub fn get_cwd(&self) -> &str {
         &self.cwd
     }
 
-    /// 设置当前工作目录路径。
+    /// 设置当前工作目录。
     pub fn set_cwd(&mut self, cwd: String) {
         self.cwd = cwd;
     }
 
-    ///exec换血
-    /// path:可执行文件位置
-    /// 不应该返回
+    /// 用新的 ELF 镜像替换当前进程。
     pub fn new_exec_task(&mut self, path: &str, argv: Vec<String>, argc: usize) -> bool {
-        //按照new函数来换血，换内核栈，换地址空间
-        debug!(
-            "exec: replacing current task image with {}  <----ptah\n",
-            path
-        );
-
+        debug!("exec: replacing current task image with {}", path);
         let elf_data = file_loader(path);
         if elf_data.is_empty() {
-            //加载错误,直接返回
             return false;
         }
         self.new_exec_task_with_elf(path, argv, argc, &elf_data)
     }
 
-    /// 用已加载的 ELF 数据执行 exec (换血)。
-    ///
-    /// 与 `new_exec_task` 的区别: 不再重复读文件，直接使用传入的 `elf_data`。
-    /// 成功返回 `true`，失败 (ELF 解析错误) 返回 `false`。
+    /// 使用已经加载的 ELF 数据替换当前进程镜像。
     pub fn new_exec_task_with_elf(
         &mut self,
         _path: &str,
@@ -543,13 +418,11 @@ impl TaskControlBlock {
             .translate_byvpn(VirAddr(TRAP_CONTEXT_ADDR).strict_into_virnum())
             .expect("trap ppn translate failed");
 
-        // 运行时构造 auxv 并推入用户栈
         let _ = argc;
         let mut auxv = build_auxv(elf_data, elf_entry);
         let new_user_sp = Self::push_args_to_user_stack(user_satp, user_sp.0, &argv, &mut auxv);
 
-        self.memory_set = memset; //释放旧的全复制地址空间
-
+        self.memory_set = memset;
         self.task_context = task_cx;
         self.trap_context_ppn = trap_cx_ppn.0;
 
@@ -559,14 +432,14 @@ impl TaskControlBlock {
                 elf_entry,
                 kernel_satp,
                 kernel_trap_handler as *const () as usize,
-                kernel_sp, //此时被换血进程的内核栈指针还是用的旧的，只要不立马扫清旧内核栈就没事的
+                kernel_sp,
                 new_user_sp,
             );
         }
         true
     }
 
-    /// 创建新任务
+    /// 创建新任务。
     fn new(
         app_path: &str,
         _kernel_stack_id: usize,
@@ -593,12 +466,9 @@ impl TaskControlBlock {
             .expect("trap ppn translate failed");
 
         let argv = alloc::vec![alloc::string::String::from(app_path)];
-
-        // 构造最小 auxv 并推入用户栈
         let mut auxv = build_auxv(&elf_data, elf_entry);
         let new_user_sp = Self::push_args_to_user_stack(user_satp, user_sp.0, &argv, &mut auxv);
 
-        // 初始化文件描述符表：0=stdin, 1=stdout, 2=stderr
         let file_descriptor_table: Vec<Option<Arc<dyn File>>> = vec![
             Some(stdin_file()),
             Some(stdout_file()),
@@ -625,7 +495,6 @@ impl TaskControlBlock {
             exit_queue: Arc::new(WaitQueue::new()),
         };
 
-        // 初始化 TrapContext
         let trap_cx_point: *mut TrapContext = (trap_cx_ppn.0 * PAGE_SIZE) as *mut TrapContext;
         unsafe {
             *trap_cx_point = TrapContext::init_app_trap_context(
@@ -655,23 +524,14 @@ impl Drop for TaskControlBlock {
 }
 
 impl TaskManager {
-    //全局唯一
-
     /// 阻塞当前任务并切换到下一个就绪任务。
-    ///
-    /// 调用方 (WaitQueue::block) 已将当前 TCB 推入 waiters 并设为 Blocking。
-    /// 本方法负责: 从 task_queen 移除当前任务 → stride 调度选下一个 → __switch。
-    ///
-    /// 若无就绪任务，恢复当前任务为 Ready (避免死锁)。
     pub fn block_and_switch(&self) {
         let result = self.task_que_inner.lock(|inner| {
             let current = inner.current;
-            // stride 选择下一个 Ready 任务 (在 remove 之前调用，索引稳定)
             let selected = Self::stride_select_task_inner(inner);
             let (selected_idx, _) = match selected {
                 Some(s) => s,
                 None => {
-                    // 无就绪任务，恢复当前任务避免死锁
                     inner.task_queen[current].lock(|t| t.task_statut = TaskStatus::Ready);
                     return None;
                 }
@@ -679,11 +539,8 @@ impl TaskManager {
 
             let swap_out =
                 inner.task_queen[current].lock(|t| &mut t.task_context as *mut TaskContext);
-
-            // 从 task_queen 移除当前任务
             inner.task_queen.remove(current);
 
-            // 调整 selected_idx (remove 导致后续元素前移)
             let adjusted = if selected_idx > current {
                 selected_idx - 1
             } else {
@@ -706,7 +563,7 @@ impl TaskManager {
         }
     }
 
-    /// 处理当前task的signal
+    /// 处理当前任务的信号。
     pub fn resolve_current_task_signal(&self) {
         let (current_task, pid) = self.task_que_inner.lock(|inner| {
             if inner.task_queen.is_empty() {
@@ -726,35 +583,23 @@ impl TaskManager {
         };
 
         let signal: VecDeque<OsSignal> = current_task.lock(|t| t.signal.drain(..).collect());
-
         if signal.is_empty() {
             return;
         }
 
         for sig in signal {
             crate::kprintln!("[Signal] PID {} reviec signal {:?}", pid, sig.signal);
-            // release lock
             match sig.signal {
-                Signal::SIGKILL => {
+                Signal::SIGKILL | Signal::SIGINT | Signal::SIGTERM => {
                     TASK_MANAER.kail_current_task_and_run_next();
                 }
-                Signal::SIGINT | Signal::SIGTERM => {
-                    TASK_MANAER.kail_current_task_and_run_next();
-                }
-                Signal::SIGTSTP => {
-                    // 暂停信号，目前仅打印
-                }
-                _ => {
-                    warn!("未处理的信号: {:?}", sig.signal);
-                }
+                Signal::SIGTSTP => {}
+                _ => warn!("未处理的信号: {:?}", sig.signal),
             }
         }
     }
 
-    /// 将当前任务标记为 Zombie 状态并记录退出码。
-    ///
-    /// 对标 Linux: `do_exit()` → `EXIT_ZOMBIE`
-    /// 调用后必须立即 `suspend_and_run_task()` 让出 CPU。
+    /// 将当前任务标记为 Zombie 并记录退出码。
     pub fn mark_current_zombie(&self, exit_code: isize) {
         self.task_que_inner.lock(|inner| {
             if inner.task_queen.is_empty() {
@@ -771,10 +616,7 @@ impl TaskManager {
         });
     }
 
-    /// 将当前任务的所有子进程过继给 init (PID=1)。
-    ///
-    /// 对标 Linux: `forget_original_parent()` → `find_new_reaper()`
-    /// 在进程退出时调用，防止子进程成为孤儿进程。
+    /// 将当前任务的子进程过继给 init。
     pub fn reparent_current_children_to_init(&self) {
         let (current_task, init_task) = self.task_que_inner.lock(|inner| {
             if inner.task_queen.is_empty() {
@@ -796,7 +638,9 @@ impl TaskManager {
         let Some(current_task) = current_task else {
             return;
         };
-        let Some(init_task) = init_task else { return };
+        let Some(init_task) = init_task else {
+            return;
+        };
 
         if current_task.lock(|t| t.pid.0 == INIT_PID) {
             warn!("Init are exit: pid {} ", INIT_PID);
@@ -817,21 +661,15 @@ impl TaskManager {
         }
     }
 
-    /// 回收指定 PID 的子进程 Zombie，返回其退出码。
-    ///
-    /// 对标 Linux: `waitpid()` → `wait_task_zombie()`
-    ///
-    /// 前提: `child_pid` 必须是当前进程的子进程且状态为 Zombie。
-    /// 回收后从就绪队列移除，释放 PID 和地址空间。
+    /// 回收指定 PID 的 Zombie 子进程并返回退出码。
     pub fn reap_zombie_child(&self, child_pid: i32) -> Option<isize> {
-        let result = self.task_que_inner.lock(|inner| {
+        self.task_que_inner.lock(|inner| {
             let current = inner.current;
             if inner.task_queen.is_empty() || current >= inner.task_queen.len() {
                 return None;
             }
             let current_task = inner.task_queen[current].clone();
 
-            // 只允许回收当前进程的子进程
             let is_child = current_task.lock(|parent| {
                 parent
                     .childrens
@@ -851,7 +689,7 @@ impl TaskManager {
                             zombie_index = Some(idx);
                             exit_code = Some(t.exit_code);
                         }
-                        true // found target pid
+                        true
                     } else {
                         false
                     }
@@ -871,7 +709,6 @@ impl TaskManager {
                 }
             }
 
-            // 从父进程的 childrens 中移除
             current_task.lock(|parent| {
                 parent
                     .childrens
@@ -879,34 +716,27 @@ impl TaskManager {
             });
 
             exit_code
-        });
-
-        result
+        })
     }
 
-    ///TODO:根据传入路径加载并且new新的taskblock然后add_task进队列
+    /// 根据路径加载新任务到任务管理器。
     pub fn load_newtask_to_taskmanager(_path: &str) {}
 
-    ///添加任务队列或者归队
+    /// 添加任务或将任务重新加入队列。
     pub fn add_task(self, task: Arc<UPSafeCell<TaskControlBlock>>) {
         self.task_que_inner
             .lock(|inner| inner.task_queen.push_back(task));
     }
 
-    ///根据stride选择一个任务 (index, pass)
-    ///
-    ///注意：这是一个对外包装，会持锁一次。若调用方已经持有 inner 锁，必须使用
-    ///`stride_select_task_inner`，否则会触发 `RefCell already borrowed`。
+    /// 根据 Stride 选择任务。
     pub fn stride_select_task(&self, inner: &TaskManagerInner) -> Option<(usize, usize)> {
         Self::stride_select_task_inner(inner)
     }
 
-    ///在已持有 TaskManagerInner 锁的情况下选择任务（不会再次 lock task_que_inner）。
     fn stride_select_task_inner(inner: &TaskManagerInner) -> Option<(usize, usize)> {
         let current = inner.current;
-        let mut selected: Option<(usize, usize)> = None; // (index, pass)
+        let mut selected: Option<(usize, usize)> = None;
 
-        // 若就绪队列中无 Ready 任务，尝试恢复 init,但是init不能是已经死了！TODO:
         let has_ready = inner
             .task_queen
             .iter()
@@ -927,8 +757,6 @@ impl TaskManager {
                     let pass = t.pass;
                     match selected {
                         Some((best_idx, best_pass)) => {
-                            // pass 更小者优先；pass 相同时，把当前正在运行的任务让给其它就绪任务，
-                            // 避免同 pass 下 current 一直独占，实现公平轮转。
                             if pass < best_pass
                                 || (pass == best_pass && best_idx == current && idx != current)
                             {
@@ -943,8 +771,7 @@ impl TaskManager {
         selected
     }
 
-    ///TODO 内核栈释放
-    ///从队列移除当前任务,应该由aplication的exit系统调用来执行 之后必须执行下一个任务 bug修复：应该同时移动指针到任意一个ready的任务
+    /// 从队列移除当前任务。
     pub fn remove_current_task(&self) {
         let (removed_task, init_task) = self.task_que_inner.lock(|inner| {
             let task_to_remove = inner.current;
@@ -1020,13 +847,13 @@ impl TaskManager {
             shutdown();
         }
     }
-    ///根据Stride挑选下个要运行的READY任务,挂起当前任务,把current设置为下个任务的index,然后运行下一个任务 Stride算法：增加运行任务的步长
+
+    /// 挂起当前任务并通过 Stride 调度下一个 READY 任务。
     pub fn suspend_and_run_task(&self) {
         if self.task_queen_is_empty() {
             panic!("Task Queen is empty!");
         }
 
-        // Phase 1: 更新当前任务状态，选出下一个任务
         let (swap_out, _current, task_index) = self.task_que_inner.lock(|inner| {
             if inner.task_queen.is_empty() {
                 panic!("Task Queen is empty!");
@@ -1036,7 +863,6 @@ impl TaskManager {
                 panic!("TaskManager current index out of range");
             }
 
-            // 当前任务非 Zombie 则设为 Ready
             inner.task_queen[current].lock(|cur| {
                 if !matches!(cur.task_statut, TaskStatus::Zombie) {
                     cur.task_statut = TaskStatus::Ready;
@@ -1044,9 +870,7 @@ impl TaskManager {
                 }
             });
 
-            // 选择 stride 最小的 READY 任务
-            let selected = Self::stride_select_task_inner(inner);
-            let task_index = match selected {
+            let task_index = match Self::stride_select_task_inner(inner) {
                 Some((idx, _)) => idx,
                 None => {
                     warn!("No task can select");
@@ -1058,14 +882,12 @@ impl TaskManager {
                 panic!("Selected task index out of range");
             }
 
-            // 校验选中任务状态
             inner.task_queen[task_index].lock(|t| {
                 if !matches!(t.task_statut, TaskStatus::Ready) {
                     panic!("Selected task is not Ready");
                 }
             });
 
-            // 如果切换到同一个任务，直接返回
             if current == task_index {
                 inner.task_queen[task_index].lock(|t| {
                     t.task_statut = TaskStatus::Runing;
@@ -1073,19 +895,16 @@ impl TaskManager {
                 return (core::ptr::null_mut(), current, task_index);
             }
 
-            // 获取 swap_out 指针
             let swap_out =
                 inner.task_queen[current].lock(|cur| &mut cur.task_context as *mut TaskContext);
 
             (swap_out, current, task_index)
         });
 
-        // 同任务切换，直接返回
         if swap_out.is_null() {
             return;
         }
 
-        // Phase 2: 获取 swap_in 指针，更新 current
         let swap_in = self.task_que_inner.lock(|inner| {
             inner.current = task_index;
             inner.task_queen[task_index].lock(|next| {
@@ -1099,13 +918,13 @@ impl TaskManager {
         }
     }
 
-    /// 检查就绪队列是否为空。
+    /// 检查任务队列是否为空。
     pub fn task_queen_is_empty(&self) -> bool {
         self.task_que_inner
             .lock(|inner| inner.task_queen.is_empty())
     }
 
-    ///运行第一个任务
+    /// 运行第一个任务。
     pub fn run_first_task(&self) -> ! {
         let task_cx_ptr = self.task_que_inner.lock(|inner| {
             let idx = inner.current;
@@ -1117,19 +936,13 @@ impl TaskManager {
         });
         let kernel_task_cx = TaskContext::zero_init();
 
-        // 调试：打印 __switch 参数
         debug!("run_first_task: task_cx_ptr={:#x}", task_cx_ptr as usize);
         debug!(
             "run_first_task: task sp={:#x}, lr(x30)={:#x}",
             unsafe { (*task_cx_ptr).kernel_sp },
             unsafe { core::ptr::read((task_cx_ptr as *const u8).add(11 * 8) as *const usize) }
-        ); // x30 offset = 11*8
+        );
 
-        // 调用 __switch 切换到第一个任务
-        // __switch 会：
-        // 1. 保存 _unused 的上下文（虽然我们不会再用到）
-        // 2. 恢复 next_task_cx_ptr 指向的上下文
-        // 3. 跳转到 task.task_context.ra，即 app_entry_point
         unsafe {
             __switch(&kernel_task_cx as *const TaskContext, task_cx_ptr);
         }
@@ -1137,10 +950,7 @@ impl TaskManager {
         panic!("unreachable in run_first_task!");
     }
 
-    /// 在删除当前任务后，直接切换到当前 inner.current 指向的任务。
-    ///
-    /// 关键点：此时 CPU 仍在”已删除任务”的内核栈/执行流上，不能把当前寄存器保存到
-    /// 新任务的 `task_context` 里，否则会污染新任务上下文。
+    /// 删除当前任务后直接切换到 inner.current 指向的任务。
     pub fn run_current_task(&self) -> ! {
         let task_cx_ptr = self.task_que_inner.lock(|inner| {
             if inner.task_queen.is_empty() {
@@ -1163,7 +973,7 @@ impl TaskManager {
         panic!("unreachable in run_current_task!");
     }
 
-    ///获取当前任务的页表stap
+    /// 获取当前任务页表 SATP token。
     pub fn get_current_stap(&self) -> usize {
         self.task_que_inner.lock(|inner| {
             let current = inner.current;
@@ -1171,11 +981,7 @@ impl TaskManager {
         })
     }
 
-    ///获取当前任务的陷阱上下文可变引用
-    // clippy::mut_from_ref: 此处从 `&self` 产出 `&mut TrapContext` 是有意为之。
-    // 返回的可变引用并非借自 `self`，而是指向当前任务陷入上下文所在的物理页
-    // （由 trap_context_ppn 定位）。该内存在陷入/返回窗口内由内核独占，调用方
-    // 需保证不与其它对同一 TrapContext 的引用并发存在。
+    /// 获取当前任务陷阱上下文的可变引用。
     #[allow(clippy::mut_from_ref)]
     pub fn get_current_trapcx(&self) -> &mut TrapContext {
         let task_trap_ppn = self.task_que_inner.lock(|inner| {
@@ -1186,7 +992,7 @@ impl TaskManager {
         unsafe { &mut *origin_phyaddr }
     }
 
-    ///获取当前任务的文件描述符
+    /// 获取当前任务的文件描述符。
     pub fn get_current_fd(&self, fd: usize) -> Option<Option<Arc<dyn File>>> {
         self.task_que_inner.lock(|inner| {
             let current = inner.current;
@@ -1194,7 +1000,7 @@ impl TaskManager {
         })
     }
 
-    /// 获取当前任务的工作目录路径。
+    /// 获取当前任务的工作目录。
     pub fn get_current_cwd(&self) -> String {
         self.task_que_inner.lock(|inner| {
             if inner.task_queen.is_empty() {
@@ -1205,7 +1011,7 @@ impl TaskManager {
         })
     }
 
-    /// 设置当前任务的工作目录路径。
+    /// 设置当前任务的工作目录。
     pub fn set_current_cwd(&self, cwd: String) {
         self.task_que_inner.lock(|inner| {
             let current = inner.current;
@@ -1215,11 +1021,7 @@ impl TaskManager {
         });
     }
 
-    /// 为当前任务分配一个空闲 fd 并安装文件对象。
-    ///
-    /// 跳过 fd 0/1/2 (stdin/stdout/stderr)。
-    /// 如果所有现有 slot 都已占用，则 push 到末尾。
-    /// 返回分配的 fd 号。
+    /// 为当前任务分配空闲 fd 并安装文件对象。
     pub fn alloc_fd_for_current(&self, new_fd: Arc<dyn File>) -> i32 {
         self.task_que_inner.lock(|inner| {
             let current = inner.current;
@@ -1245,8 +1047,6 @@ impl TaskManager {
     }
 
     /// 关闭当前任务的指定 fd。
-    ///
-    /// 返回 0 表示成功，-1 表示 fd 无效或已关闭。
     pub fn close_current_fd(&self, fd: usize) -> isize {
         self.task_que_inner.lock(|inner| {
             let current = inner.current;
@@ -1273,7 +1073,7 @@ impl TaskManager {
         })
     }
 
-    ///kail当前任务，内核有权调用 调用栈顶必须为TrapHandler! 调用它的地方考虑是否直接return
+    /// 终止当前任务并运行下一个任务。
     pub fn kail_current_task_and_run_next(&self) {
         use crate::syscall::sys_exit::sys_exit;
         sys_exit(usize::MAX);
@@ -1281,124 +1081,43 @@ impl TaskManager {
     }
 }
 
-//全局进程id分配器
 lazy_static! {
+    /// 全局进程 ID 分配器。
     pub static ref ProcessId_ALLOCTOR: UPSafeCell<ProcessIdAlloctor> =
         UPSafeCell::new(ProcessIdAlloctor::initial_processid_alloctor(1, 10_000_000));
 }
 
-// 全局任务管理器，加载init程序
 lazy_static! {
-    pub static ref TASK_MANAER: TaskManager = unsafe {
+    /// 全局任务管理器，启动时从根文件系统加载 `/test/init`。
+    pub static ref TASK_MANAER: TaskManager = {
         debug!("Initializing TASK_MANAGER...");
 
         let mut task_deque = VecDeque::new();
+        let task = TaskControlBlock::new("/test/init", 1, None).expect("Can't load init elf");
+        task_deque.push_back(Arc::new(UPSafeCell::new(task)));
+        debug!("Application init loaded successfully");
 
-
-
-        if CONSENT {
-            let init_task = TaskControlBlock::new("/cinit", 1, None);
-            if init_task.is_some() {
-                let task = init_task.expect("Kernel error");
-                task_deque.push_back(Arc::new(UPSafeCell::new(task)));
-                return TaskManager {
-                    task_que_inner: UPSafeCell::new(TaskManagerInner {
-                        task_queen: task_deque,
-                        current: 0
-                    })
-                };
-            }
-            let dir = vfs_open("/sd", OpenFlags::DIRECTORY).expect("open /sd error");
-            let mut names: Vec<String> = Vec::new();
-
-            while let Ok(bytes) = vfs_getdents64(&dir, 4096) {
-                if bytes.is_empty() {
-                    break;
-                }
-
-                let mut off: usize = 0;
-                while off < bytes.len() {
-                    if off + core::mem::size_of::<LinuxDirent64>() > bytes.len() {
-                        break;
-                    }
-                    let hdr = *(bytes.as_ptr().add(off) as *const LinuxDirent64);
-                    let reclen = hdr.d_reclen as usize;
-                    if reclen == 0 || off + reclen > bytes.len() {
-                        break;
-                    }
-
-                    let name_off = off + core::mem::size_of::<LinuxDirent64>();
-                    let name_end = off + reclen;
-                    let mut z = name_off;
-                    while z < name_end && bytes[z] != 0 {
-                        z += 1;
-                    }
-                    let name = core::str::from_utf8(&bytes[name_off..z]).unwrap_or("");
-                    off += reclen;
-
-                    if name.is_empty() || name == "." || name == ".." {
-                        continue;
-                    }
-                    if hdr.d_type as u32 != VFS_DT_REG {
-                        continue;
-                    }
-                    names.push(String::from(name));
-                }
-            }
-
-            names.sort();
-            let mut kid: usize = 1;
-            for name in names {
-                let path = alloc::format!("/sd/{}", name);
-                if let Some(task) = TaskControlBlock::new(&path, kid, None) {
-                    task_deque.push_back(Arc::new(UPSafeCell::new(task)));
-                    kid += 1;
-                }
-            }
-
+        unsafe {
             TASK_MANAGER_INIT = true;
+        }
 
-            TaskManager {
-                task_que_inner: UPSafeCell::new(TaskManagerInner {
-                    task_queen: task_deque,
-                    current: 0  // 初始化为第一个任务
-                })
-            }
-
-
-        }else {
-            // 加载init应用程序
-                debug!("Loading init lication {}...", 0);
-                // app_id 从 0 开始，kernel_stack_id 从 1 开始
-                let task = TaskControlBlock::new("/test/init",1,None).expect("Can't load init elf");
-                //task.task_statut=TaskStatus::Ready; 在new已经设置为ready
-                task_deque.push_back(Arc::new(UPSafeCell::new(task)));
-                debug!("Application init {} loaded successfully", 0);
-
-            TASK_MANAGER_INIT = true;
-
-            TaskManager {
-                task_que_inner: UPSafeCell::new(TaskManagerInner {
-                    task_queen: task_deque,
-                    current: 0  // 初始化为第一个任务
-                })
-            }
+        TaskManager {
+            task_que_inner: UPSafeCell::new(TaskManagerInner {
+                task_queen: task_deque,
+                current: 0,
+            }),
         }
     };
 }
-/// 获取第一个任务 (app_id=0) 的内核栈顶地址。
-///
-/// 内核栈布局: `[TRAP_BOTTOM_ADDR - (app_id+1)*(KERNEL_STACK_SIZE+PAGE_SIZE), +KERNEL_STACK_SIZE)`
+
+/// 获取第一个任务的内核栈顶地址。
 pub fn getapp_kernel_sapce() -> usize {
-    // 现在内核栈在内核空间，需要返回第0个任务的内核栈顶
-    let app_id = 0; // 第一个任务
+    let app_id = 0;
     let kernel_stack_bottom = TRAP_BOTTOM_ADDR - (app_id + 1) * (KERNEL_STACK_SIZE + PAGE_SIZE);
-    kernel_stack_bottom + KERNEL_STACK_SIZE // 返回栈顶
+    kernel_stack_bottom + KERNEL_STACK_SIZE
 }
 
-/// 启动第一个任务 (内核入口调用)。
-///
-/// 委托给 `TASK_MANAER.run_first_task()`，永不返回。
+/// 启动第一个任务。
 pub fn run_first_task() -> ! {
     TASK_MANAER.run_first_task()
 }
