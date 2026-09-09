@@ -37,12 +37,15 @@ BlueStarOS 是一个使用 Rust 编写的实验性操作系统内核，目标是
 ### 设备驱动
 
 - PCIe：枚举、BAR 解析、中断能力
+- xHCI USB Host：QEMU xHCI、4 KiB DMA ring、root-port reset、slot/address
+  分配、EP0 控制传输和设备描述符读取
 - NVMe 块设备驱动
 - Intel e1000 网卡驱动
 - virtio-blk / virtio-gpu
 - framebuffer / keyboard
 - DTB（设备树）解析
 - RISC-V PLIC 与 AArch64 GIC
+- RISC-V DMA：Zicbom cache clean/invalidate 与 DMA 内存屏障
 
 ### 网络协议栈
 
@@ -126,6 +129,13 @@ RISC-V QEMU 默认配置包含 e1000 + TAP 网络设备；如果本机没有 `ta
 make build
 ```
 
+QEMU xHCI 和 PCI IRQ trace 默认由 `kernel/Makefile` 配置。需要缩小输出时，
+可以覆盖变量，例如：
+
+```bash
+make -C kernel QEMU_TRACE='-trace usb_xhci_fetch_trb -trace pci_route_irq' run
+```
+
 ## 测试
 
 仓库内的 `test/` 与 `kernel/TestOS.mk` 用于维护独立测试用例。目前可以构建 syscall 测试与测试 rootfs：
@@ -150,6 +160,9 @@ make img
 
 ## 开发方向
 
+- [x] USB：QEMU xHCI 基础枚举与 EP0 Get Descriptor
+- [ ] USB：配置端点、读取完整配置描述符和 USB class 驱动
+- [x] RISC-V：QEMU PLIC 外部中断与 Zicbom DMA 基础支持
 - [ ] 完善 socket syscall 与用户态 UDP/TCP
 - [ ] SMP 多核支持
 - [ ] 完善系统调用兼容性与错误语义
