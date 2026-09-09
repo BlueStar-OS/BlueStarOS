@@ -5,7 +5,7 @@
 //! `alloc_kernel_stack` 等方法据此在高地址区域切分出互不重叠的内核栈区间。
 //! 全局单例 [`KERNEL_STACK_ALLOCATOR`] 供同模块的 `map_set` 使用。
 
-use crate::sync::UPSafeCell;
+use crate::sync::NoIrqLock;
 use alloc::vec::Vec;
 use lazy_static::lazy_static;
 use log::error;
@@ -41,6 +41,6 @@ impl KernelStackAllocator {
 }
 
 lazy_static! {
-    pub(crate) static ref KERNEL_STACK_ALLOCATOR: UPSafeCell<KernelStackAllocator> =
-        UPSafeCell::new(KernelStackAllocator::new());
+    pub(crate) static ref KERNEL_STACK_ALLOCATOR: NoIrqLock<KernelStackAllocator> =
+        NoIrqLock::new(KernelStackAllocator::new());
 }

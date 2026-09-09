@@ -9,7 +9,7 @@ use crate::driver::dtb::DeviceNode;
 use crate::fs::vfs::register_global_block_device;
 use crate::kprintln;
 use crate::memory::*;
-use crate::sync::UPSafeCell;
+use crate::sync::NoIrqLock;
 use spin::Mutex;
 
 const VIRTIO_DEVICE_BLOCK_ID: u32 = 2;
@@ -22,9 +22,9 @@ struct VirtioMmioDevice {
 }
 
 lazy_static! {
-    static ref QUEUE_FRAMES: UPSafeCell<Vec<(virtio_drivers::PhysAddr, Vec<FramTracker>)>> =
-        UPSafeCell::new(Vec::new());
-    static ref VIRTIO_MMIO_DEVICES: UPSafeCell<Vec<VirtioMmioDevice>> = UPSafeCell::new(Vec::new());
+    static ref QUEUE_FRAMES: NoIrqLock<Vec<(virtio_drivers::PhysAddr, Vec<FramTracker>)>> =
+        NoIrqLock::new(Vec::new());
+    static ref VIRTIO_MMIO_DEVICES: NoIrqLock<Vec<VirtioMmioDevice>> = NoIrqLock::new(Vec::new());
 }
 
 fn virtio_device_name(device_id: u32) -> &'static str {
@@ -167,7 +167,7 @@ fn draw_red_square(fb: &mut [u8], screen_width: u32, screen_height: u32) {
     }
 }
 
-pub struct VirtBlk(pub UPSafeCell<VirtIOBlk<'static, VirtioHal>>, u64);
+pub struct VirtBlk(pub NoIrqLock<VirtIOBlk<'static, VirtioHal>>, u64);
 
 unsafe impl Send for VirtBlk {}
 unsafe impl Sync for VirtBlk {}
@@ -221,7 +221,7 @@ impl VirtBlk {
 
             let capacity_in_sectors = core::ptr::read_volatile(header.config_space() as *const u64);
             Ok(VirtBlk(
-                UPSafeCell::new(VirtIOBlk::new(header).map_err(|_| "failed new blk device")?),
+                NoIrqLock::new(VirtIOBlk::new(header).map_err(|_| "failed new blk device")?),
                 capacity_in_sectors,
             ))
         }

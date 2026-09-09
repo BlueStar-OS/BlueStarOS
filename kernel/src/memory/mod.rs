@@ -8,10 +8,10 @@ pub mod memorymodel;
 mod memory_space;
 
 pub use frame_allocator::*;
-pub use memorymodel::*;
 pub use memory_space::*;
+pub use memorymodel::*;
 
-use crate::sync::UPSafeCell;
+use crate::sync::NoIrqLock;
 use lazy_static::lazy_static;
 pub struct PreFlectMemory {
     pub range: VirNumRange,
@@ -26,8 +26,8 @@ impl PreFlectMemory {
 
 // 内核地址空间区域注册，用于早期使用dtb_probe探针将需要映射的内核内存都插入进去
 lazy_static! {
-    pub static ref KERNEL_MEMORY_SPACE_LIST: UPSafeCell<Vec<PreFlectMemory>> =
-        UPSafeCell::new(Vec::new());
+    pub static ref KERNEL_MEMORY_SPACE_LIST: NoIrqLock<Vec<PreFlectMemory>> =
+        NoIrqLock::new(Vec::new());
 }
 
 /// 注册内核 MMIO 区域（供 dtb_probe 回调使用）

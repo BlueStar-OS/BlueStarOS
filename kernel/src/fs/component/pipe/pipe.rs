@@ -1,7 +1,7 @@
 use alloc::sync::{Arc, Weak};
 
 use crate::fs::vfs::{File, VfsFsError};
-use crate::sync::UPSafeCell;
+use crate::sync::NoIrqLock;
 use crate::task::TASK_MANAER;
 
 pub const RINGBUFFERSIZE: usize = 512;
@@ -10,7 +10,7 @@ pub const RINGBUFFERSIZE: usize = 512;
 pub struct Pipe {
     readble: bool,
     writeble: bool,
-    ringbuffer: Arc<UPSafeCell<PipeRingBuffer>>,
+    ringbuffer: Arc<NoIrqLock<PipeRingBuffer>>,
 }
 
 ///pipe环形缓冲区模型
@@ -19,8 +19,8 @@ pub struct PipeRingBuffer {
     status: PipeRingBufferStatus,
     head: usize,
     tail: usize,
-    write_point: Weak<UPSafeCell<Pipe>>, //写段弱引用计数,检测写段是否关闭
-    read_point: Weak<UPSafeCell<Pipe>>,  //读端弱引用计数，检测读端是否关闭
+    write_point: Weak<NoIrqLock<Pipe>>, //写段弱引用计数,检测写段是否关闭
+    read_point: Weak<NoIrqLock<Pipe>>,  //读端弱引用计数，检测读端是否关闭
 }
 
 ///pipe环形缓冲区状态
@@ -42,10 +42,10 @@ impl PipeRingBuffer {
         }
     }
 
-    pub fn set_write_point(&mut self, w: Weak<UPSafeCell<Pipe>>) {
+    pub fn set_write_point(&mut self, w: Weak<NoIrqLock<Pipe>>) {
         self.write_point = w;
     }
-    pub fn set_read_point(&mut self, r: Weak<UPSafeCell<Pipe>>) {
+    pub fn set_read_point(&mut self, r: Weak<NoIrqLock<Pipe>>) {
         self.read_point = r;
     }
 
@@ -147,7 +147,7 @@ impl PipeRingBuffer {
 }
 
 impl Pipe {
-    pub fn new(readble: bool, writeble: bool, ringbuffer: Arc<UPSafeCell<PipeRingBuffer>>) -> Self {
+    pub fn new(readble: bool, writeble: bool, ringbuffer: Arc<NoIrqLock<PipeRingBuffer>>) -> Self {
         Self {
             readble,
             writeble,
@@ -187,21 +187,21 @@ impl Pipe {
     }
 }
 
-pub fn make_pipe() -> (Arc<UPSafeCell<Pipe>>, Arc<UPSafeCell<Pipe>>) {
-    let ring = Arc::new(UPSafeCell::new(PipeRingBuffer::new()));
-    let read_end = Arc::new(UPSafeCell::new(Pipe::new(true, false, ring.clone())));
-    let write_end = Arc::new(UPSafeCell::new(Pipe::new(false, true, ring.clone())));
+pub fn make_pipe() -> (Arc<NoIrqLock<Pipe>>, Arc<NoIrqLock<Pipe>>) {
+    let ring = Arc::new(NoIrqLock::new(PipeRingBuffer::new()));
+    let read_end = Arc::new(NoIrqLock::new(Pipe::new(true, false, ring.clone())));
+    let write_end = Arc::new(NoIrqLock::new(Pipe::new(false, true, ring.clone())));
     ring.lock(|r| r.set_write_point(Arc::downgrade(&write_end)));
     ring.lock(|r| r.set_read_point(Arc::downgrade(&read_end)));
     (read_end, write_end)
 }
 
 pub struct PipeHandle {
-    end: Arc<UPSafeCell<Pipe>>,
+    end: Arc<NoIrqLock<Pipe>>,
 }
 
 impl PipeHandle {
-    pub fn new(end: Arc<UPSafeCell<Pipe>>) -> Self {
+    pub fn new(end: Arc<NoIrqLock<Pipe>>) -> Self {
         Self { end }
     }
 }

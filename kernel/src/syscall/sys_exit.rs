@@ -57,7 +57,7 @@ pub fn sys_exit(exit_code: usize) -> isize {
         // 通过 exit_queue 唤醒父进程 (必须在 mark_zombie 之后，父进程醒来后检查 children 必须看到 Zombie 状态)。
         // 这里必须先在父 TCB 锁内 clone 出 `exit_queue`，然后在锁外执行 wake()；
         // 否则父进程若正阻塞在自己的 exit_queue 上，wake() 会再次借用同一个 TCB，
-        // 触发 UPSafeCell double borrow。
+        // 触发 NoIrqLock double borrow。
         // 参考: kernel/exit.c:645-691,1413-1415
         let parent_exit_queue = parent_weak
             .and_then(|pa_weak| pa_weak.upgrade())

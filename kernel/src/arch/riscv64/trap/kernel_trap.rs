@@ -16,7 +16,7 @@ pub extern "C" fn kernel_mode_trap_handler() {
 
     match scauses.cause() {
         Trap::Interrupt(Interrupt::SupervisorExternal) => {
-            driver::plic::dispatch_irq();
+            driver::dispatch_external_interrupt();
         }
         Trap::Interrupt(Interrupt::SupervisorTimer) => {
             set_next_time_interupt();

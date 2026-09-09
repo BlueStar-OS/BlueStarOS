@@ -6,7 +6,7 @@ use lazy_static::lazy_static;
 
 use crate::driver::network::e1000::queue::{rx::E1000RxRing, tx::E1000TxRing};
 use crate::driver::pcie::BarSpace;
-use crate::sync::UPSafeCell;
+use crate::sync::NoIrqLock;
 
 /// e1000 网卡设备实例。
 ///
@@ -24,8 +24,8 @@ pub struct E1000 {
 
 lazy_static! {
     /// 全局 e1000 设备实例。
-    pub static ref E1000_DEV: UPSafeCell<Option<E1000>> =
-        UPSafeCell::new(None);
+    pub static ref E1000_DEV: NoIrqLock<Option<E1000>> =
+        NoIrqLock::new(None);
 }
 
 /// BAR0 MMIO 基址快照，供中断上下文无锁访问。

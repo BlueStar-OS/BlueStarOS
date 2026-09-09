@@ -4,7 +4,7 @@ use alloc::collections::btree_map::BTreeMap;
 use lazy_static::lazy_static;
 
 use crate::driver::network::e1000::agreenment::{DstMac, Ipv4Addr};
-use crate::sync::UPSafeCell;
+use crate::sync::NoIrqLock;
 
 /// ARP 缓存表: IP -> MAC。
 pub struct ArpTable {
@@ -32,5 +32,5 @@ impl ArpTable {
 
 lazy_static! {
     /// 全局 ARP 缓存表。
-    pub static ref ARP_TABLE: UPSafeCell<ArpTable> = UPSafeCell::new(ArpTable::new());
+    pub static ref ARP_TABLE: NoIrqLock<ArpTable> = NoIrqLock::new(ArpTable::new());
 }

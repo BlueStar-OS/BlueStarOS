@@ -70,7 +70,6 @@
 //! 参考: POSIX.1-2017, listen(3p)
 //! 参考: net/socket.c:__sys_listen
 
-
 /// sys_listen(sockfd, backlog) -> 0 或 -errno
 ///
 /// 将 socket 标记为被动监听状态，准备接受连接。

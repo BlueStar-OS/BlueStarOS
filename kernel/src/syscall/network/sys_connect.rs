@@ -82,7 +82,6 @@
 //! 参考: POSIX.1-2017, connect(3p)
 //! 参考: net/socket.c:__sys_connect
 
-
 /// sys_connect(sockfd, addr, addrsz) -> 0 或 -errno
 ///
 /// 向目标地址发起连接 (TCP: 三次握手; UDP: 记录默认地址)。

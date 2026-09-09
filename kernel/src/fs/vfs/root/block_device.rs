@@ -4,7 +4,7 @@ use crate::fs::fs_backend::RamFs;
 use crate::fs::partition::gpt::{parsing_gpt_entries, parsing_gpt_header, GptPartitionName};
 use crate::fs::partition::mbr::{parsing_mbr_partition, MbrPartitionType};
 use crate::fs::vfs::dm_liner::DmlinerEntry;
-use crate::fs::vfs::{global_block_devices, BlockDevTrait, File, VfsFsError, BlockDevFile};
+use crate::fs::vfs::{global_block_devices, BlockDevFile, BlockDevTrait, File, VfsFsError};
 use alloc::{string::String, sync::Arc, vec::Vec};
 use log::{debug, warn};
 use spin::Mutex;

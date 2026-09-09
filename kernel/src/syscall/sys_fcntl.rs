@@ -67,7 +67,6 @@
 //! F_GETFL 返回的低 2 bit 是访问模式 (O_RDONLY=0, O_WRONLY=1, O_RDWR=2)。
 //! F_SETFL 不能修改访问模式，只能修改 O_APPEND/O_NONBLOCK 等状态标志。
 
-
 /// 文件描述符标志。
 pub const FD_CLOEXEC: usize = 1;
 

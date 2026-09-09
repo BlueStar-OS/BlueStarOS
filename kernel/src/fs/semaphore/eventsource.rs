@@ -1,7 +1,7 @@
 //! 事件源占位模块。
 //!
 //! `WaitQueue::wake()` 目前会直接操作调度队列；当调用方来自 IRQ 路径时，
-//! 这会和普通任务上下文争用 `TASK_MANAER.task_que_inner` 的 `UPSafeCell` 借用。
+//! 这会和普通任务上下文争用 `TASK_MANAER.task_que_inner` 的 `NoIrqLock` 借用。
 //! 后续网络收包应优先演进为：
 //!
 //! ```text

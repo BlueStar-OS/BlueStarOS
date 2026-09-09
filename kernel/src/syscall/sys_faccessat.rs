@@ -65,7 +65,6 @@
 //! POSIX `access(path, mode)` 在用户库中通过 `faccessat(AT_FDCWD, path, mode, 0)` 实现。
 //! 参考: glibc/sysdeps/unix/sysv/linux/access.c
 
-
 /// `faccessat` 的 mode 位。
 ///
 /// 对标 Linux: `include/uapi/linux/fs.h`

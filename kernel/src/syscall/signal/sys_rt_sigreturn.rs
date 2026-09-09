@@ -82,7 +82,6 @@
 //! 参考: arch/riscv/kernel/signal.c:sys_rt_sigreturn
 //! 参考: include/uapi/asm-generic/signal.h
 
-
 /// sys_rt_sigreturn() -> (不正常返回)
 ///
 /// 从信号处理函数返回，恢复被中断的用户态上下文。

@@ -128,7 +128,7 @@ fn build_auxv(elf_data: &[u8], elf_entry: usize) -> Vec<AuxEntry> {
     ]
 }
 
-use crate::sync::UPSafeCell;
+use crate::sync::NoIrqLock;
 
 /// 任务运行状态。
 #[derive(Clone, PartialEq, Debug)]
@@ -179,9 +179,9 @@ pub struct TaskControlBlock {
     /// 当前工作目录
     pub cwd: String,
     /// 父进程
-    pub parent: Option<Weak<UPSafeCell<TaskControlBlock>>>,
+    pub parent: Option<Weak<NoIrqLock<TaskControlBlock>>>,
     /// 子进程列表
-    pub childrens: Vec<Arc<UPSafeCell<TaskControlBlock>>>,
+    pub childrens: Vec<Arc<NoIrqLock<TaskControlBlock>>>,
     /// 进程退出等待队列
     pub exit_queue: Arc<WaitQueue>,
 }
@@ -189,7 +189,7 @@ pub struct TaskControlBlock {
 /// 任务管理器内部状态。
 pub struct TaskManagerInner {
     /// 全局任务队列
-    pub task_queen: VecDeque<Arc<UPSafeCell<TaskControlBlock>>>,
+    pub task_queen: VecDeque<Arc<NoIrqLock<TaskControlBlock>>>,
     /// 当前任务索引
     pub current: usize,
 }
@@ -197,7 +197,7 @@ pub struct TaskManagerInner {
 /// 全局任务管理器。
 pub struct TaskManager {
     /// 内部任务队列状态
-    pub task_que_inner: UPSafeCell<TaskManagerInner>,
+    pub task_que_inner: NoIrqLock<TaskManagerInner>,
 }
 
 impl ProcessIdAlloctor {
@@ -366,12 +366,12 @@ impl TaskControlBlock {
     }
 
     /// 设置父进程引用。
-    pub fn set_father(&mut self, father: &Arc<UPSafeCell<TaskControlBlock>>) {
+    pub fn set_father(&mut self, father: &Arc<NoIrqLock<TaskControlBlock>>) {
         self.parent = Some(Arc::downgrade(father));
     }
 
     /// 添加子进程。
-    pub fn add_children(&mut self, tlb: Arc<UPSafeCell<TaskControlBlock>>) {
+    pub fn add_children(&mut self, tlb: Arc<NoIrqLock<TaskControlBlock>>) {
         self.childrens.push(tlb);
     }
 
@@ -443,7 +443,7 @@ impl TaskControlBlock {
     fn new(
         app_path: &str,
         _kernel_stack_id: usize,
-        father: Option<Weak<UPSafeCell<TaskControlBlock>>>,
+        father: Option<Weak<NoIrqLock<TaskControlBlock>>>,
     ) -> Option<Self> {
         debug!(
             "Creating task for app_path: {}, kernel_stack_id: {}",
@@ -723,7 +723,7 @@ impl TaskManager {
     pub fn load_newtask_to_taskmanager(_path: &str) {}
 
     /// 添加任务或将任务重新加入队列。
-    pub fn add_task(self, task: Arc<UPSafeCell<TaskControlBlock>>) {
+    pub fn add_task(self, task: Arc<NoIrqLock<TaskControlBlock>>) {
         self.task_que_inner
             .lock(|inner| inner.task_queen.push_back(task));
     }
@@ -1083,8 +1083,8 @@ impl TaskManager {
 
 lazy_static! {
     /// 全局进程 ID 分配器。
-    pub static ref ProcessId_ALLOCTOR: UPSafeCell<ProcessIdAlloctor> =
-        UPSafeCell::new(ProcessIdAlloctor::initial_processid_alloctor(1, 10_000_000));
+    pub static ref ProcessId_ALLOCTOR: NoIrqLock<ProcessIdAlloctor> =
+        NoIrqLock::new(ProcessIdAlloctor::initial_processid_alloctor(1, 10_000_000));
 }
 
 lazy_static! {
@@ -1094,7 +1094,7 @@ lazy_static! {
 
         let mut task_deque = VecDeque::new();
         let task = TaskControlBlock::new("/test/init", 1, None).expect("Can't load init elf");
-        task_deque.push_back(Arc::new(UPSafeCell::new(task)));
+        task_deque.push_back(Arc::new(NoIrqLock::new(task)));
         debug!("Application init loaded successfully");
 
         unsafe {
@@ -1102,7 +1102,7 @@ lazy_static! {
         }
 
         TaskManager {
-            task_que_inner: UPSafeCell::new(TaskManagerInner {
+            task_que_inner: NoIrqLock::new(TaskManagerInner {
                 task_queen: task_deque,
                 current: 0,
             }),

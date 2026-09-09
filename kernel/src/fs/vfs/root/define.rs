@@ -1,7 +1,7 @@
 use crate::alloc::string::ToString;
 use crate::fs::vfs::vfs::VfsFs;
 use crate::fs::vfs::VfsFsError;
-use crate::sync::UPSafeCell;
+use crate::sync::NoIrqLock;
 use alloc::collections::btree_map::BTreeMap;
 use alloc::{string::String, sync::Arc};
 use lazy_static::lazy_static;
@@ -9,7 +9,7 @@ use spin::Mutex;
 
 lazy_static! {
     /// 全局根文件系统。
-    pub static ref ROOTFS: UPSafeCell<Option<RootFs>> = UPSafeCell::new(None);
+    pub static ref ROOTFS: NoIrqLock<Option<RootFs>> = NoIrqLock::new(None);
 }
 
 /// 挂载点路径。
@@ -90,10 +90,7 @@ impl RootFs {
     }
 
     /// 解析挂载点和剩余路径。
-    pub fn resolve_mount_point(
-        &self,
-        path: &str,
-    ) -> Result<MountResolved, VfsFsError> {
+    pub fn resolve_mount_point(&self, path: &str) -> Result<MountResolved, VfsFsError> {
         let abs = Self::normalize_abs_path(path);
 
         let mut best: MountCandidate = None;

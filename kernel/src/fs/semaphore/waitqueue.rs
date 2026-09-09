@@ -7,14 +7,13 @@
 //!
 //! ## IRQ 安全性
 //!
-//! `wake()` 会重新借用 `TASK_MANAER.task_que_inner`，因此它应在任务上下文或
-//! 明确的 bottom-half 中调用。若硬中断直接调用并打断了持有同一 `UPSafeCell`
-//! 的代码，可能触发双重借用 panic。
+//! `NoIrqLock` 在借用期间关闭中断，因此 `wake()` 也可以由已经进入 PLIC
+//! 分发路径的硬中断调用；它不会重入一个正在持有的调度器借用。
 
 use alloc::{sync::Arc, vec::Vec};
 
 use crate::{
-    sync::UPSafeCell,
+    sync::NoIrqLock,
     task::{TaskControlBlock, TaskStatus, TASK_MANAER},
 };
 
@@ -27,13 +26,13 @@ use crate::{
 /// 这里持有的是 TCB 的 `Arc`，不是任务栈或上下文本身的所有权；真正的上下文
 /// 切换仍由 `TaskManager` 完成。
 pub struct WaitQueue {
-    waiters: UPSafeCell<Vec<Arc<UPSafeCell<TaskControlBlock>>>>,
+    waiters: NoIrqLock<Vec<Arc<NoIrqLock<TaskControlBlock>>>>,
 }
 
 impl WaitQueue {
     pub fn new() -> Self {
         Self {
-            waiters: UPSafeCell::new(Vec::new()),
+            waiters: NoIrqLock::new(Vec::new()),
         }
     }
 

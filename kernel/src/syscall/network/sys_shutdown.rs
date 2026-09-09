@@ -79,7 +79,6 @@
 //! 参考: POSIX.1-2017, shutdown(3p)
 //! 参考: net/socket.c:__sys_shutdown
 
-
 /// 关闭方式常量。
 pub const SHUT_RD: usize = 0;
 pub const SHUT_WR: usize = 1;

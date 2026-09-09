@@ -1,4 +1,5 @@
 //! 平台设备驱动探测和初始化
+#[cfg(feature = "rk3588-emmc")]
 pub mod emmc_blk;
 pub mod gicd;
 pub mod keyboard;

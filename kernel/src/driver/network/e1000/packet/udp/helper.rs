@@ -17,10 +17,7 @@
 //! - `/home/inkbottle/桌面/linux-5.4.29/net/ipv4/udp.c:882-886`
 //! - `/home/inkbottle/桌面/linux-5.4.29/arch/x86/include/asm/checksum_64.h:87-99`
 
-use crate::driver::network::e1000::{
-    agreenment::UdpPrseHeader,
-    packet::net_endian::Net16,
-};
+use crate::driver::network::e1000::{agreenment::UdpPrseHeader, packet::net_endian::Net16};
 
 /// IPv4 协议号: UDP
 const IPPROTO_UDP: u8 = 17;

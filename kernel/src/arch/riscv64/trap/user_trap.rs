@@ -111,7 +111,7 @@ pub extern "C" fn kernel_trap_handler() {
             TASK_MANAER.suspend_and_run_task();
         }
         Trap::Interrupt(Interrupt::SupervisorExternal) => {
-            driver::plic::dispatch_irq();
+            driver::dispatch_external_interrupt();
         }
         _ => {
             panic!("Unknown trap from user: {:?}", scauses.cause())

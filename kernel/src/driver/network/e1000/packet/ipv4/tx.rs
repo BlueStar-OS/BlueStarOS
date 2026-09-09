@@ -8,15 +8,14 @@
 use log::{info, warn};
 
 use crate::driver::network::e1000::{
-        agreenment::{
-            DestIp, DstMac, EthHead, EtherType, IPv4Header, Ipv4Addr, Ipv4Protocol, SourceIp,
-            SourceMac,
-        },
-        arp::ARP_TABLE,
-        netbuffer::NetBuffer,
-        tx_ringbuffer::{e1000_transmit, E1000TxRing},
-        E1000_DEV,
-    };
+    agreenment::{
+        DestIp, DstMac, EthHead, EtherType, IPv4Header, Ipv4Addr, Ipv4Protocol, SourceIp, SourceMac,
+    },
+    arp::ARP_TABLE,
+    netbuffer::NetBuffer,
+    tx_ringbuffer::{e1000_transmit, E1000TxRing},
+    E1000_DEV,
+};
 
 use super::config::MY_IPV4;
 

@@ -1,13 +1,13 @@
 //! AArch64 keyboard input via QEMU PL011 RX interrupt.
 
-use crate::sync::UPSafeCell;
+use crate::sync::NoIrqLock;
 use alloc::collections::VecDeque;
 use lazy_static::lazy_static;
 use log::{debug, info, warn};
 
 lazy_static! {
-    static ref INPUT_BUF: UPSafeCell<VecDeque<u8>> =
-        unsafe { UPSafeCell::new(VecDeque::with_capacity(128)) };
+    static ref INPUT_BUF: NoIrqLock<VecDeque<u8>> =
+        unsafe { NoIrqLock::new(VecDeque::with_capacity(128)) };
 }
 
 pub fn enable_uart_rx_interrupt() {

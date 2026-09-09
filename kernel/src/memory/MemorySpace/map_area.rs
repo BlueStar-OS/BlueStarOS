@@ -21,7 +21,7 @@ pub struct MapArea {
     //通常为单次push进来，虽然粒度大，保证push粒度足够小即可
     ///虚拟页号范围,闭区间
     pub range: VirNumRange,
-    pub(crate) flags: MapAreaFlags, //访问标志
+    pub(crate) flags: MapAreaFlags,                    //访问标志
     pub frames: BTreeMap<VirNumber, Arc<FramTracker>>, //Maparea 持有的物理页
     pub(crate) map_type: MapType,
     /// 非空 => 该 area 由 mmap 创建，按页记录懒分配/文件映射信息。

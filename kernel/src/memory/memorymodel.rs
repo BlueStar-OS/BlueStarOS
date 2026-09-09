@@ -2,7 +2,7 @@
 //! dtb::init() 扫描 memory 节点后注册到 KERNEL_MAIN_MEMORY
 
 use crate::config::MB;
-use crate::sync::UPSafeCell;
+use crate::sync::NoIrqLock;
 use crate::PAGE_SIZE;
 use alloc::vec::Vec;
 use lazy_static::lazy_static;
@@ -78,8 +78,8 @@ impl MachineMemoryInfo {
 }
 
 lazy_static! {
-    pub static ref KERNEL_MAIN_MEMORY: UPSafeCell<MachineMemoryInfo> =
-        UPSafeCell::new(MachineMemoryInfo::new());
+    pub static ref KERNEL_MAIN_MEMORY: NoIrqLock<MachineMemoryInfo> =
+        NoIrqLock::new(MachineMemoryInfo::new());
 }
 
 /// 注册一段物理内存区域（供 dtb::init 调用）

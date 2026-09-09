@@ -88,7 +88,6 @@
 //! 参考: POSIX.1-2017, socketpair(3p)
 //! 参考: net/socket.c:__sys_socketpair
 
-
 /// AF_UNIX 协议族。
 pub const AF_UNIX: usize = 1;
 

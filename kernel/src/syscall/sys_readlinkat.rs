@@ -57,7 +57,6 @@
 //! `readlinkat(AT_FDCWD, path, buf, bufsiz)` 实现。
 //! 参考: glibc/sysdeps/unix/sysv/linux/readlink.c
 
-
 /// sys_readlinkat(dfd, pathname, buf, bufsiz) -> 读取字节数 或 -errno
 ///
 /// 读取符号链接的目标路径到用户缓冲区。

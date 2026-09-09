@@ -39,7 +39,7 @@ use crate::{
         vfs::{File, PollStatus, VfsFsError},
     },
     network::{porttable::PORT_TABLE, NetPort},
-    sync::UPSafeCell,
+    sync::NoIrqLock,
 };
 
 /// UDP 套接字。
@@ -51,13 +51,13 @@ use crate::{
 /// - `wait_queue`: 阻塞队列，`read` 在 rx_queue 为空时阻塞当前任务
 pub struct UdpSock {
     /// 对端 IP (sendto 时设置)
-    target_ip: UPSafeCell<Ipv4Addr>,
+    target_ip: NoIrqLock<Ipv4Addr>,
     /// 对端端口 (sendto 时设置，网络字节序)
-    target_port: UPSafeCell<NetPort>,
+    target_port: NoIrqLock<NetPort>,
     /// 本地绑定端口 (bind 时设置)
-    bind_port: UPSafeCell<Option<NetPort>>,
+    bind_port: NoIrqLock<Option<NetPort>>,
     /// 接收队列 — 塞入剥离 UDP 头后的纯数据 NetBuffer
-    rx_queue: UPSafeCell<VecDeque<NetBuffer>>,
+    rx_queue: NoIrqLock<VecDeque<NetBuffer>>,
     /// 等待队列 — 收到包后唤醒一个阻塞在 read 的线程
     wait_queue: WaitQueue,
 }
@@ -72,10 +72,10 @@ impl UdpSock {
     /// 创建一个空的 UDP socket。
     pub fn new() -> Self {
         Self {
-            target_ip: UPSafeCell::new(Ipv4Addr::ZERO),
-            target_port: UPSafeCell::new(NetPort(Net16::ZERO)),
-            bind_port: UPSafeCell::new(None),
-            rx_queue: UPSafeCell::new(VecDeque::new()),
+            target_ip: NoIrqLock::new(Ipv4Addr::ZERO),
+            target_port: NoIrqLock::new(NetPort(Net16::ZERO)),
+            bind_port: NoIrqLock::new(None),
+            rx_queue: NoIrqLock::new(VecDeque::new()),
             wait_queue: WaitQueue::new(),
         }
     }
@@ -142,7 +142,7 @@ impl UdpSock {
     /// 对标 Linux: `__udp_enqueue_schedule_skb` → `sk->sk_data_ready(sk)`
     ///
     /// TODO(IRQ-safety): 当前 e1000 IRQ handler 可能直接调用 `wake()`，它会借用
-    /// `TASK_MANAER.task_que_inner`。如果中断打断了已持有该 `UPSafeCell` 的路径，
+    /// `TASK_MANAER.task_que_inner`。如果中断打断了已持有该 `NoIrqLock` 的路径，
     /// 会触发双重借用 panic。后续应把唤醒动作延迟到 softirq / bottom half，
     /// 或在进入相关临界区时明确屏蔽网卡中断。
     pub fn push_rx_buf(&self, pkt: NetBuffer) {

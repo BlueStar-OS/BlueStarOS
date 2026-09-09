@@ -19,7 +19,7 @@ use crate::arch::task::TaskContext;
 use crate::arch::TrapContext;
 use crate::config::PAGE_SIZE;
 use crate::memory::{CloneFlags, MapSet};
-use crate::sync::UPSafeCell;
+use crate::sync::NoIrqLock;
 use crate::syscall::syscall::*;
 use crate::task::{ProcessId_ALLOCTOR, TaskStatus};
 use crate::TRAP_CONTEXT_ADDR;
@@ -96,7 +96,7 @@ pub fn sys_fork(_mode: CloneFlags, stack: usize, _ptid: usize, _tls: usize, _cti
         }
     }
 
-    let arc_task = Arc::new(UPSafeCell::new(bad_task));
+    let arc_task = Arc::new(NoIrqLock::new(bad_task));
     /* 建立父子关系 */
     current_task.lock(|parent| parent.add_children(arc_task.clone()));
     arc_task.lock(|child| child.set_father(&current_task));

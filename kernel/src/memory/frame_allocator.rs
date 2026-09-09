@@ -1,7 +1,7 @@
 use crate::arch::memory::*;
 use crate::{
     config::{KERNEL_HEAP_SIZE, MB, PAGE_SIZE},
-    sync::UPSafeCell,
+    sync::NoIrqLock,
 };
 use buddy_system_allocator::LockedHeap;
 use log::trace;
@@ -245,8 +245,7 @@ impl FramTracker {
 }
 
 lazy_static! {
-    pub static ref FRAME_ALLOCATOR: UPSafeCell<FrameAlloctor> =
-        UPSafeCell::new(FrameAlloctor::new());
+    pub static ref FRAME_ALLOCATOR: NoIrqLock<FrameAlloctor> = NoIrqLock::new(FrameAlloctor::new());
 }
 
 pub fn init_frame_allocator(start: usize, end: usize) {

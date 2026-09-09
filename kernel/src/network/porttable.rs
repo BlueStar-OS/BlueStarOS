@@ -20,15 +20,15 @@
 use alloc::{collections::btree_map::BTreeMap, sync::Arc};
 use lazy_static::lazy_static;
 
-use crate::{fs::vfs::File, network::NetPort, sync::UPSafeCell};
+use crate::{fs::vfs::File, network::NetPort, sync::NoIrqLock};
 
 /// 本地端口绑定表。
 ///
 /// 内部使用 `BTreeMap<NetPort, Arc<dyn File>>` 存储端口到 socket 的映射。
-/// 通过 `UPSafeCell` 提供单核内部可变性；它不是可重入锁，因此 IRQ 路径
+/// 通过 `NoIrqLock` 提供单核内部可变性；它不是可重入锁，因此 IRQ 路径
 /// 调用时必须避免与 syscall 路径嵌套借用。
 pub struct PortTable {
-    table: UPSafeCell<BTreeMap<NetPort, Arc<dyn File>>>,
+    table: NoIrqLock<BTreeMap<NetPort, Arc<dyn File>>>,
 }
 
 impl Default for PortTable {
@@ -41,7 +41,7 @@ impl PortTable {
     /// 创建一个空的端口表。
     pub fn new() -> Self {
         PortTable {
-            table: UPSafeCell::new(BTreeMap::new()),
+            table: NoIrqLock::new(BTreeMap::new()),
         }
     }
 
@@ -65,7 +65,7 @@ impl PortTable {
     ///
     /// TODO(IRQ-safety): 当前 `lookup()` 会在 e1000 IRQ 收包路径中执行，
     /// 而 `bind()` / `unbind()` 来自 syscall/close 路径。二者都借用同一个
-    /// `UPSafeCell`，如果 IRQ 打断了正在持有端口表的代码，会触发双重借用
+    /// `NoIrqLock`，如果 IRQ 打断了正在持有端口表的代码，会触发双重借用
     /// panic。后续应改为关中断临界区、无锁读表，或把收包分发延迟到 softirq。
     pub fn lookup(&self, port: NetPort) -> Option<Arc<dyn File>> {
         self.table.lock(|tb| tb.get(&port).cloned())

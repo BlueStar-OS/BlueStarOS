@@ -1,5 +1,5 @@
 use crate::memory::VirNumRange;
-use crate::sync::UPSafeCell;
+use crate::sync::NoIrqLock;
 //系统调用
 use crate::config::*;
 use crate::MapSet;
@@ -9,8 +9,8 @@ use lazy_static::lazy_static;
 pub mod pagefault_handler;
 
 lazy_static! {
-    static ref PENDING_KSTACK_FREE: UPSafeCell<Vec<(VirNumRange, Option<usize>)>> =
-        UPSafeCell::new(Vec::new());
+    static ref PENDING_KSTACK_FREE: NoIrqLock<Vec<(VirNumRange, Option<usize>)>> =
+        NoIrqLock::new(Vec::new());
 }
 
 pub fn enqueue_kstack_free(range: VirNumRange, id0: Option<usize>) {

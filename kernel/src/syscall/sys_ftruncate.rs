@@ -56,7 +56,6 @@
 //! `open(path, O_WRONLY)` + `ftruncate(fd, length)` + `close(fd)` 实现。
 //! 参考: glibc/sysdeps/posix/truncate.c
 
-
 /// sys_ftruncate(fd, length) -> 0 或 -errno
 ///
 /// 将打开的文件截断/扩展到指定长度。

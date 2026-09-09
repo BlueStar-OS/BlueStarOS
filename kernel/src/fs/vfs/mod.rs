@@ -32,7 +32,7 @@ use alloc::vec::Vec;
 use lazy_static::lazy_static;
 use spin::Mutex;
 
-use crate::sync::UPSafeCell;
+use crate::sync::NoIrqLock;
 
 pub use self::api::*;
 pub use self::vblock::*;
@@ -47,8 +47,8 @@ lazy_static! {
     /// 2. VFS 层不关心"当前是 QEMU 还是真机板子"；
     /// 3. 根文件系统初始化阶段只负责遍历这里的设备并生成
     ///    `/vda`、`/vdb` 等整盘设备节点。
-    pub static ref GLOBAL_BLOCKS: UPSafeCell<Vec<Arc<Mutex<dyn BlockDevTrait>>>> =
-        UPSafeCell::new(Vec::new());
+    pub static ref GLOBAL_BLOCKS: NoIrqLock<Vec<Arc<Mutex<dyn BlockDevTrait>>>> =
+        NoIrqLock::new(Vec::new());
 }
 
 /// 注册一个已探测并初始化成功的块设备。

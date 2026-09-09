@@ -14,19 +14,19 @@ use crate::arch::{disable_irq, enable_irq};
 ///
 /// **嵌套安全**：通过读取 `sstatus.SIE` 判断进入前中断是否已关闭。
 /// 若已关闭（嵌套调用），内层 lock 返回时不恢复中断，由最外层恢复。
-pub struct UPSafeCell<T> {
+pub struct NoIrqLock<T> {
     inner: RefCell<T>,
     /// 当前持有者的调用位置 (文件名, 行号)。
     /// 用 `Cell` 而非 `RefCell`：元组是 `Copy`，无需运行时借用检查。
     borrower: Cell<(&'static str, u32)>,
 }
 
-unsafe impl<T> Sync for UPSafeCell<T> {}
-unsafe impl<T> Send for UPSafeCell<T> {}
+unsafe impl<T> Sync for NoIrqLock<T> {}
+unsafe impl<T> Send for NoIrqLock<T> {}
 
-impl<T> UPSafeCell<T> {
+impl<T> NoIrqLock<T> {
     pub const fn new(value: T) -> Self {
-        UPSafeCell {
+        NoIrqLock {
             inner: RefCell::new(value),
             borrower: Cell::new(("", 0)),
         }
@@ -62,7 +62,7 @@ impl<T> UPSafeCell<T> {
                 }
                 let (file, line) = self.borrower.get();
                 panic!(
-                    "UPSafeCell: double borrow!\n  current: {}:{}\n  holder:  {}:{}",
+                    "NoIrqLock: double borrow!\n  current: {}:{}\n  holder:  {}:{}",
                     caller.file(),
                     caller.line(),
                     file,
@@ -101,7 +101,7 @@ impl<T> UPSafeCell<T> {
                 let caller = core::panic::Location::caller();
                 let (file, line) = self.borrower.get();
                 error!(
-                    "UPSafeCell try_lock failed!\n  current: {}:{}\n  holder:  {}:{}",
+                    "NoIrqLock try_lock failed!\n  current: {}:{}\n  holder:  {}:{}",
                     caller.file(),
                     caller.line(),
                     file,
