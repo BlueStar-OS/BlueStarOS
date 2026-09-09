@@ -5,7 +5,7 @@ use crate::dtb::DeviceNode;
 use crate::dtb_probe;
 use crate::error::BlueErr;
 use crate::register_kernel_mmio;
-use crate::sync::UPSafeCell;
+use crate::sync::NoIrqLock;
 use crate::MapAreaFlags;
 use crate::VirNumRange;
 use alloc::vec::Vec;
@@ -84,9 +84,7 @@ impl BarSpace {
             error!(" out of bar space ");
             return 0;
         }
-        unsafe {
-            read_volatile(addr as *const u16)
-        }
+        unsafe { read_volatile(addr as *const u16) }
     }
     pub fn write_16(&self, offset: usize, value: u16) {
         // 检查对齐
@@ -118,9 +116,7 @@ impl BarSpace {
             error!(" out of bar space ");
             return 0;
         }
-        unsafe {
-            read_volatile(addr as *const u32)
-        }
+        unsafe { read_volatile(addr as *const u32) }
     }
     pub fn write_32(&self, offset: usize, value: u32) {
         // 检查对齐
@@ -152,9 +148,7 @@ impl BarSpace {
             error!(" out of bar space ");
             return 0;
         }
-        unsafe {
-            read_volatile(addr as *const u64)
-        }
+        unsafe { read_volatile(addr as *const u64) }
     }
     pub fn write_64(&self, offset: usize, value: u64) {
         // 检查对齐
@@ -227,8 +221,8 @@ lazy_static! {
     ///
     /// 扫描流程在枚举到每个 BDF 后立即注册，后续显卡、网卡、块设备等驱动
     /// 只需要消费这里的快照，不需要再次直接扫配置空间。
-    pub static ref PCIE_DEVICES: UPSafeCell<Vec<PcieDeviceInfo>> =
-        UPSafeCell::new(Vec::new());
+    pub static ref PCIE_DEVICES: NoIrqLock<Vec<PcieDeviceInfo>> =
+        NoIrqLock::new(Vec::new());
 }
 
 /// 注册一个已扫描到的 PCIe 设备。
@@ -469,7 +463,7 @@ fn is_qemu_edu_device(vendor_id: u16, device_id: u16) -> bool {
 // ─── 全局状态 ────────────────────────────────────────────────────────
 
 /// ECAM 基地址，设备树探测后填入
-// TODO(soundness): static mut written at boot, read later. Use OnceLock or UPSafeCell.
+// TODO(soundness): static mut written at boot, read later. Use OnceLock or NoIrqLock.
 static mut PCIE_ECAM_ADDR: usize = 0;
 
 // ─── 日志宏 ──────────────────────────────────────────────────────────
@@ -1234,6 +1228,9 @@ fn pci_probe_callback(node: &DeviceNode, _compatible: &str) -> Result<(), &'stat
     // 4. TODO(dirinkbottle): NVMe probe 成功后直接 `register_global_block_device()`，
     //    后面的 `RootFs::init_rootfs()` 就能无缝看到它。
     let _ = crate::driver::nvme::probe_registered_pcie_nvme_devices();
+
+    #[cfg(target_arch = "riscv64")]
+    crate::driver::usb::qemu_xhcihost::probe_registered_qemu_xhcihost();
 
     // e1000探测
     crate::driver::network::e1000::probe_registered_e1000();
