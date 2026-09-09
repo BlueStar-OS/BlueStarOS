@@ -11,10 +11,23 @@ keywords = ["kernel", "operating-system", "riscv"]
 categories = ["os", "embedded"]
 
 [features]
-default = ["main_fs"]
+default = ["riscv64-qemu"]
 main_fs = ["ext4"]
 ext4 = ["rsext4"]
-qemu_plat = []
+
+# Architecture capability features. Board features below select one of them.
+riscv64 = []
+aarch64 = []
+
+# Optional AArch64 board driver capabilities. They are intentionally not part
+# of the QEMU profile; enabling one belongs to a future RK3588 board profile.
+rk3588-emmc = []
+
+# Complete board profiles. Keep driver selection here so Cargo and Rust use
+# the same source of truth.
+riscv64-qemu = ["riscv64", "main_fs"]
+spacemitk3-com260kit = ["riscv64", "main_fs"]
+aarch64-qemu = ["aarch64", "main_fs"]
 
 [dependencies]
 log = "0.4"
@@ -27,9 +40,6 @@ spin = "0.9"
 virtio-drivers = {git = "https://github.com/rcore-os/virtio-drivers", rev = "4ee80e5"}
 rsext4 = {path = "./dependencies/rsext4", optional = true}
 paste = "1.0.15"
-
-[build-dependencies]
-cc = "1.0"
 
 [profile.release]
 debug = true

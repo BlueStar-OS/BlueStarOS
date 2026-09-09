@@ -13,11 +13,11 @@ extern "C" {
     pub fn kernel_trap_stack_protect_start();
     pub fn kernel_trap_stack_protect_end();
 
-    // 内核 self-trap 栈
+    // 内核sleftrap栈
     pub fn kernel_kernel_trap_bottom();
     pub fn kernel_kernel_trap_top();
 
-    // stack bss 结束后的 bss 开始地址
+    // stack bss结束后的bss开始地址
     pub fn estack();
 
     pub fn ekernel();
@@ -30,61 +30,96 @@ extern "C" {
     pub fn edata();
     pub fn sbss();
     pub fn ebss();
-    /// 内核陷阱地址
+    ///内核陷阱地址
     pub fn __kernel_trap();
-    /// 内核陷阱恢复地址
+    ///内核陷阱恢复地址
     pub fn __kernel_refume();
-    /// 内核陷入拒绝函数
+    ///内核陷入拒绝函数
     pub fn kernel_traped_forbid();
-    /// 内核陷阱的物理起始地址
+    ///内核陷阱的物理起始地址
     pub fn straper();
-    /// 用户程序专用陷阱物理起始地址
+    ///用户程序专用陷阱物理起始地址
     pub fn utraper();
+    pub fn app_start(); //测试应用地址
+    pub fn app_end(); //测试应用地址
     /// secondary hart 入口地址 (entry.asm)
     pub fn _blue_secondary_start();
 }
 
-/// MB 的简单封装
+/// consent mode
+pub static mut CONSENT: bool = false;
+
+///MB的简单封装
 pub const MB: usize = 1024 * 1024;
-pub const PAGE_SIZE: usize = 4096;
+pub const PAGE_SIZE: usize = 4096; //每个页面大小4kb
 
-pub const KERNEL_HEAP_SIZE: usize = 64 * MB;
-pub const KERNEL_STACK_SIZE: usize = PAGE_SIZE * 64;
-pub const USER_STACK_SIZE: usize = 64;
-pub static mut KERNEL_HEADP: [u8; KERNEL_HEAP_SIZE] = [0; KERNEL_HEAP_SIZE];
-pub const PAGE_SIZE_BITS: usize = 12;
+pub const KERNEL_HEAP_SIZE: usize = 64 * MB; //内核堆大小，64mb足以了，后期可以调整，主要是init程序加载时的vec比较大。
 
-pub const CPU_CIRCLE: usize = 12_500_000;
+pub const KERNEL_STACK_SIZE: usize = PAGE_SIZE * 64; //应用内核栈有64个页面的大小
+pub const USER_STACK_SIZE: usize = 64; //应用内核栈有64个页面的大小
+pub static mut KERNEL_HEADP: [u8; KERNEL_HEAP_SIZE] = [0; KERNEL_HEAP_SIZE]; //内核堆实例
+pub const PAGE_SIZE_BITS: usize = 12; //2^12=4096 4kb
 
-/// 使用虚拟高地址并且刚好留够一个页面，代表开始的第一个地址
+pub const CPU_CIRCLE: usize = 12_500_000; // qemu时钟频率
+
+///使用虚拟高地址并且刚好留够一个页面,代表开始的第一个地址
 pub const TRAP_BOTTOM_ADDR: usize = usize::MAX - PAGE_SIZE + 1;
-/// 每个 app 的 trap context（高地址）
+///每个app的trap context (高地址)
 pub const TRAP_CONTEXT_ADDR: usize = TRAP_BOTTOM_ADDR - PAGE_SIZE;
-/// 用户 start 函数在用户地址空间的起始映射地址
+///用户start函数在用户地址空间的起始映射地址，不携带页帧，直接操作页表映射 D
 pub const USERLIB_START_RETURN_HIGNADDR: usize = TRAP_CONTEXT_ADDR - PAGE_SIZE;
-pub const HIGNADDRESS_MASK: usize = 0xFFFFFFE000000000;
-/// 每秒时钟中断次数
+pub const HIGNADDRESS_MASK: usize = 0xFFFFFFE000000000; //0xFFFFFFFFFFFFF000 hb *0xfffffffffffff070
+///每秒多少次时钟中断
 pub const TIME_FREQUENT: usize = 100;
-/// 扇区大小
-pub const SECTOR_SIZE: usize = 512;
+///扇区大小
+pub const SECTOR_SIZE: usize = 512; //512 bytes
 
-/// 任务初始 ticket（优先级）
+///任务初始ticket(优先级)
 pub const TASK_TICKET: usize = 100;
-/// Stride 调度基准大数
+///初始大数
 pub const BIG_INT: usize = 1_000_000;
 
-/// 文件系统每个 Block 大小
+///文件系统每个Block大小
 pub const BLOCKSIZE: usize = 4096;
 
-/// 系统架构字符串
+///系统架构字符串
 #[cfg(target_arch = "aarch64")]
 pub const ARCHITECTURE: &str = "aarch64";
 #[cfg(target_arch = "riscv64")]
 pub const ARCHITECTURE: &str = "riscv64";
 
-use crate::{sync::UPSafeCell, MapSet};
+use crate::{sync::NoIrqLock, MapSet};
 use lazy_static::lazy_static;
 lazy_static! {
-    pub static ref KERNEL_SPACE: UPSafeCell<MapSet> =
-        UPSafeCell::new(MapSet::new_kernel());
+        pub static ref KERNEL_SPACE:NoIrqLock<MapSet> =NoIrqLock::new( MapSet::new_kernel()); //内核地址空间，必须持有,从来不会丢弃
 }
+// 板子编译宏
+//
+// build.rs 根据唯一的 board feature 生成 board_config.rs；宏本身不包含
+// 任何板级细节，因此新增板子只需要扩展 build.rs 的 Board 表。
+macro_rules! board_copiler_config {
+    () => {
+        include!(concat!(env!("OUT_DIR"), "/board_config.rs"));
+    };
+}
+
+#[cfg(not(any(
+    feature = "riscv64-qemu",
+    feature = "spacemitk3-com260kit",
+    feature = "aarch64-qemu"
+)))]
+compile_error!("select exactly one BlueStarOS board feature");
+
+#[cfg(any(
+    all(feature = "riscv64-qemu", feature = "spacemitk3-com260kit"),
+    all(feature = "riscv64-qemu", feature = "aarch64-qemu"),
+    all(feature = "spacemitk3-com260kit", feature = "aarch64-qemu")
+))]
+compile_error!("select only one BlueStarOS board feature");
+
+#[cfg(any(
+    feature = "riscv64-qemu",
+    feature = "spacemitk3-com260kit",
+    feature = "aarch64-qemu"
+))]
+board_copiler_config!();

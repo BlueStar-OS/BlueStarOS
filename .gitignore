@@ -1,6 +1,8 @@
 kernel/target/
+kernel/src/board_config.h
 user/target/
 target/
+testsuits-for-oskernel/
 user/musltest/
 user/musltest-aarch64/
 *.img
