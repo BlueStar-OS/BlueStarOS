@@ -11,14 +11,15 @@
 //! ```
 
 use lazy_static::lazy_static;
-use log::warn;
+use log::{info, warn};
+use riscv::register::{scause, sepc, sie, sip, sstatus, stval, stvec};
 
 use crate::arch::memory::*;
 use crate::dtb::DeviceNode;
 use crate::dtb_probe;
 use crate::kprintln;
 use crate::register_kernel_mmio;
-use crate::sync::UPSafeCell;
+use crate::sync::NoIrqLock;
 use crate::MapAreaFlags;
 use crate::VirNumRange;
 
@@ -27,6 +28,12 @@ const PLIC_BASE: usize = 0x0C00_0000;
 
 /// QEMU virt 平台最大中断源数量 (IRQ 1-52, 0=无中断)
 const MAX_IRQ: usize = 53;
+
+/// QEMU virt 中挂在 rp5(slot 6) 后面的 xHCI 的 PLIC source。
+///
+/// xHCI 的 INTA 经 rp5 swizzle 到 root-complex IRQ 2，PCI wired IRQ
+/// 基址为 0x20，因此最终 PLIC source = 0x20 + 2 = 34。
+pub const QEMU_XHCI_IRQ: u32 = 34;
 
 /// 外部中断处理函数类型
 pub type IrqHandler = fn();
@@ -42,6 +49,16 @@ const fn priority_reg(irq: u32) -> usize {
 /// S-mode 使能寄存器: base + 0x2000 + context * 0x80
 const fn senable_reg(context: usize) -> usize {
     PLIC_BASE + 0x2000 + context * 0x80
+}
+
+/// PLIC pending word containing one interrupt source.
+const fn pending_reg(irq: u32) -> usize {
+    PLIC_BASE + 0x1000 + ((irq as usize) / 32) * 4
+}
+
+/// PLIC S-mode enable word containing one interrupt source.
+const fn enable_reg(irq: u32) -> usize {
+    senable_reg(S_CONTEXT) + ((irq as usize) / 32) * 4
 }
 
 /// S-mode 阈值寄存器: base + 0x20_0000 + context * 0x1000
@@ -61,8 +78,8 @@ const fn sclaim_reg(context: usize) -> usize {
 lazy_static! {
     /// 全局 IRQ → handler 映射表
     /// 索引 = IRQ 号, None = 未注册
-    static ref PLIC_HANDLERS: UPSafeCell<[Option<IrqHandler>; MAX_IRQ]> =
-        UPSafeCell::new([None; MAX_IRQ]);
+    static ref PLIC_HANDLERS: NoIrqLock<[Option<IrqHandler>; MAX_IRQ]> =
+        NoIrqLock::new([None; MAX_IRQ]);
 }
 
 /// 注册中断处理函数
@@ -80,13 +97,17 @@ pub fn register_irq(irq: u32, handler: IrqHandler, priority: u8) {
     assert!((irq as usize) < MAX_IRQ, "plic: invalid IRQ number {}", irq,);
     assert!(irq > 0, "plic: IRQ 0 is reserved (no interrupt)");
 
-    // 1. 写 PLIC 优先级寄存器
+    // 1. 先发布 handler。之后才打开硬件入口，避免中断先到而查不到
+    //    handler。
+    PLIC_HANDLERS.lock(|x| x[irq as usize] = Some(handler));
+
+    // 2. 写 PLIC 优先级寄存器
     unsafe {
         let prio = priority_reg(irq) as *mut u32;
         prio.write_volatile(priority as u32);
     }
 
-    // 2. 使能 S-mode 对该 IRQ 的中断
+    // 3. 使能 S-mode 对该 IRQ 的中断
     //
     // PLIC enable 数组按每 32 个 source 拆分到独立的 32-bit word 中。
     // IRQ N 的 enable bit 位于 word[N/32] 的 bit[N%32]。
@@ -99,9 +120,43 @@ pub fn register_irq(irq: u32, handler: IrqHandler, priority: u8) {
         let val = enable.read_volatile();
         enable.write_volatile(val | (1 << bit));
     }
+}
 
-    // 3. 注册 handler 到全局表
-    PLIC_HANDLERS.lock(|x| x[irq as usize] = Some(handler));
+/// Print the CPU and PLIC state without reading claim/complete.
+///
+/// PLIC claim is destructive: reading it may consume a pending source, so
+/// this diagnostic deliberately reads only status, pending, and enable data.
+pub fn debug_irq_state(irq: u32) {
+    assert!((irq as usize) < MAX_IRQ, "plic: invalid IRQ number {}", irq);
+
+    let sstatus_bits = sstatus::read().bits();
+    let sie_bits = sie::read().bits();
+    let sip_bits = sip::read().bits();
+    let scause_bits = scause::read().bits();
+    let sepc_value = sepc::read();
+    let stval_value = stval::read();
+    let stvec_value = stvec::read().bits();
+
+    let priority = unsafe { (priority_reg(irq) as *const u32).read_volatile() };
+    let pending = unsafe { (pending_reg(irq) as *const u32).read_volatile() };
+    let enable = unsafe { (enable_reg(irq) as *const u32).read_volatile() };
+    let threshold = unsafe { (sthreshold_reg(S_CONTEXT) as *const u32).read_volatile() };
+
+    info!(
+        "plic: irq {} state: sstatus={:#x} sie={:#x} sip={:#x} scause={:#x} sepc={:#x} stval={:#x} stvec={:#x}; priority={:#x} pending_word={:#x} enable_word={:#x} threshold={:#x}",
+        irq,
+        sstatus_bits,
+        sie_bits,
+        sip_bits,
+        scause_bits,
+        sepc_value,
+        stval_value,
+        stvec_value,
+        priority,
+        pending,
+        enable,
+        threshold,
+    );
 }
 
 /// 中断分发入口

@@ -36,7 +36,7 @@ use lazy_static::lazy_static;
 use log::{debug, warn};
 
 use crate::kprintln;
-use crate::sync::UPSafeCell;
+use crate::sync::NoIrqLock;
 
 // Import DTB pointer from assembly (defined in entry.asm)
 extern "C" {
@@ -52,7 +52,7 @@ lazy_static! {
     ///
     /// 设备树解析本身不依赖页帧分配器，但很多设备 probe 会依赖。
     /// 因此这里先缓存，等 frame allocator 初始化完成后再统一 probe。
-    static ref PARSED_DEVICE_TREE: UPSafeCell<Option<DeviceTree>> = UPSafeCell::new(None);
+    static ref PARSED_DEVICE_TREE: NoIrqLock<Option<DeviceTree>> = NoIrqLock::new(None);
 }
 
 /// Initialize DTB parsing
@@ -146,13 +146,18 @@ fn scan_and_register_memory(tree: &DeviceTree) {
 /// 这一阶段才允许驱动真正初始化 virtio 队列、申请连续页帧、
 /// 注册全局块设备等依赖内存分配器的动作。
 pub fn run_device_probes() {
-    PARSED_DEVICE_TREE.lock(|tree_guard| {
-        let Some(tree) = tree_guard.as_ref() else {
-            warn!("[DTB] run_device_probes called before DTB init");
-            return;
-        };
-        probe::run_probes(tree);
-    });
+    // NoIrqLock::lock disables interrupts for the duration of its closure.
+    // Do not hold the DTB lock while probing: xHCI may submit a command and
+    // wait for its IRQ during a probe.
+    let Some(tree) = PARSED_DEVICE_TREE.lock(|tree_guard| tree_guard.take()) else {
+        warn!("[DTB] run_device_probes called before DTB init");
+        return;
+    };
+
+    probe::run_probes(&tree);
+
+    // Keep the parsed tree available for later read-only users.
+    PARSED_DEVICE_TREE.lock(|tree_guard| *tree_guard = Some(tree));
 }
 
 /// Trace device tree content

@@ -32,8 +32,6 @@ extern "C" {
     fn __kernel_mode_trap();
 }
 
-use crate::arch::driver::keyboard;
-
 global_asm!(include_str!("trap.asm"));
 global_asm!(include_str!("kernel_trap.asm"));
 global_asm!(include_str!("./entry.asm"));
@@ -52,13 +50,7 @@ pub fn arch_init() {
     kprintln!("Inital Physical Memory Alloctor");
 
     init_frame_allocator_from_dtb(ekernel as *const () as usize);
-    dtb::run_device_probes();
-    kernel_info_debug();
-
-    driver::plic::plic_init();
-    keyboard::enable_uart_rx_interrupt();
-
-    enable_external_interrupt();
+    driver::init_external_interrupts();
 
     kprintln!("Welcome to BlueStarOS!");
     debug!("Kernel init success!");
@@ -67,6 +59,11 @@ pub fn arch_init() {
     set_kernel_trap();
     // 开启内核中断
     enable_irq();
+
+    // 设备 probe 可能启动控制器并产生中断，因此必须在 trap 和 IRQ 就绪后执行。
+    // KERNEL_SPACE 仍然在 probe 后激活，以便收集 probe 注册的全部 MMIO 区域。
+    dtb::run_device_probes();
+    kernel_info_debug();
 
     KERNEL_SPACE.lock(|ks| ks.activate());
 
