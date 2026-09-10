@@ -15,7 +15,7 @@ use log::{info, warn};
 use riscv::register::{scause, sepc, sie, sip, sstatus, stval, stvec};
 
 use crate::arch::memory::*;
-use crate::dtb::DeviceNode;
+use crate::driver::dtb::DeviceNode;
 use crate::dtb_probe;
 use crate::kprintln;
 use crate::register_kernel_mmio;

@@ -9,7 +9,7 @@ pub mod trap;
 
 use crate::allocator_init;
 use crate::config::*;
-use crate::dtb;
+use crate::driver::dtb;
 use crate::init_frame_allocator_from_dtb;
 use crate::kernel_info_debug;
 use crate::kprintln;

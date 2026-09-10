@@ -1,7 +1,7 @@
 use crate::arch::memory::{PhysiAddr, VirAddr};
+use crate::driver::dtb::DeviceNode;
 use crate::driver::pcie::bar::*;
 use crate::driver::pcie::pci_ids::*;
-use crate::dtb::DeviceNode;
 use crate::dtb_probe;
 use crate::error::BlueErr;
 use crate::register_kernel_mmio;
