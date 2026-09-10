@@ -240,7 +240,7 @@
 000000008021cd3a <os::sync::up::NoIrqLock<os::driver::network::e1000::packet::arp::cache::ArpTable>>::lock::<core::option::Option<os::driver::network::e1000::packet::ethernet::DstMac>, os::driver::network::e1000::packet::ipv4::tx::resolve_target_mac::{closure#1}>
 000000008021ce40 <os::sync::up::NoIrqLock<os::driver::network::e1000::packet::ipv4::header::Ipv4Addr>>::lock::<os::driver::network::e1000::packet::ipv4::header::Ipv4Addr, <os::network::udpsock::UdpSock>::target_ip_inner::{closure#0}>
 000000008021ced6 <os::sync::up::NoIrqLock<os::driver::network::e1000::packet::ipv4::header::Ipv4Addr>>::lock::<(), <os::network::udpsock::UdpSock>::set_target_inner::{closure#0}>
-000000008021cf6c core::ptr::drop_in_place::<core::option::Option<os::driver::dtb::node::DeviceTree>> (.llvm.12466349367710382138)
+000000008021cf6c core::ptr::drop_in_place::<core::option::Option<os::driver::dtb::node::DeviceTree>> (.llvm.16157475662867587955)
 000000008021d026 core::ptr::drop_in_place::<alloc::string::String>
 000000008021d040 core::ptr::drop_in_place::<os::fs::fs_backend::ext4_backend::ext4::Ext4Fs>
 000000008021d17e <os::fs::fs_backend::ext4_backend::ext4::Ext4Fs as core::any::Any>::type_id
@@ -255,14 +255,14 @@
 000000008021d6a0 <rsext4::cache::data_block::DataBlockCache>::create_new::<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>
 000000008021d8f0 <rsext4::cache::data_block::DataBlockCache>::modify_new::<os::fs::fs_backend::ext4_backend::Ext4BlockDevice, rsext4::file::create::mkfile<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>::{closure#0}>
 000000008021d9ce <rsext4::cache::data_block::DataBlockCache>::get_or_load::<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>
-000000008021dc9a <rsext4::cache::data_block::DataBlockCache>::get_or_load_mut::<os::fs::fs_backend::ext4_backend::Ext4BlockDevice> (.llvm.17099282702134074099)
-000000008021df0e <rsext4::cache::data_block::DataBlockCache>::evict::<os::fs::fs_backend::ext4_backend::Ext4BlockDevice> (.llvm.17099282702134074099)
+000000008021dc9a <rsext4::cache::data_block::DataBlockCache>::get_or_load_mut::<os::fs::fs_backend::ext4_backend::Ext4BlockDevice> (.llvm.583909930431113766)
+000000008021df0e <rsext4::cache::data_block::DataBlockCache>::evict::<os::fs::fs_backend::ext4_backend::Ext4BlockDevice> (.llvm.583909930431113766)
 000000008021e03c <rsext4::cache::data_block::DataBlockCache>::modify::<os::fs::fs_backend::ext4_backend::Ext4BlockDevice, rsext4::dir::insert::insert_dir_entry<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>::{closure#0}>
 000000008021e33c <rsext4::cache::data_block::DataBlockCache>::modify::<os::fs::fs_backend::ext4_backend::Ext4BlockDevice, rsext4::dir::insert::insert_dir_entry<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>::{closure#1}>
 000000008021e4b6 <rsext4::cache::data_block::DataBlockCache>::modify::<os::fs::fs_backend::ext4_backend::Ext4BlockDevice, rsext4::file::io::write_inode_data<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>::{closure#1}>
 000000008021e5a6 <rsext4::cache::data_block::DataBlockCache>::modify::<os::fs::fs_backend::ext4_backend::Ext4BlockDevice, rsext4::file::delete::remove_inodeentry_from_parentdir<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>::{closure#0}>
 000000008021e91a <rsext4::cache::data_block::DataBlockCache>::modify::<os::fs::fs_backend::ext4_backend::Ext4BlockDevice, rsext4::file::rename::mv<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>::{closure#2}>
-000000008021ea7a <rsext4::cache::data_block::DataBlockCache>::evict_lru::<os::fs::fs_backend::ext4_backend::Ext4BlockDevice> (.llvm.17099282702134074099)
+000000008021ea7a <rsext4::cache::data_block::DataBlockCache>::evict_lru::<os::fs::fs_backend::ext4_backend::Ext4BlockDevice> (.llvm.583909930431113766)
 000000008021eb98 <rsext4::cache::data_block::DataBlockCache>::flush_all::<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>
 000000008021ef3c <core::str::pattern::TwoWaySearcher>::next::<core::str::pattern::MatchOnly>
 000000008021f0a6 core::ptr::drop_in_place::<os::fs::vfs::vblock::BlockDevFile>
@@ -275,14 +275,14 @@
 000000008022278e <os::fs::vfs::root::define::RootFs>::resolve_mount_point
 0000000080222b70 <os::driver::dtb::devices::DeviceScanner>::find_buses
 0000000080222d7e <os::driver::dtb::devices::DeviceScanner>::find_memory
-0000000080222f8c <os::driver::dtb::devices::DeviceScanner>::find_ic_recursive (.llvm.17099282702134074099)
+0000000080222f8c <os::driver::dtb::devices::DeviceScanner>::find_ic_recursive (.llvm.583909930431113766)
 000000008022344e <os::driver::dtb::devices::DeviceScanner>::find_mmio_devices
-000000008022365c <os::driver::dtb::devices::DeviceScanner>::find_bus_recursive (.llvm.17099282702134074099)
-0000000080223da4 <os::driver::dtb::devices::DeviceScanner>::find_cpus_recursive (.llvm.17099282702134074099)
-000000008022411c <os::driver::dtb::devices::DeviceScanner>::find_gpio_recursive (.llvm.17099282702134074099)
-00000000802246b8 <os::driver::dtb::devices::DeviceScanner>::find_mmio_recursive (.llvm.17099282702134074099)
+000000008022365c <os::driver::dtb::devices::DeviceScanner>::find_bus_recursive (.llvm.583909930431113766)
+0000000080223da4 <os::driver::dtb::devices::DeviceScanner>::find_cpus_recursive (.llvm.583909930431113766)
+000000008022411c <os::driver::dtb::devices::DeviceScanner>::find_gpio_recursive (.llvm.583909930431113766)
+00000000802246b8 <os::driver::dtb::devices::DeviceScanner>::find_mmio_recursive (.llvm.583909930431113766)
 00000000802250fa <os::driver::dtb::devices::DeviceScanner>::find_gpio_controllers
-0000000080225308 <os::driver::dtb::devices::DeviceScanner>::find_memory_recursive (.llvm.17099282702134074099)
+0000000080225308 <os::driver::dtb::devices::DeviceScanner>::find_memory_recursive (.llvm.583909930431113766)
 000000008022571e <os::driver::dtb::devices::DeviceScanner>::find_interrupt_controllers
 000000008022592c os::arch::riscv64::memory::active_memset
 0000000080225a0a os::arch::riscv64::driver::plic::dispatch_irq
@@ -290,35 +290,35 @@
 0000000080225cd2 os::arch::riscv64::driver::plic::plic_fn
 0000000080225e4e <os::fs::vfs::vblock::BlockDevFile as core::any::Any>::type_id
 0000000080225e64 <os::fs::fs_backend::ramfs::ramfs::RamFs as core::any::Any>::type_id
-0000000080225e7a <os::fs::component::tty::tty::Stdin as core::any::Any>::type_id (.llvm.17099282702134074099)
-0000000080225e90 <os::fs::component::tty::tty::Stderr as core::any::Any>::type_id (.llvm.17099282702134074099)
-0000000080225ea6 <os::fs::component::tty::tty::Stdout as core::any::Any>::type_id (.llvm.17099282702134074099)
+0000000080225e7a <os::fs::component::tty::tty::Stdin as core::any::Any>::type_id (.llvm.583909930431113766)
+0000000080225e90 <os::fs::component::tty::tty::Stderr as core::any::Any>::type_id (.llvm.583909930431113766)
+0000000080225ea6 <os::fs::component::tty::tty::Stdout as core::any::Any>::type_id (.llvm.583909930431113766)
 0000000080225ebc <os::fs::vfs::vfserror::VfsFsError as core::fmt::Debug>::fmt
-0000000080225ee6 <os::fs::component::tty::tty::Stdin as os::fs::vfs::vfs::File>::read (.llvm.17099282702134074099)
-000000008022614a <os::fs::component::tty::tty::Stdin as os::fs::vfs::vfs::File>::ioctl (.llvm.17099282702134074099)
-0000000080226348 <os::fs::component::tty::tty::Stdin as os::fs::vfs::vfs::File>::write (.llvm.17099282702134074099)
-0000000080226354 <os::fs::component::tty::tty::Stdin as os::fs::vfs::vfs::File>::as_any (.llvm.17099282702134074099)
+0000000080225ee6 <os::fs::component::tty::tty::Stdin as os::fs::vfs::vfs::File>::read (.llvm.583909930431113766)
+000000008022614a <os::fs::component::tty::tty::Stdin as os::fs::vfs::vfs::File>::ioctl (.llvm.583909930431113766)
+0000000080226348 <os::fs::component::tty::tty::Stdin as os::fs::vfs::vfs::File>::write (.llvm.583909930431113766)
+0000000080226354 <os::fs::component::tty::tty::Stdin as os::fs::vfs::vfs::File>::as_any (.llvm.583909930431113766)
 000000008022635e <os::fs::partition::gpt::Guid as core::fmt::Debug>::fmt
 000000008022638a <os::fs::fs_backend::ramfs::ramfs::RamFs as os::fs::vfs::vfs::VfsFs>::as_any_mut
 0000000080226394 <os::fs::fs_backend::ramfs::ramfs::RamFs as os::fs::vfs::vfs::VfsFs>::mount
 00000000802263a8 <os::fs::fs_backend::ramfs::ramfs::RamFs as os::fs::vfs::vfs::VfsFs>::as_any
 00000000802263b2 <os::fs::fs_backend::ramfs::ramfs::RamFs as os::fs::vfs::vfs::VfsFs>::umount
-00000000802263c4 <os::fs::component::tty::tty::Stderr as os::fs::vfs::vfs::File>::read (.llvm.17099282702134074099)
-00000000802263c4 <os::fs::component::tty::tty::Stdout as os::fs::vfs::vfs::File>::read (.llvm.17099282702134074099)
-00000000802263d0 <os::fs::component::tty::tty::Stderr as os::fs::vfs::vfs::File>::write (.llvm.17099282702134074099)
-0000000080226416 <os::fs::component::tty::tty::Stderr as os::fs::vfs::vfs::File>::as_any (.llvm.17099282702134074099)
+00000000802263c4 <os::fs::component::tty::tty::Stderr as os::fs::vfs::vfs::File>::read (.llvm.583909930431113766)
+00000000802263c4 <os::fs::component::tty::tty::Stdout as os::fs::vfs::vfs::File>::read (.llvm.583909930431113766)
+00000000802263d0 <os::fs::component::tty::tty::Stderr as os::fs::vfs::vfs::File>::write (.llvm.583909930431113766)
+0000000080226416 <os::fs::component::tty::tty::Stderr as os::fs::vfs::vfs::File>::as_any (.llvm.583909930431113766)
 0000000080226420 <core::panic::panic_info::PanicMessage as core::fmt::Debug>::fmt
-0000000080226432 <os::fs::component::tty::tty::Stdout as core::fmt::Write>::write_str (.llvm.17099282702134074099)
+0000000080226432 <os::fs::component::tty::tty::Stdout as core::fmt::Write>::write_str (.llvm.583909930431113766)
 0000000080226486 <os::fs::partition::gpt::GptPartitionName as core::fmt::Debug>::fmt
 00000000802264d0 <os::fs::partition::mbr::MbrPartitionMetadata as core::fmt::Debug>::fmt
-0000000080226564 <core::fmt::Error as core::fmt::Debug>::fmt (.llvm.17099282702134074099)
+0000000080226564 <core::fmt::Error as core::fmt::Debug>::fmt (.llvm.583909930431113766)
 000000008022657a <u8 as core::fmt::Debug>::fmt
 00000000802265a2 <os::fs::vfs::vblock::BlockDevFile as os::fs::vfs::vfs::File>::getdents64
 00000000802265b0 <os::fs::vfs::vblock::BlockDevFile as os::fs::vfs::vfs::File>::stat
 00000000802265d0 <os::fs::vfs::vblock::BlockDevFile as os::fs::vfs::vfs::File>::as_any
 00000000802265da <os::fs::vfs::root::define::MountPath as core::cmp::Ord>::cmp
-0000000080226744 <os::fs::component::tty::tty::Stdout as os::fs::vfs::vfs::File>::write (.llvm.17099282702134074099)
-00000000802267aa <os::fs::component::tty::tty::Stdout as os::fs::vfs::vfs::File>::as_any (.llvm.17099282702134074099)
+0000000080226744 <os::fs::component::tty::tty::Stdout as os::fs::vfs::vfs::File>::write (.llvm.583909930431113766)
+00000000802267aa <os::fs::component::tty::tty::Stdout as os::fs::vfs::vfs::File>::as_any (.llvm.583909930431113766)
 00000000802267b4 <os::fs::partition::gpt::GptPartitionMetadata as core::fmt::Debug>::fmt
 0000000080226844 <bool as core::fmt::Debug>::fmt
 000000008022684c <alloc::string::String as core::fmt::Display>::fmt
@@ -327,34 +327,34 @@
 00000000802269f6 <os::fs::vfs::vblock::BlockDevFile as os::fs::vfs::vfs::File>::close
 00000000802269fc <os::fs::vfs::vblock::BlockDevFile as os::fs::vfs::vfs::File>::ioctl
 0000000080226a08 <os::fs::fs_backend::ramfs::ramfs::RamFs as os::fs::vfs::vfs::VfsFs>::mv
-0000000080226a0c <os::fs::component::tty::tty::Stdin as os::fs::vfs::vfs::File>::getdents64 (.llvm.17099282702134074099)
-0000000080226a0c <os::fs::component::tty::tty::Stderr as os::fs::vfs::vfs::File>::getdents64 (.llvm.17099282702134074099)
-0000000080226a0c <os::fs::component::tty::tty::Stdout as os::fs::vfs::vfs::File>::getdents64 (.llvm.17099282702134074099)
-0000000080226a1a <os::fs::component::tty::tty::Stdin as os::fs::vfs::vfs::File>::poll (.llvm.17099282702134074099)
-0000000080226a1a <os::fs::component::tty::tty::Stderr as os::fs::vfs::vfs::File>::poll (.llvm.17099282702134074099)
-0000000080226a1a <os::fs::component::tty::tty::Stdout as os::fs::vfs::vfs::File>::poll (.llvm.17099282702134074099)
-0000000080226a1e <os::fs::component::tty::tty::Stdin as os::fs::vfs::vfs::File>::stat (.llvm.17099282702134074099)
-0000000080226a1e <os::fs::component::tty::tty::Stderr as os::fs::vfs::vfs::File>::stat (.llvm.17099282702134074099)
-0000000080226a1e <os::fs::component::tty::tty::Stdout as os::fs::vfs::vfs::File>::stat (.llvm.17099282702134074099)
-0000000080226a2a <os::fs::component::tty::tty::Stdin as os::fs::vfs::vfs::File>::close (.llvm.17099282702134074099)
-0000000080226a2a <os::fs::component::tty::tty::Stderr as os::fs::vfs::vfs::File>::close (.llvm.17099282702134074099)
-0000000080226a2a <os::fs::component::tty::tty::Stdout as os::fs::vfs::vfs::File>::close (.llvm.17099282702134074099)
-0000000080226a30 <os::fs::component::tty::tty::Stdin as os::fs::vfs::vfs::File>::flush (.llvm.17099282702134074099)
-0000000080226a30 <os::fs::component::tty::tty::Stderr as os::fs::vfs::vfs::File>::flush (.llvm.17099282702134074099)
-0000000080226a30 <os::fs::component::tty::tty::Stdout as os::fs::vfs::vfs::File>::flush (.llvm.17099282702134074099)
-0000000080226a34 <os::fs::component::tty::tty::Stdin as os::fs::vfs::vfs::File>::lseek (.llvm.17099282702134074099)
-0000000080226a34 <os::fs::component::tty::tty::Stderr as os::fs::vfs::vfs::File>::lseek (.llvm.17099282702134074099)
-0000000080226a34 <os::fs::component::tty::tty::Stdout as os::fs::vfs::vfs::File>::lseek (.llvm.17099282702134074099)
-0000000080226a40 <os::fs::component::tty::tty::Stdin as os::fs::vfs::vfs::File>::read_at (.llvm.17099282702134074099)
-0000000080226a40 <os::fs::component::tty::tty::Stderr as os::fs::vfs::vfs::File>::read_at (.llvm.17099282702134074099)
-0000000080226a40 <os::fs::component::tty::tty::Stdout as os::fs::vfs::vfs::File>::read_at (.llvm.17099282702134074099)
-0000000080226a4c <os::fs::component::tty::tty::Stdin as os::fs::vfs::vfs::File>::write_at (.llvm.17099282702134074099)
-0000000080226a4c <os::fs::component::tty::tty::Stderr as os::fs::vfs::vfs::File>::write_at (.llvm.17099282702134074099)
-0000000080226a4c <os::fs::component::tty::tty::Stdout as os::fs::vfs::vfs::File>::write_at (.llvm.17099282702134074099)
-0000000080226a58 <os::fs::component::tty::tty::Stderr as os::fs::vfs::vfs::File>::ioctl (.llvm.17099282702134074099)
-0000000080226a58 <os::fs::component::tty::tty::Stdout as os::fs::vfs::vfs::File>::ioctl (.llvm.17099282702134074099)
-0000000080226a64 <os::fs::component::tty::tty::Stdout as core::fmt::Write>::write_char (.llvm.17099282702134074099)
-0000000080226b34 <os::fs::component::tty::tty::Stdout as core::fmt::Write>::write_fmt (.llvm.17099282702134074099)
+0000000080226a0c <os::fs::component::tty::tty::Stdin as os::fs::vfs::vfs::File>::getdents64 (.llvm.583909930431113766)
+0000000080226a0c <os::fs::component::tty::tty::Stderr as os::fs::vfs::vfs::File>::getdents64 (.llvm.583909930431113766)
+0000000080226a0c <os::fs::component::tty::tty::Stdout as os::fs::vfs::vfs::File>::getdents64 (.llvm.583909930431113766)
+0000000080226a1a <os::fs::component::tty::tty::Stdin as os::fs::vfs::vfs::File>::poll (.llvm.583909930431113766)
+0000000080226a1a <os::fs::component::tty::tty::Stderr as os::fs::vfs::vfs::File>::poll (.llvm.583909930431113766)
+0000000080226a1a <os::fs::component::tty::tty::Stdout as os::fs::vfs::vfs::File>::poll (.llvm.583909930431113766)
+0000000080226a1e <os::fs::component::tty::tty::Stdin as os::fs::vfs::vfs::File>::stat (.llvm.583909930431113766)
+0000000080226a1e <os::fs::component::tty::tty::Stderr as os::fs::vfs::vfs::File>::stat (.llvm.583909930431113766)
+0000000080226a1e <os::fs::component::tty::tty::Stdout as os::fs::vfs::vfs::File>::stat (.llvm.583909930431113766)
+0000000080226a2a <os::fs::component::tty::tty::Stdin as os::fs::vfs::vfs::File>::close (.llvm.583909930431113766)
+0000000080226a2a <os::fs::component::tty::tty::Stderr as os::fs::vfs::vfs::File>::close (.llvm.583909930431113766)
+0000000080226a2a <os::fs::component::tty::tty::Stdout as os::fs::vfs::vfs::File>::close (.llvm.583909930431113766)
+0000000080226a30 <os::fs::component::tty::tty::Stdin as os::fs::vfs::vfs::File>::flush (.llvm.583909930431113766)
+0000000080226a30 <os::fs::component::tty::tty::Stderr as os::fs::vfs::vfs::File>::flush (.llvm.583909930431113766)
+0000000080226a30 <os::fs::component::tty::tty::Stdout as os::fs::vfs::vfs::File>::flush (.llvm.583909930431113766)
+0000000080226a34 <os::fs::component::tty::tty::Stdin as os::fs::vfs::vfs::File>::lseek (.llvm.583909930431113766)
+0000000080226a34 <os::fs::component::tty::tty::Stderr as os::fs::vfs::vfs::File>::lseek (.llvm.583909930431113766)
+0000000080226a34 <os::fs::component::tty::tty::Stdout as os::fs::vfs::vfs::File>::lseek (.llvm.583909930431113766)
+0000000080226a40 <os::fs::component::tty::tty::Stdin as os::fs::vfs::vfs::File>::read_at (.llvm.583909930431113766)
+0000000080226a40 <os::fs::component::tty::tty::Stderr as os::fs::vfs::vfs::File>::read_at (.llvm.583909930431113766)
+0000000080226a40 <os::fs::component::tty::tty::Stdout as os::fs::vfs::vfs::File>::read_at (.llvm.583909930431113766)
+0000000080226a4c <os::fs::component::tty::tty::Stdin as os::fs::vfs::vfs::File>::write_at (.llvm.583909930431113766)
+0000000080226a4c <os::fs::component::tty::tty::Stderr as os::fs::vfs::vfs::File>::write_at (.llvm.583909930431113766)
+0000000080226a4c <os::fs::component::tty::tty::Stdout as os::fs::vfs::vfs::File>::write_at (.llvm.583909930431113766)
+0000000080226a58 <os::fs::component::tty::tty::Stderr as os::fs::vfs::vfs::File>::ioctl (.llvm.583909930431113766)
+0000000080226a58 <os::fs::component::tty::tty::Stdout as os::fs::vfs::vfs::File>::ioctl (.llvm.583909930431113766)
+0000000080226a64 <os::fs::component::tty::tty::Stdout as core::fmt::Write>::write_char (.llvm.583909930431113766)
+0000000080226b34 <os::fs::component::tty::tty::Stdout as core::fmt::Write>::write_fmt (.llvm.583909930431113766)
 0000000080226b48 rsext4::dir::mkdir::mkdir_internal::<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>
 0000000080227f36 rsext4::dir::bootstrap::create_lost_found_directory::<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>
 00000000802287b4 rsext4::dir::bootstrap::create_root_directory_entry::<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>
@@ -405,13 +405,13 @@
 000000008022f506 core::ptr::drop_in_place::<os::fs::fs_backend::fat32::fat32::Fat32File>
 000000008022f524 <u8 as alloc::vec::spec_from_elem::SpecFromElem>::from_elem::<alloc::alloc::Global>
 000000008022f588 <os::fs::fs_backend::fat32::fat32::Fat32SfnEntry>::from_raw
-000000008022f5fe <alloc::collections::vec_deque::VecDeque<alloc::sync::Arc<os::sync::up::NoIrqLock<os::task::task::TaskControlBlock>>>>::wrap_copy (.llvm.14071001226973656531)
+000000008022f5fe <alloc::collections::vec_deque::VecDeque<alloc::sync::Arc<os::sync::up::NoIrqLock<os::task::task::TaskControlBlock>>>>::wrap_copy (.llvm.6343521684883894645)
 000000008022f7c6 <alloc::collections::vec_deque::VecDeque<os::task::signal::OsSignal>>::wrap_copy
 000000008022f988 <os::fs::fs_backend::fat32::fat32::Fat32Fs>::new
-000000008022fb84 <alloc::collections::vec_deque::VecDeque<alloc::sync::Arc<os::sync::up::NoIrqLock<os::task::task::TaskControlBlock>>>>::grow (.llvm.14071001226973656531)
+000000008022fb84 <alloc::collections::vec_deque::VecDeque<alloc::sync::Arc<os::sync::up::NoIrqLock<os::task::task::TaskControlBlock>>>>::grow (.llvm.6343521684883894645)
 000000008022fbfe <alloc::collections::vec_deque::VecDeque<os::task::signal::OsSignal>>::insert_mut
-000000008022fcbe <alloc::collections::vec_deque::VecDeque<os::task::signal::OsSignal>>::grow (.llvm.14071001226973656531)
-000000008022fd38 <alloc::collections::vec_deque::VecDeque<u8>>::grow (.llvm.14071001226973656531)
+000000008022fcbe <alloc::collections::vec_deque::VecDeque<os::task::signal::OsSignal>>::grow (.llvm.6343521684883894645)
+000000008022fd38 <alloc::collections::vec_deque::VecDeque<u8>>::grow (.llvm.6343521684883894645)
 000000008022fda4 <os::fs::fs_backend::fat32::fat32::Fat32Fs>::read_cluster
 000000008022fe68 <os::fs::fs_backend::fat32::fat32::Fat32Fs>::walk_dir_find
 00000000802309aa <os::fs::fs_backend::fat32::fat32::Fat32Fs>::write_cluster
@@ -466,8 +466,8 @@
 00000000802365e8 core::ptr::drop_in_place::<os::fs::fs_backend::fat32::fat32::Fat32Fs>
 0000000080236604 core::ptr::drop_in_place::<os::fs::component::pipe::pipe::PipeHandle>
 0000000080236620 rsext4::hashtree::lookup::lookup::<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>
-0000000080236972 <alloc::collections::btree::map::BTreeMap<_, _, _> as core::clone::Clone>::clone::clone_subtree::<os::arch::riscv64::memory::address::VirNumber, alloc::sync::Arc<os::memory::frame_allocator::FramTracker>, alloc::alloc::Global> (.llvm.1412693910752421623)
-0000000080236bde <alloc::collections::btree::map::BTreeMap<_, _, _> as core::clone::Clone>::clone::clone_subtree::<os::arch::riscv64::memory::address::VirNumber, os::memory::memory_space::mmap_entry::MmapEntryInfo, alloc::alloc::Global> (.llvm.1412693910752421623)
+0000000080236972 <alloc::collections::btree::map::BTreeMap<_, _, _> as core::clone::Clone>::clone::clone_subtree::<os::arch::riscv64::memory::address::VirNumber, alloc::sync::Arc<os::memory::frame_allocator::FramTracker>, alloc::alloc::Global> (.llvm.17596309902199403172)
+0000000080236bde <alloc::collections::btree::map::BTreeMap<_, _, _> as core::clone::Clone>::clone::clone_subtree::<os::arch::riscv64::memory::address::VirNumber, os::memory::memory_space::mmap_entry::MmapEntryInfo, alloc::alloc::Global> (.llvm.17596309902199403172)
 0000000080236f36 <virtio_drivers::blk::VirtIOBlk<os::arch::riscv64::driver::virtio_blk::block::VirtioHal>>::read_block
 0000000080237006 <virtio_drivers::blk::VirtIOBlk<os::arch::riscv64::driver::virtio_blk::block::VirtioHal>>::write_block
 00000000802370d6 <virtio_drivers::blk::VirtIOBlk<os::arch::riscv64::driver::virtio_blk::block::VirtioHal>>::new
@@ -492,7 +492,7 @@
 000000008023974c os::syscall::sys_mount::sys_mount
 000000008023a7da os::syscall::sys_write::sys_write
 000000008023ab28 os::fs::partition::gpt::parsing_gpt_entries
-000000008023afde os::arch::riscv64::trap::no_return_start (.llvm.1412693910752421623)
+000000008023afde os::arch::riscv64::trap::no_return_start (.llvm.17596309902199403172)
 000000008023affa os::driver::dtb::probe::run_probes
 000000008023b566 os::syscall::signal::sys_rt_sigreturn::sys_rt_sigreturn
 000000008023b582 os::driver::network::e1000::packet::udp::tx::send_udp_packet
@@ -511,8 +511,8 @@
 000000008023c3a0 <alloc::collections::btree::map::BTreeMap<u32, os::fs::fs_backend::ramfs::ramfs::Node> as core::ops::drop::Drop>::drop
 000000008023c574 <rsext4::error::errno::Errno as core::fmt::Debug>::fmt
 000000008023c5a2 <os::fs::vfs::vfserror::VfsFsError as core::fmt::Debug>::fmt
-000000008023c5cc <os::driver::uvc::uvc::UvcDriverFactory as os::driver::usb::xhci_host::driver::UsbDeviceDriverFactory>::new_driver (.llvm.1412693910752421623)
-000000008023c624 <rsext4::error::Ext4Error as core::fmt::Debug>::fmt (.llvm.1412693910752421623)
+000000008023c5cc <os::driver::uvc::uvc::UvcDriverFactory as os::driver::usb::xhci_host::driver::UsbDeviceDriverFactory>::new_driver (.llvm.17596309902199403172)
+000000008023c624 <rsext4::error::Ext4Error as core::fmt::Debug>::fmt (.llvm.17596309902199403172)
 000000008023c678 <os::fs::vfs::api::PartitionFsHint as core::fmt::Debug>::fmt
 000000008023c6a2 <os::fs::fs_backend::ext4_backend::ext4::Ext4Fs as os::fs::vfs::vfs::VfsFs>::as_any_mut
 000000008023c6ac <os::fs::fs_backend::ext4_backend::ext4::Ext4Fs as os::fs::vfs::vfs::VfsFs>::as_any
@@ -537,7 +537,7 @@
 000000008023cfc4 <os::fs::fs_backend::ext4_backend::Ext4BlockDevice as rsext4::blockdev::traits::BlockDevice>::write
 000000008023d080 <os::driver::uvc::uvc::UvcDriver as os::driver::usb::xhci_host::driver::UsbDeviceDriver>::probe
 000000008023d1da <alloc::collections::btree::map::Iter<rsext4::cache::bitmap::CacheKey, rsext4::cache::bitmap::CachedBitmap> as core::iter::traits::iterator::Iterator>::next
-000000008023d29e <alloc::string::String as core::fmt::Display>::fmt (.llvm.1412693910752421623)
+000000008023d29e <alloc::string::String as core::fmt::Display>::fmt (.llvm.17596309902199403172)
 000000008023d2b2 <core::result::Result<&str, core::str::error::Utf8Error> as core::fmt::Debug>::fmt
 000000008023d30a <alloc::collections::btree::map::IntoIter<rsext4::bmalloc::LogicalBN, rsext4::bmalloc::AbsoluteBN> as core::ops::drop::Drop>::drop
 000000008023d4da <alloc::collections::btree::map::IntoIter<os::arch::riscv64::memory::address::VirNumber, alloc::sync::Arc<os::memory::frame_allocator::FramTracker>> as core::ops::drop::Drop>::drop
@@ -576,9 +576,9 @@
 00000000802411c8 <os::driver::gpu::vga_console::Console>::render_printable_char
 0000000080241334 <os::driver::gpu::vga_console::Console>::apply_csi
 0000000080241a22 <os::driver::gpu::vga_console::Console>::draw_char
-0000000080241d20 <os::fs::fs_backend::ramfs::ramfs::RamFs>::create_node (.llvm.2801648081991334350)
+0000000080241d20 <os::fs::fs_backend::ramfs::ramfs::RamFs>::create_node (.llvm.1917797410319167243)
 0000000080242026 <os::fs::fs_backend::ramfs::ramfs::RamFs>::lookup_path
-0000000080242230 <os::fs::fs_backend::ramfs::ramfs::RamFs>::split_parent (.llvm.2801648081991334350)
+0000000080242230 <os::fs::fs_backend::ramfs::ramfs::RamFs>::split_parent (.llvm.1917797410319167243)
 00000000802424fa <os::fs::fs_backend::ramfs::ramfs::RamFs>::normalize_components
 0000000080242650 <os::fs::fs_backend::ramfs::ramfs::RamFs>::mkdev
 0000000080242704 os::symbols::lookup
@@ -619,7 +619,7 @@
 0000000080245d1e <os::fs::fs_backend::ramfs::ramfs::RamFile as os::fs::vfs::vfs::File>::close
 0000000080245d24 <os::fs::fs_backend::ramfs::ramfs::RamFile as os::fs::vfs::vfs::File>::ioctl
 0000000080245d30 <rsext4::cache::inode_table::InodeCache>::get_or_load::<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>
-0000000080246080 <rsext4::cache::inode_table::InodeCache>::get_or_load_mut::<os::fs::fs_backend::ext4_backend::Ext4BlockDevice> (.llvm.722998937115896712)
+0000000080246080 <rsext4::cache::inode_table::InodeCache>::get_or_load_mut::<os::fs::fs_backend::ext4_backend::Ext4BlockDevice> (.llvm.16468259258390370099)
 0000000080246370 <rsext4::cache::inode_table::InodeCache>::modify::<os::fs::fs_backend::ext4_backend::Ext4BlockDevice, <rsext4::ext4::fs::Ext4FileSystem>::modify_inode<os::fs::fs_backend::ext4_backend::Ext4BlockDevice, <rsext4::ext4::fs::Ext4FileSystem>::alloc_inode<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>::{closure#0}>::{closure#0}>
 000000008024642a <rsext4::cache::inode_table::InodeCache>::evict_lru::<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>
 00000000802466d4 <rsext4::cache::inode_table::InodeCache>::flush_all::<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>
@@ -751,7 +751,7 @@
 0000000080254f40 <alloc::vec::Vec<(u32, u32, u64)> as core::fmt::Debug>::fmt
 0000000080254f98 <alloc::vec::Vec<(u32, u64)> as core::fmt::Debug>::fmt
 0000000080254ff0 <alloc::vec::Vec<u8> as core::fmt::Debug>::fmt
-0000000080255046 core::ptr::drop_in_place::<core::option::Option<os::driver::usb::xhci_host::device::PendingOperation>> (.llvm.12061293744449830463)
+0000000080255046 core::ptr::drop_in_place::<core::option::Option<os::driver::usb::xhci_host::device::PendingOperation>> (.llvm.2076044456210995270)
 0000000080255206 core::ptr::drop_in_place::<core::option::Option<os::driver::usb::xhci_host::device::XhciSlotResources>>
 00000000802554b2 core::ptr::drop_in_place::<alloc::vec::Vec<os::driver::usb::xhci_host::device::XhciEndpointRing>>
 00000000802555d0 core::ptr::drop_in_place::<os::arch::riscv64::driver::dma::DmaMemory>
@@ -820,7 +820,7 @@
 00000000802562c2 <alloc::raw_vec::RawVec<rsext4::file::delete::delete_dir::DirFrame>>::grow_one
 000000008025630e <alloc::raw_vec::RawVec<(alloc::string::String, rsext4::bmalloc::InodeNumber, rsext4::disknode::inode::Ext4Inode, alloc::string::String)>>::grow_one
 000000008025635a <alloc::raw_vec::RawVec<u16>>::grow_one
-00000000802563a4 <alloc::raw_vec::RawVecInner>::finish_grow (.llvm.12061293744449830463)
+00000000802563a4 <alloc::raw_vec::RawVecInner>::finish_grow (.llvm.2076044456210995270)
 0000000080256470 <alloc::raw_vec::RawVecInner>::try_allocate_in
 000000008025650a <os::fs::component::pipe::pipe::Pipe>::read
 0000000080256654 <os::driver::usb::xhci_host::device::XhciDevice>::debug_desc
@@ -841,7 +841,7 @@
 0000000080259870 <alloc::sync::Arc<spin::mutex::Mutex<dyn os::fs::vfs::vblock::BlockDevTrait>>>::drop_slow
 0000000080259906 <alloc::sync::Arc<spin::mutex::Mutex<os::fs::fs_backend::ext4_backend::ext4::Ext4Fs>>>::drop_slow
 0000000080259a7a <alloc::sync::Arc<os::sync::up::NoIrqLock<os::task::task::TaskControlBlock>>>::drop_slow
-0000000080259e54 <alloc::sync::Arc<os::sync::up::NoIrqLock<os::fs::component::pipe::pipe::PipeRingBuffer>>>::drop_slow (.llvm.12061293744449830463)
+0000000080259e54 <alloc::sync::Arc<os::sync::up::NoIrqLock<os::fs::component::pipe::pipe::PipeRingBuffer>>>::drop_slow (.llvm.2076044456210995270)
 0000000080259f08 <alloc::sync::Arc<os::sync::up::NoIrqLock<os::fs::component::pipe::pipe::Pipe>>>::drop_slow
 0000000080259f72 <alloc::sync::Arc<os::sync::up::NoIrqLock<os::driver::usb::xhci_host::device::XhciDevice>>>::drop_slow
 000000008025a0a6 <alloc::sync::Arc<os::memory::frame_allocator::FramTracker>>::drop_slow
@@ -980,10 +980,10 @@
 000000008026eb9e log::__private_api::log_impl::<log::__private_api::GlobalLogger>
 000000008026ec08 rsext4::file::rename::mv::<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>
 000000008026fb64 rsext4::jbd2::jbd2::create_journal_entry::<os::fs::fs_backend::ext4_backend::Ext4BlockDevice>
-000000008027000a <<alloc::collections::vec_deque::drain::Drain<_, _> as core::ops::drop::Drop>::drop::DropGuard<_, _> as core::ops::drop::Drop>::drop::join_head_and_tail_wrapping::<os::task::signal::OsSignal, alloc::alloc::Global> (.llvm.18256640821723345087)
+000000008027000a <<alloc::collections::vec_deque::drain::Drain<_, _> as core::ops::drop::Drop>::drop::DropGuard<_, _> as core::ops::drop::Drop>::drop::join_head_and_tail_wrapping::<os::task::signal::OsSignal, alloc::alloc::Global> (.llvm.3139088958248583144)
 0000000080270056 <os::driver::dtb::node::Property>::as_u32_list
 00000000802701b2 <os::driver::dtb::node::Property>::as_reg
-00000000802706b2 <os::driver::dtb::node::DeviceTree>::find_compatible_recursive (.llvm.18256640821723345087)
+00000000802706b2 <os::driver::dtb::node::DeviceTree>::find_compatible_recursive (.llvm.3139088958248583144)
 0000000080270826 <os::driver::dtb::node::DeviceNode>::compatible
 0000000080270a88 <os::driver::dtb::node::DeviceNode>::get_string
 0000000080270be6 <os::driver::dtb::node::DeviceNode>::new
@@ -991,9 +991,9 @@
 0000000080271294 os::logger::init
 0000000080271644 os::syscall::signal::sys_tkill::sys_tkill
 0000000080271660 <os::fs::fs_backend::ext4_backend::ext4::Ext4File as core::any::Any>::type_id
-0000000080271676 <os::logger::SimpleLogger as log::Log>::log (.llvm.18256640821723345087)
-00000000802718d8 <os::logger::SimpleLogger as log::Log>::flush (.llvm.18256640821723345087)
-00000000802718da <os::logger::SimpleLogger as log::Log>::enabled (.llvm.18256640821723345087)
+0000000080271676 <os::logger::SimpleLogger as log::Log>::log (.llvm.3139088958248583144)
+00000000802718d8 <os::logger::SimpleLogger as log::Log>::flush (.llvm.3139088958248583144)
+00000000802718da <os::logger::SimpleLogger as log::Log>::enabled (.llvm.3139088958248583144)
 00000000802718de <rsext4::error::errno::Errno as core::fmt::Debug>::fmt
 000000008027190c <core::str::pattern::CharSearcher as core::str::pattern::ReverseSearcher>::next_match_back
 0000000080271a40 <rsext4::error::Ext4Error as core::fmt::Debug>::fmt
@@ -1129,28 +1129,28 @@
 00000000802854b4 os::memory::register_kernel_mmio
 000000008028556c <&rsext4::bmalloc::AbsoluteBN as core::fmt::Debug>::fmt
 000000008028559a <&rsext4::bmalloc::AbsoluteBN as core::fmt::Display>::fmt
-00000000802855a4 <spin::once::Once<os::sync::up::NoIrqLock<[core::option::Option<fn()>; 53]>>>::try_call_once_slow::<<spin::once::Once<os::sync::up::NoIrqLock<[core::option::Option<fn()>; 53]>>>::call_once<<os::arch::riscv64::driver::plic::PLIC_HANDLERS as core::ops::deref::Deref>::deref::__static_ref_initialize>::{closure#0}, core::convert::Infallible> (.llvm.10289878943979631963)
-000000008028567e <spin::once::Once<os::sync::up::NoIrqLock<alloc::vec::Vec<alloc::sync::Arc<spin::mutex::Mutex<dyn os::fs::vfs::vblock::BlockDevTrait>>>>>>::try_call_once_slow::<<spin::once::Once<os::sync::up::NoIrqLock<alloc::vec::Vec<alloc::sync::Arc<spin::mutex::Mutex<dyn os::fs::vfs::vblock::BlockDevTrait>>>>>>::call_once<<os::fs::vfs::GLOBAL_BLOCKS as core::ops::deref::Deref>::deref::__static_ref_initialize>::{closure#0}, core::convert::Infallible> (.llvm.10289878943979631963)
-000000008028567e <spin::once::Once<os::sync::up::NoIrqLock<alloc::vec::Vec<alloc::boxed::Box<os::driver::usb::xhci_host::XhciHost>>>>>::try_call_once_slow::<<spin::once::Once<os::sync::up::NoIrqLock<alloc::vec::Vec<alloc::boxed::Box<os::driver::usb::xhci_host::XhciHost>>>>>::call_once<<os::driver::usb::xhci_host::XHCI_HOSTS as core::ops::deref::Deref>::deref::__static_ref_initialize>::{closure#0}, core::convert::Infallible> (.llvm.10289878943979631963)
-000000008028567e <spin::once::Once<os::sync::up::NoIrqLock<alloc::vec::Vec<os::memory::PreFlectMemory>>>>::try_call_once_slow::<<spin::once::Once<os::sync::up::NoIrqLock<alloc::vec::Vec<os::memory::PreFlectMemory>>>>::call_once<<os::memory::KERNEL_MEMORY_SPACE_LIST as core::ops::deref::Deref>::deref::__static_ref_initialize>::{closure#0}, core::convert::Infallible> (.llvm.10289878943979631963)
-000000008028567e <spin::once::Once<os::sync::up::NoIrqLock<alloc::vec::Vec<os::arch::riscv64::driver::virtio_blk::block::VirtioMmioDevice>>>>::try_call_once_slow::<<spin::once::Once<os::sync::up::NoIrqLock<alloc::vec::Vec<os::arch::riscv64::driver::virtio_blk::block::VirtioMmioDevice>>>>::call_once<<os::arch::riscv64::driver::virtio_blk::block::VIRTIO_MMIO_DEVICES as core::ops::deref::Deref>::deref::__static_ref_initialize>::{closure#0}, core::convert::Infallible> (.llvm.10289878943979631963)
-000000008028567e <spin::once::Once<os::sync::up::NoIrqLock<alloc::vec::Vec<(usize, alloc::vec::Vec<os::memory::frame_allocator::FramTracker>)>>>>::try_call_once_slow::<<spin::once::Once<os::sync::up::NoIrqLock<alloc::vec::Vec<(usize, alloc::vec::Vec<os::memory::frame_allocator::FramTracker>)>>>>::call_once<<os::arch::riscv64::driver::virtio_blk::block::QUEUE_FRAMES as core::ops::deref::Deref>::deref::__static_ref_initialize>::{closure#0}, core::convert::Infallible> (.llvm.10289878943979631963)
-000000008028573c <spin::once::Once<os::sync::up::NoIrqLock<alloc::vec::Vec<os::driver::pcie::PcieDeviceInfo>>>>::try_call_once_slow::<<spin::once::Once<os::sync::up::NoIrqLock<alloc::vec::Vec<os::driver::pcie::PcieDeviceInfo>>>>::call_once<<os::driver::pcie::PCIE_DEVICES as core::ops::deref::Deref>::deref::__static_ref_initialize>::{closure#0}, core::convert::Infallible> (.llvm.10289878943979631963)
-0000000080285808 <spin::once::Once<os::sync::up::NoIrqLock<alloc::vec::Vec<os::fs::sys::dev::UsbDeviceRecord>>>>::try_call_once_slow::<<spin::once::Once<os::sync::up::NoIrqLock<alloc::vec::Vec<os::fs::sys::dev::UsbDeviceRecord>>>>::call_once<<os::fs::sys::dev::USB_DEVICES as core::ops::deref::Deref>::deref::__static_ref_initialize>::{closure#0}, core::convert::Infallible> (.llvm.10289878943979631963)
-00000000802858d2 <spin::once::Once<os::sync::up::NoIrqLock<alloc::vec::Vec<(os::memory::memory_space::vir_num_range::VirNumRange, core::option::Option<usize>)>>>>::try_call_once_slow::<<spin::once::Once<os::sync::up::NoIrqLock<alloc::vec::Vec<(os::memory::memory_space::vir_num_range::VirNumRange, core::option::Option<usize>)>>>>::call_once<<os::trap::PENDING_KSTACK_FREE as core::ops::deref::Deref>::deref::__static_ref_initialize>::{closure#0}, core::convert::Infallible> (.llvm.10289878943979631963)
-000000008028599a <spin::once::Once<os::sync::up::NoIrqLock<core::option::Option<os::driver::dtb::node::DeviceTree>>>>::try_call_once_slow::<<spin::once::Once<os::sync::up::NoIrqLock<core::option::Option<os::driver::dtb::node::DeviceTree>>>>::call_once<<os::driver::dtb::PARSED_DEVICE_TREE as core::ops::deref::Deref>::deref::__static_ref_initialize>::{closure#0}, core::convert::Infallible> (.llvm.10289878943979631963)
-0000000080285a52 <spin::once::Once<os::sync::up::NoIrqLock<core::option::Option<os::fs::vfs::root::define::RootFs>>>>::try_call_once_slow::<<spin::once::Once<os::sync::up::NoIrqLock<core::option::Option<os::fs::vfs::root::define::RootFs>>>>::call_once<<os::fs::vfs::root::define::ROOTFS as core::ops::deref::Deref>::deref::__static_ref_initialize>::{closure#0}, core::convert::Infallible> (.llvm.10289878943979631963)
-0000000080285b1e <spin::once::Once<os::sync::up::NoIrqLock<core::option::Option<os::driver::usb::xhci_host::driver::UsbDeviceDriverTable>>>>::try_call_once_slow::<<spin::once::Once<os::sync::up::NoIrqLock<core::option::Option<os::driver::usb::xhci_host::driver::UsbDeviceDriverTable>>>>::call_once<<os::driver::usb::xhci_host::driver::USBDRIERTABLE as core::ops::deref::Deref>::deref::__static_ref_initialize>::{closure#0}, core::convert::Infallible> (.llvm.10289878943979631963)
-0000000080285bd6 <spin::once::Once<os::sync::up::NoIrqLock<core::option::Option<os::driver::network::e1000::hw::device::E1000>>>>::try_call_once_slow::<<spin::once::Once<os::sync::up::NoIrqLock<core::option::Option<os::driver::network::e1000::hw::device::E1000>>>>::call_once<<os::driver::network::e1000::hw::device::E1000_DEV as core::ops::deref::Deref>::deref::__static_ref_initialize>::{closure#0}, core::convert::Infallible> (.llvm.10289878943979631963)
-0000000080285c8e <spin::once::Once<os::sync::up::NoIrqLock<alloc::collections::vec_deque::VecDeque<u8>>>>::try_call_once_slow::<<spin::once::Once<os::sync::up::NoIrqLock<alloc::collections::vec_deque::VecDeque<u8>>>>::call_once<<os::arch::riscv64::driver::keyboard::INPUT_BUF as core::ops::deref::Deref>::deref::__static_ref_initialize>::{closure#0}, core::convert::Infallible> (.llvm.10289878943979631963)
-0000000080285da6 <spin::once::Once<os::sync::up::NoIrqLock<os::task::task::ProcessIdAlloctor>>>::try_call_once_slow::<<spin::once::Once<os::sync::up::NoIrqLock<os::task::task::ProcessIdAlloctor>>>::call_once<<os::task::task::ProcessId_ALLOCTOR as core::ops::deref::Deref>::deref::__static_ref_initialize>::{closure#0}, core::convert::Infallible> (.llvm.10289878943979631963)
-0000000080285e6e <spin::once::Once<os::sync::up::NoIrqLock<os::memory::memorymodel::MachineMemoryInfo>>>::try_call_once_slow::<<spin::once::Once<os::sync::up::NoIrqLock<os::memory::memorymodel::MachineMemoryInfo>>>::call_once<<os::memory::memorymodel::KERNEL_MAIN_MEMORY as core::ops::deref::Deref>::deref::__static_ref_initialize>::{closure#0}, core::convert::Infallible> (.llvm.10289878943979631963)
-0000000080285f30 <spin::once::Once<os::sync::up::NoIrqLock<os::memory::frame_allocator::FrameAlloctor>>>::try_call_once_slow::<<spin::once::Once<os::sync::up::NoIrqLock<os::memory::frame_allocator::FrameAlloctor>>>::call_once<<os::memory::frame_allocator::FRAME_ALLOCATOR as core::ops::deref::Deref>::deref::__static_ref_initialize>::{closure#0}, core::convert::Infallible> (.llvm.10289878943979631963)
-000000008028600c <spin::once::Once<os::sync::up::NoIrqLock<os::memory::memory_space::kernel_stack::KernelStackAllocator>>>::try_call_once_slow::<<spin::once::Once<os::sync::up::NoIrqLock<os::memory::memory_space::kernel_stack::KernelStackAllocator>>>::call_once<<os::memory::memory_space::kernel_stack::KERNEL_STACK_ALLOCATOR as core::ops::deref::Deref>::deref::__static_ref_initialize>::{closure#0}, core::convert::Infallible> (.llvm.10289878943979631963)
-00000000802860ce <spin::once::Once<os::sync::up::NoIrqLock<os::memory::memory_space::map_set::MapSet>>>::try_call_once_slow::<<spin::once::Once<os::sync::up::NoIrqLock<os::memory::memory_space::map_set::MapSet>>>::call_once<<os::config::KERNEL_SPACE as core::ops::deref::Deref>::deref::__static_ref_initialize>::{closure#0}, core::convert::Infallible> (.llvm.10289878943979631963)
-00000000802861b2 <spin::once::Once<os::sync::up::NoIrqLock<os::driver::network::e1000::packet::arp::cache::ArpTable>>>::try_call_once_slow::<<spin::once::Once<os::sync::up::NoIrqLock<os::driver::network::e1000::packet::arp::cache::ArpTable>>>::call_once<<os::driver::network::e1000::packet::arp::cache::ARP_TABLE as core::ops::deref::Deref>::deref::__static_ref_initialize>::{closure#0}, core::convert::Infallible> (.llvm.10289878943979631963)
-00000000802861b2 <spin::once::Once<os::network::porttable::PortTable>>::try_call_once_slow::<<spin::once::Once<os::network::porttable::PortTable>>::call_once<<os::network::porttable::PORT_TABLE as core::ops::deref::Deref>::deref::__static_ref_initialize>::{closure#0}, core::convert::Infallible> (.llvm.10289878943979631963)
-000000008028627a <spin::once::Once<os::task::task::TaskManager>>::try_call_once_slow::<<spin::once::Once<os::task::task::TaskManager>>::call_once<<os::task::task::TASK_MANAER as core::ops::deref::Deref>::deref::__static_ref_initialize>::{closure#0}, core::convert::Infallible> (.llvm.10289878943979631963)
+00000000802855a4 <spin::once::Once<os::sync::up::NoIrqLock<[core::option::Option<fn()>; 53]>>>::try_call_once_slow::<<spin::once::Once<os::sync::up::NoIrqLock<[core::option::Option<fn()>; 53]>>>::call_once<<os::arch::riscv64::driver::plic::PLIC_HANDLERS as core::ops::deref::Deref>::deref::__static_ref_initialize>::{closure#0}, core::convert::Infallible> (.llvm.14505254539249745332)
+000000008028567e <spin::once::Once<os::sync::up::NoIrqLock<alloc::vec::Vec<alloc::sync::Arc<spin::mutex::Mutex<dyn os::fs::vfs::vblock::BlockDevTrait>>>>>>::try_call_once_slow::<<spin::once::Once<os::sync::up::NoIrqLock<alloc::vec::Vec<alloc::sync::Arc<spin::mutex::Mutex<dyn os::fs::vfs::vblock::BlockDevTrait>>>>>>::call_once<<os::fs::vfs::GLOBAL_BLOCKS as core::ops::deref::Deref>::deref::__static_ref_initialize>::{closure#0}, core::convert::Infallible> (.llvm.14505254539249745332)
+000000008028567e <spin::once::Once<os::sync::up::NoIrqLock<alloc::vec::Vec<alloc::boxed::Box<os::driver::usb::xhci_host::XhciHost>>>>>::try_call_once_slow::<<spin::once::Once<os::sync::up::NoIrqLock<alloc::vec::Vec<alloc::boxed::Box<os::driver::usb::xhci_host::XhciHost>>>>>::call_once<<os::driver::usb::xhci_host::XHCI_HOSTS as core::ops::deref::Deref>::deref::__static_ref_initialize>::{closure#0}, core::convert::Infallible> (.llvm.14505254539249745332)
+000000008028567e <spin::once::Once<os::sync::up::NoIrqLock<alloc::vec::Vec<os::memory::PreFlectMemory>>>>::try_call_once_slow::<<spin::once::Once<os::sync::up::NoIrqLock<alloc::vec::Vec<os::memory::PreFlectMemory>>>>::call_once<<os::memory::KERNEL_MEMORY_SPACE_LIST as core::ops::deref::Deref>::deref::__static_ref_initialize>::{closure#0}, core::convert::Infallible> (.llvm.14505254539249745332)
+000000008028567e <spin::once::Once<os::sync::up::NoIrqLock<alloc::vec::Vec<os::arch::riscv64::driver::virtio_blk::block::VirtioMmioDevice>>>>::try_call_once_slow::<<spin::once::Once<os::sync::up::NoIrqLock<alloc::vec::Vec<os::arch::riscv64::driver::virtio_blk::block::VirtioMmioDevice>>>>::call_once<<os::arch::riscv64::driver::virtio_blk::block::VIRTIO_MMIO_DEVICES as core::ops::deref::Deref>::deref::__static_ref_initialize>::{closure#0}, core::convert::Infallible> (.llvm.14505254539249745332)
+000000008028567e <spin::once::Once<os::sync::up::NoIrqLock<alloc::vec::Vec<(usize, alloc::vec::Vec<os::memory::frame_allocator::FramTracker>)>>>>::try_call_once_slow::<<spin::once::Once<os::sync::up::NoIrqLock<alloc::vec::Vec<(usize, alloc::vec::Vec<os::memory::frame_allocator::FramTracker>)>>>>::call_once<<os::arch::riscv64::driver::virtio_blk::block::QUEUE_FRAMES as core::ops::deref::Deref>::deref::__static_ref_initialize>::{closure#0}, core::convert::Infallible> (.llvm.14505254539249745332)
+000000008028573c <spin::once::Once<os::sync::up::NoIrqLock<alloc::vec::Vec<os::driver::pcie::PcieDeviceInfo>>>>::try_call_once_slow::<<spin::once::Once<os::sync::up::NoIrqLock<alloc::vec::Vec<os::driver::pcie::PcieDeviceInfo>>>>::call_once<<os::driver::pcie::PCIE_DEVICES as core::ops::deref::Deref>::deref::__static_ref_initialize>::{closure#0}, core::convert::Infallible> (.llvm.14505254539249745332)
+0000000080285808 <spin::once::Once<os::sync::up::NoIrqLock<alloc::vec::Vec<os::fs::sys::dev::UsbDeviceRecord>>>>::try_call_once_slow::<<spin::once::Once<os::sync::up::NoIrqLock<alloc::vec::Vec<os::fs::sys::dev::UsbDeviceRecord>>>>::call_once<<os::fs::sys::dev::USB_DEVICES as core::ops::deref::Deref>::deref::__static_ref_initialize>::{closure#0}, core::convert::Infallible> (.llvm.14505254539249745332)
+00000000802858d2 <spin::once::Once<os::sync::up::NoIrqLock<alloc::vec::Vec<(os::memory::memory_space::vir_num_range::VirNumRange, core::option::Option<usize>)>>>>::try_call_once_slow::<<spin::once::Once<os::sync::up::NoIrqLock<alloc::vec::Vec<(os::memory::memory_space::vir_num_range::VirNumRange, core::option::Option<usize>)>>>>::call_once<<os::trap::PENDING_KSTACK_FREE as core::ops::deref::Deref>::deref::__static_ref_initialize>::{closure#0}, core::convert::Infallible> (.llvm.14505254539249745332)
+000000008028599a <spin::once::Once<os::sync::up::NoIrqLock<core::option::Option<os::driver::dtb::node::DeviceTree>>>>::try_call_once_slow::<<spin::once::Once<os::sync::up::NoIrqLock<core::option::Option<os::driver::dtb::node::DeviceTree>>>>::call_once<<os::driver::dtb::PARSED_DEVICE_TREE as core::ops::deref::Deref>::deref::__static_ref_initialize>::{closure#0}, core::convert::Infallible> (.llvm.14505254539249745332)
+0000000080285a52 <spin::once::Once<os::sync::up::NoIrqLock<core::option::Option<os::fs::vfs::root::define::RootFs>>>>::try_call_once_slow::<<spin::once::Once<os::sync::up::NoIrqLock<core::option::Option<os::fs::vfs::root::define::RootFs>>>>::call_once<<os::fs::vfs::root::define::ROOTFS as core::ops::deref::Deref>::deref::__static_ref_initialize>::{closure#0}, core::convert::Infallible> (.llvm.14505254539249745332)
+0000000080285b1e <spin::once::Once<os::sync::up::NoIrqLock<core::option::Option<os::driver::usb::xhci_host::driver::UsbDeviceDriverTable>>>>::try_call_once_slow::<<spin::once::Once<os::sync::up::NoIrqLock<core::option::Option<os::driver::usb::xhci_host::driver::UsbDeviceDriverTable>>>>::call_once<<os::driver::usb::xhci_host::driver::USBDRIERTABLE as core::ops::deref::Deref>::deref::__static_ref_initialize>::{closure#0}, core::convert::Infallible> (.llvm.14505254539249745332)
+0000000080285bd6 <spin::once::Once<os::sync::up::NoIrqLock<core::option::Option<os::driver::network::e1000::hw::device::E1000>>>>::try_call_once_slow::<<spin::once::Once<os::sync::up::NoIrqLock<core::option::Option<os::driver::network::e1000::hw::device::E1000>>>>::call_once<<os::driver::network::e1000::hw::device::E1000_DEV as core::ops::deref::Deref>::deref::__static_ref_initialize>::{closure#0}, core::convert::Infallible> (.llvm.14505254539249745332)
+0000000080285c8e <spin::once::Once<os::sync::up::NoIrqLock<alloc::collections::vec_deque::VecDeque<u8>>>>::try_call_once_slow::<<spin::once::Once<os::sync::up::NoIrqLock<alloc::collections::vec_deque::VecDeque<u8>>>>::call_once<<os::arch::riscv64::driver::keyboard::INPUT_BUF as core::ops::deref::Deref>::deref::__static_ref_initialize>::{closure#0}, core::convert::Infallible> (.llvm.14505254539249745332)
+0000000080285da6 <spin::once::Once<os::sync::up::NoIrqLock<os::task::task::ProcessIdAlloctor>>>::try_call_once_slow::<<spin::once::Once<os::sync::up::NoIrqLock<os::task::task::ProcessIdAlloctor>>>::call_once<<os::task::task::ProcessId_ALLOCTOR as core::ops::deref::Deref>::deref::__static_ref_initialize>::{closure#0}, core::convert::Infallible> (.llvm.14505254539249745332)
+0000000080285e6e <spin::once::Once<os::sync::up::NoIrqLock<os::memory::memorymodel::MachineMemoryInfo>>>::try_call_once_slow::<<spin::once::Once<os::sync::up::NoIrqLock<os::memory::memorymodel::MachineMemoryInfo>>>::call_once<<os::memory::memorymodel::KERNEL_MAIN_MEMORY as core::ops::deref::Deref>::deref::__static_ref_initialize>::{closure#0}, core::convert::Infallible> (.llvm.14505254539249745332)
+0000000080285f30 <spin::once::Once<os::sync::up::NoIrqLock<os::memory::frame_allocator::FrameAlloctor>>>::try_call_once_slow::<<spin::once::Once<os::sync::up::NoIrqLock<os::memory::frame_allocator::FrameAlloctor>>>::call_once<<os::memory::frame_allocator::FRAME_ALLOCATOR as core::ops::deref::Deref>::deref::__static_ref_initialize>::{closure#0}, core::convert::Infallible> (.llvm.14505254539249745332)
+000000008028600c <spin::once::Once<os::sync::up::NoIrqLock<os::memory::memory_space::kernel_stack::KernelStackAllocator>>>::try_call_once_slow::<<spin::once::Once<os::sync::up::NoIrqLock<os::memory::memory_space::kernel_stack::KernelStackAllocator>>>::call_once<<os::memory::memory_space::kernel_stack::KERNEL_STACK_ALLOCATOR as core::ops::deref::Deref>::deref::__static_ref_initialize>::{closure#0}, core::convert::Infallible> (.llvm.14505254539249745332)
+00000000802860ce <spin::once::Once<os::sync::up::NoIrqLock<os::memory::memory_space::map_set::MapSet>>>::try_call_once_slow::<<spin::once::Once<os::sync::up::NoIrqLock<os::memory::memory_space::map_set::MapSet>>>::call_once<<os::config::KERNEL_SPACE as core::ops::deref::Deref>::deref::__static_ref_initialize>::{closure#0}, core::convert::Infallible> (.llvm.14505254539249745332)
+00000000802861b2 <spin::once::Once<os::sync::up::NoIrqLock<os::driver::network::e1000::packet::arp::cache::ArpTable>>>::try_call_once_slow::<<spin::once::Once<os::sync::up::NoIrqLock<os::driver::network::e1000::packet::arp::cache::ArpTable>>>::call_once<<os::driver::network::e1000::packet::arp::cache::ARP_TABLE as core::ops::deref::Deref>::deref::__static_ref_initialize>::{closure#0}, core::convert::Infallible> (.llvm.14505254539249745332)
+00000000802861b2 <spin::once::Once<os::network::porttable::PortTable>>::try_call_once_slow::<<spin::once::Once<os::network::porttable::PortTable>>::call_once<<os::network::porttable::PORT_TABLE as core::ops::deref::Deref>::deref::__static_ref_initialize>::{closure#0}, core::convert::Infallible> (.llvm.14505254539249745332)
+000000008028627a <spin::once::Once<os::task::task::TaskManager>>::try_call_once_slow::<<spin::once::Once<os::task::task::TaskManager>>::call_once<<os::task::task::TASK_MANAER as core::ops::deref::Deref>::deref::__static_ref_initialize>::{closure#0}, core::convert::Infallible> (.llvm.14505254539249745332)
 0000000080286528 core::ptr::drop_in_place::<os::network::udpsock::UdpSock>
 00000000802865d8 core::ptr::drop_in_place::<os::fs::fs_backend::ramfs::ramfs::RamFs>
 00000000802865e2 core::panicking::assert_failed::<i32, i32>
@@ -1199,8 +1199,8 @@
 000000008028d1a6 os::driver::network::e1000::queue::tx::e1000_setup_tx_resources
 000000008028d4be <os::network::udpsock::UdpSock as core::any::Any>::type_id
 000000008028d4d4 <os::fs::sys::dev::UsbDevicesFile as core::any::Any>::type_id
-000000008028d4ea <os::fs::component::devices::KeyboardDeviceFile as core::any::Any>::type_id (.llvm.10289878943979631963)
-000000008028d500 <os::fs::component::devices::FrameBufferDeviceFile as core::any::Any>::type_id (.llvm.10289878943979631963)
+000000008028d4ea <os::fs::component::devices::KeyboardDeviceFile as core::any::Any>::type_id (.llvm.14505254539249745332)
+000000008028d500 <os::fs::component::devices::FrameBufferDeviceFile as core::any::Any>::type_id (.llvm.14505254539249745332)
 000000008028d516 <os::fs::fs_backend::ramfs::ramfs::RamFs as core::any::Any>::type_id
 000000008028d52c <os::fs::sys::dev::UsbDevicesFile as os::fs::vfs::vfs::File>::read
 000000008028d5fe <os::fs::sys::dev::UsbDevicesFile as os::fs::vfs::vfs::File>::stat
@@ -1209,24 +1209,24 @@
 000000008028d74c <os::fs::sys::dev::UsbDevicesFile as os::fs::vfs::vfs::File>::as_any
 000000008028d756 <os::fs::sys::dev::UsbDevicesFile as os::fs::vfs::vfs::File>::read_at
 000000008028d7f8 <os::network::udpsock::UdpSock as os::fs::vfs::vfs::File>::as_any
-000000008028d802 <os::fs::component::devices::FrameBufferDeviceFile as os::fs::vfs::vfs::File>::read (.llvm.10289878943979631963)
-000000008028d8f8 <os::fs::component::devices::FrameBufferDeviceFile as os::fs::vfs::vfs::File>::stat (.llvm.10289878943979631963)
-000000008028d942 <os::fs::component::devices::FrameBufferDeviceFile as os::fs::vfs::vfs::File>::ioctl (.llvm.10289878943979631963)
-000000008028d996 <os::fs::component::devices::FrameBufferDeviceFile as os::fs::vfs::vfs::File>::lseek (.llvm.10289878943979631963)
-000000008028da6a <os::fs::component::devices::FrameBufferDeviceFile as os::fs::vfs::vfs::File>::write (.llvm.10289878943979631963)
-000000008028db60 <os::fs::component::devices::FrameBufferDeviceFile as os::fs::vfs::vfs::File>::as_any (.llvm.10289878943979631963)
-000000008028db6a <os::fs::component::devices::FrameBufferDeviceFile as os::fs::vfs::vfs::File>::read_at (.llvm.10289878943979631963)
-000000008028dbe6 <os::fs::component::devices::FrameBufferDeviceFile as os::fs::vfs::vfs::File>::write_at (.llvm.10289878943979631963)
+000000008028d802 <os::fs::component::devices::FrameBufferDeviceFile as os::fs::vfs::vfs::File>::read (.llvm.14505254539249745332)
+000000008028d8f8 <os::fs::component::devices::FrameBufferDeviceFile as os::fs::vfs::vfs::File>::stat (.llvm.14505254539249745332)
+000000008028d942 <os::fs::component::devices::FrameBufferDeviceFile as os::fs::vfs::vfs::File>::ioctl (.llvm.14505254539249745332)
+000000008028d996 <os::fs::component::devices::FrameBufferDeviceFile as os::fs::vfs::vfs::File>::lseek (.llvm.14505254539249745332)
+000000008028da6a <os::fs::component::devices::FrameBufferDeviceFile as os::fs::vfs::vfs::File>::write (.llvm.14505254539249745332)
+000000008028db60 <os::fs::component::devices::FrameBufferDeviceFile as os::fs::vfs::vfs::File>::as_any (.llvm.14505254539249745332)
+000000008028db6a <os::fs::component::devices::FrameBufferDeviceFile as os::fs::vfs::vfs::File>::read_at (.llvm.14505254539249745332)
+000000008028dbe6 <os::fs::component::devices::FrameBufferDeviceFile as os::fs::vfs::vfs::File>::write_at (.llvm.14505254539249745332)
 000000008028dc64 <os::fs::fs_backend::ramfs::ramfs::RamFs as os::fs::vfs::vfs::VfsFs>::as_any_mut
 000000008028dc6e <os::fs::fs_backend::ramfs::ramfs::RamFs as os::fs::vfs::vfs::VfsFs>::mount
 000000008028dc82 <os::fs::fs_backend::ramfs::ramfs::RamFs as os::fs::vfs::vfs::VfsFs>::as_any
 000000008028dc8c <os::fs::fs_backend::ramfs::ramfs::RamFs as os::fs::vfs::vfs::VfsFs>::umount
 000000008028dc9e <os::driver::pcie::HeaderType as core::fmt::LowerHex>::fmt
-000000008028dca6 <os::fs::component::devices::KeyboardDeviceFile as os::fs::vfs::vfs::File>::read (.llvm.10289878943979631963)
-000000008028dde0 <os::fs::component::devices::KeyboardDeviceFile as os::fs::vfs::vfs::File>::stat (.llvm.10289878943979631963)
-000000008028ddf4 <os::fs::component::devices::KeyboardDeviceFile as os::fs::vfs::vfs::File>::ioctl (.llvm.10289878943979631963)
-000000008028deb6 <os::fs::component::devices::KeyboardDeviceFile as os::fs::vfs::vfs::File>::write (.llvm.10289878943979631963)
-000000008028dec2 <os::fs::component::devices::KeyboardDeviceFile as os::fs::vfs::vfs::File>::as_any (.llvm.10289878943979631963)
+000000008028dca6 <os::fs::component::devices::KeyboardDeviceFile as os::fs::vfs::vfs::File>::read (.llvm.14505254539249745332)
+000000008028dde0 <os::fs::component::devices::KeyboardDeviceFile as os::fs::vfs::vfs::File>::stat (.llvm.14505254539249745332)
+000000008028ddf4 <os::fs::component::devices::KeyboardDeviceFile as os::fs::vfs::vfs::File>::ioctl (.llvm.14505254539249745332)
+000000008028deb6 <os::fs::component::devices::KeyboardDeviceFile as os::fs::vfs::vfs::File>::write (.llvm.14505254539249745332)
+000000008028dec2 <os::fs::component::devices::KeyboardDeviceFile as os::fs::vfs::vfs::File>::as_any (.llvm.14505254539249745332)
 000000008028decc <os::memory::frame_allocator::FrameAlloctor as os::memory::frame_allocator::FrameAllocatorTrait>::dealloc
 000000008028e05a <os::fs::vfs::vblock::BlockDevFile as os::fs::vfs::vfs::File>::read
 000000008028e120 <os::fs::vfs::vblock::BlockDevFile as os::fs::vfs::vfs::File>::flush
@@ -1234,23 +1234,23 @@
 000000008028e248 <os::fs::vfs::vblock::BlockDevFile as os::fs::vfs::vfs::File>::write
 000000008028e30e <os::fs::vfs::vblock::BlockDevFile as os::fs::vfs::vfs::File>::read_at
 000000008028e4f4 <os::fs::vfs::vblock::BlockDevFile as os::fs::vfs::vfs::File>::write_at
-000000008028e72c <alloc::string::String as core::fmt::Display>::fmt (.llvm.10289878943979631963)
+000000008028e72c <alloc::string::String as core::fmt::Display>::fmt (.llvm.14505254539249745332)
 000000008028e740 <os::network::udpsock::UdpSock as os::fs::vfs::vfs::File>::stat
 000000008028e74c <os::network::udpsock::UdpSock as os::fs::vfs::vfs::File>::ioctl
 000000008028e758 <os::network::udpsock::UdpSock as os::fs::vfs::vfs::File>::lseek
 000000008028e764 <os::network::udpsock::UdpSock as os::fs::vfs::vfs::File>::read_at
 000000008028e770 <os::network::udpsock::UdpSock as os::fs::vfs::vfs::File>::write_at
-000000008028e77c <os::fs::component::devices::KeyboardDeviceFile as os::fs::vfs::vfs::File>::getdents64 (.llvm.10289878943979631963)
-000000008028e78a <os::fs::component::devices::KeyboardDeviceFile as os::fs::vfs::vfs::File>::poll (.llvm.10289878943979631963)
-000000008028e78e <os::fs::component::devices::KeyboardDeviceFile as os::fs::vfs::vfs::File>::close (.llvm.10289878943979631963)
-000000008028e794 <os::fs::component::devices::KeyboardDeviceFile as os::fs::vfs::vfs::File>::flush (.llvm.10289878943979631963)
-000000008028e798 <os::fs::component::devices::KeyboardDeviceFile as os::fs::vfs::vfs::File>::lseek (.llvm.10289878943979631963)
-000000008028e7a4 <os::fs::component::devices::KeyboardDeviceFile as os::fs::vfs::vfs::File>::read_at (.llvm.10289878943979631963)
-000000008028e7b0 <os::fs::component::devices::KeyboardDeviceFile as os::fs::vfs::vfs::File>::write_at (.llvm.10289878943979631963)
-000000008028e7bc <os::fs::component::devices::FrameBufferDeviceFile as os::fs::vfs::vfs::File>::getdents64 (.llvm.10289878943979631963)
-000000008028e7ca <os::fs::component::devices::FrameBufferDeviceFile as os::fs::vfs::vfs::File>::poll (.llvm.10289878943979631963)
-000000008028e7ce <os::fs::component::devices::FrameBufferDeviceFile as os::fs::vfs::vfs::File>::close (.llvm.10289878943979631963)
-000000008028e7d4 <os::fs::component::devices::FrameBufferDeviceFile as os::fs::vfs::vfs::File>::flush (.llvm.10289878943979631963)
+000000008028e77c <os::fs::component::devices::KeyboardDeviceFile as os::fs::vfs::vfs::File>::getdents64 (.llvm.14505254539249745332)
+000000008028e78a <os::fs::component::devices::KeyboardDeviceFile as os::fs::vfs::vfs::File>::poll (.llvm.14505254539249745332)
+000000008028e78e <os::fs::component::devices::KeyboardDeviceFile as os::fs::vfs::vfs::File>::close (.llvm.14505254539249745332)
+000000008028e794 <os::fs::component::devices::KeyboardDeviceFile as os::fs::vfs::vfs::File>::flush (.llvm.14505254539249745332)
+000000008028e798 <os::fs::component::devices::KeyboardDeviceFile as os::fs::vfs::vfs::File>::lseek (.llvm.14505254539249745332)
+000000008028e7a4 <os::fs::component::devices::KeyboardDeviceFile as os::fs::vfs::vfs::File>::read_at (.llvm.14505254539249745332)
+000000008028e7b0 <os::fs::component::devices::KeyboardDeviceFile as os::fs::vfs::vfs::File>::write_at (.llvm.14505254539249745332)
+000000008028e7bc <os::fs::component::devices::FrameBufferDeviceFile as os::fs::vfs::vfs::File>::getdents64 (.llvm.14505254539249745332)
+000000008028e7ca <os::fs::component::devices::FrameBufferDeviceFile as os::fs::vfs::vfs::File>::poll (.llvm.14505254539249745332)
+000000008028e7ce <os::fs::component::devices::FrameBufferDeviceFile as os::fs::vfs::vfs::File>::close (.llvm.14505254539249745332)
+000000008028e7d4 <os::fs::component::devices::FrameBufferDeviceFile as os::fs::vfs::vfs::File>::flush (.llvm.14505254539249745332)
 000000008028e7d8 <os::fs::fs_backend::ramfs::ramfs::RamFs as os::fs::vfs::vfs::VfsFs>::mv
 000000008028e7dc __rustc::__rust_alloc_error_handler
 000000008028e7e4 __rustc::__rust_no_alloc_shim_is_unstable_v2
