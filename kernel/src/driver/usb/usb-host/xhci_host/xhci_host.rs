@@ -3,12 +3,15 @@
 use crate::arch::riscv64::driver::dma::{dma_read_barrier, dma_write_barrier, DmaMemory};
 use crate::sync::NoIrqLock;
 use alloc::boxed::Box;
+use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::ptr::write_volatile;
 use lazy_static::lazy_static;
 use log::{debug, error, info, warn};
 
+pub mod descriptor;
 pub mod device;
+pub mod driver;
 pub mod event;
 
 const CAPLENGTH: usize = 0x00;
@@ -105,16 +108,21 @@ lazy_static! {
 
 /// Transfer ownership of an initialized host to the xHCI subsystem.
 pub fn register_xhci_host(host: XhciHost) {
-    let host = Box::new(host);
-    info!("xhci: register host {}", host.name());
-    XHCI_HOSTS.lock(|hosts| hosts.push(host));
+    let mut host = Box::new(host);
+    info!("xhci: register host {}", host.platform.name());
+    XHCI_HOSTS.lock(|hosts| {
+        // This minimal sysfs view uses one bus number per controller. It is
+        // deliberately not a full USB topology implementation yet.
+        host.bus_number = (hosts.len() + 1) as u8;
+        hosts.push(host);
+    });
 }
 
 /// Dispatch the xHCI PLIC source to every registered host.
 fn event_irq_process() {
     XHCI_HOSTS.lock(|hosts| {
         for host in hosts.iter_mut() {
-            host.event_irq_process();
+            host.process_event_irq();
         }
     });
 }
@@ -166,13 +174,16 @@ pub struct XhciHost {
     max_slots: u8,
     max_ports: u8,
     max_interrupters: u16,
+    /// One-based controller index exported as the minimal USB bus number.
+    bus_number: u8,
     controller_context_stride: usize,
     command_enqueue: usize,
     command_cycle: bool,
     event_dequeue: usize,
     event_cycle: bool,
-    registered_waiters: NoIrqLock<Vec<event::EventWaiter>>,
-    pub(crate) devices: NoIrqLock<Vec<device::XhciDevice>>,
+    command_routes: Vec<Option<device::DeviceId>>,
+    pub(crate) devices: NoIrqLock<Vec<device::XhciDeviceRef>>,
+    next_device_id: u32,
     dcbaa: DmaMemory,
     command_ring: DmaMemory,
     event_ring: DmaMemory,
@@ -220,13 +231,15 @@ impl XhciHost {
             max_slots,
             max_ports,
             max_interrupters,
+            bus_number: 0,
             controller_context_stride: context_stride,
             command_enqueue: 0,
             command_cycle: true,
             event_dequeue: 0,
             event_cycle: true,
-            registered_waiters: NoIrqLock::new(Vec::new()),
+            command_routes: (0..TRBS_PER_RING - 1).map(|_| None).collect(),
             devices: NoIrqLock::new(Vec::new()),
+            next_device_id: 1,
             dcbaa: DmaMemory::new(DMA_PAGE_SIZE).ok_or("cannot allocate xHCI DCBAA")?,
             command_ring: DmaMemory::new(DMA_PAGE_SIZE)
                 .ok_or("cannot allocate xHCI command ring")?,
@@ -319,9 +332,7 @@ impl XhciHost {
             (self.command_ring.phys_addr() as u64) | TRB_CYCLE as u64,
         );
 
-        // Enable interrupter 0. wait_event_irq still performs an initial poll;
-        // enabling the bits here also makes software-submitted IOC TRBs valid
-        // interrupt sources when an interrupt handler is added.
+        // Enable interrupter 0 before the controller can publish an event.
         // IP is write-one-to-clear. Clear a stale request while enabling IE.
         self.enable_interrupter();
         // ERSTSZ[31:16] is RsvdP; preserve it instead of writing a bare word.
@@ -484,100 +495,16 @@ impl XhciHost {
                     self.handle_port_status_change_event(event);
                 }
                 event::XhciEvent::CommandCompletion(command) => {
-                    let waiter = self.registered_waiters.lock(|waiters| {
-                        waiters
-                            .iter()
-                            .cloned()
-                            .find(|waiter| waiter.matches(&event))
-                    });
-                    let Some(waiter) = waiter else {
-                        warn!("xhci: discard event without registered waiter: {:?}", event);
-                        continue;
-                    };
-                    let signal = waiter.clone();
-                    signal.complete();
-                    // Internal enumeration commands do not call
-                    // wait_event_loop, so remove every completed waiter
-                    // here. The public wait path may unregister again;
-                    // that second removal is harmless.
-                    self.unregister_waiter(&signal);
-
-                    // Enable Slot allocates the slot; it cannot be matched
-                    // by slot_id until this completion has been processed.
-                    // The enumerating device therefore owns the whole
-                    // Enable Slot -> Address Device sequence.
-                    let device_index = self
-                        .devices
-                        .lock(|devices| devices.iter().position(|dev| dev.is_enumerating()));
-                    let Some(index) = device_index else {
-                        warn!(
-                            "xhci: command completion has no matching device state: slot={}",
-                            command.slot_id
-                        );
-                        continue;
-                    };
-
-                    // Let the device own its state transition and the next
-                    // command. Remove it only while it has mutable access to
-                    // the host; reinsert it before ringing the doorbell.
-                    let mut device = self.devices.lock(|devices| devices.remove(index));
-                    let next_doorbell =
-                        device.translate_state(self, device::XhciDeviceEvent::Command(command));
-                    let released = device.is_disabled();
-                    if !released {
-                        self.devices.lock(|devices| devices.insert(index, device));
-                    } else {
-                        // Disable Slot completed, so dropping the device now
-                        // releases its contexts and EP0 transfer ring.
-                        drop(device);
-                    }
-                    match next_doorbell {
-                        Ok(true) => self.bite_dorbell(),
-                        Ok(false) => {}
-                        Err(reason) => error!("xhci: device state transition failed: {}", reason),
+                    match self.take_command_owner(command.command_trb_pointer) {
+                        Some(id) => self.dispatch_device_command_completion(id, command),
+                        None => warn!(
+                            "xhci: discard command completion without owner: pointer={:#x}",
+                            command.command_trb_pointer
+                        ),
                     }
                 }
                 event::XhciEvent::Transfer(transfer) => {
-                    let transfer_event = event::XhciEvent::Transfer(transfer);
-                    let waiter = self.registered_waiters.lock(|waiters| {
-                        waiters
-                            .iter()
-                            .cloned()
-                            .find(|waiter| waiter.matches(&transfer_event))
-                    });
-                    let Some(waiter) = waiter else {
-                        warn!(
-                            "xhci: discard transfer event without registered waiter: slot={}, endpoint={}",
-                            transfer.slot_id, transfer.endpoint_id
-                        );
-                        continue;
-                    };
-                    let signal = waiter.clone();
-                    signal.complete();
-                    self.unregister_waiter(&signal);
-
-                    let device_index = self.devices.lock(|devices| {
-                        devices
-                            .iter()
-                            .position(|device| device.slot_id == Some(transfer.slot_id))
-                    });
-                    let Some(index) = device_index else {
-                        warn!(
-                            "xhci: transfer event has no matching device: slot={}, endpoint={}",
-                            transfer.slot_id, transfer.endpoint_id
-                        );
-                        continue;
-                    };
-
-                    // The slot ID is the event's device identity. The device
-                    // then validates the endpoint and advances its own state.
-                    let mut device = self.devices.lock(|devices| devices.remove(index));
-                    let result =
-                        device.translate_state(self, device::XhciDeviceEvent::Transfer(transfer));
-                    self.devices.lock(|devices| devices.insert(index, device));
-                    if let Err(reason) = result {
-                        error!("xhci: device transfer failed: {}", reason);
-                    }
+                    self.dispatch_device_transfer_completion(transfer);
                 }
                 event::XhciEvent::HostController(event) => self.handle_host_controller_event(event),
             }
@@ -592,12 +519,157 @@ impl XhciHost {
             self.handle_port_status_change_event(event);
         }
     }
-    pub(crate) fn name(&self) -> &'static str {
-        self.platform.name()
+
+    fn allocate_device_id(&mut self) -> device::DeviceId {
+        let id = device::DeviceId(self.next_device_id);
+        self.next_device_id = self.next_device_id.wrapping_add(1).max(1);
+        id
     }
 
-    pub(crate) fn event_irq_process(&mut self) {
-        self.process_event_irq();
+    fn take_command_owner(&mut self, pointer: u64) -> Option<device::DeviceId> {
+        let base = self.command_ring.phys_addr() as u64;
+        let bytes = u64::try_from(TRB_SIZE).ok()?;
+        let offset = pointer.checked_sub(base)?;
+        if offset % bytes != 0 {
+            return None;
+        }
+        let index = usize::try_from(offset / bytes).ok()?;
+        let index = (index < TRBS_PER_RING - 1).then_some(index)?;
+        self.command_routes[index].take()
+    }
+
+    pub(crate) fn set_command_owner(&mut self, index: usize, id: device::DeviceId) {
+        assert!(index < self.command_routes.len());
+        assert!(
+            self.command_routes[index].is_none(),
+            "xHCI command ring route overwrite"
+        );
+        self.command_routes[index] = Some(id);
+    }
+
+    fn submit_device_command(&mut self, id: device::DeviceId, command: event::XhciCommand) {
+        self.enqueue_command(command, id);
+        self.bite_dorbell();
+    }
+
+    fn find_device_by_id(&self, id: device::DeviceId) -> Option<device::XhciDeviceRef> {
+        self.devices.lock(|devices| {
+            devices
+                .iter()
+                .find(|device| device.lock(|device| device.id == id))
+                .cloned()
+        })
+    }
+
+    fn find_device_by_slot(&self, slot_id: u8) -> Option<device::XhciDeviceRef> {
+        self.devices.lock(|devices| {
+            devices
+                .iter()
+                .find(|device| device.lock(|device| device.slot_id == Some(slot_id)))
+                .cloned()
+        })
+    }
+
+    fn find_device_by_port(&self, port_id: u8) -> Option<device::XhciDeviceRef> {
+        self.devices.lock(|devices| {
+            devices
+                .iter()
+                .find(|device| device.lock(|device| device.port_id == port_id))
+                .cloned()
+        })
+    }
+
+    fn dispatch_device_command_completion(
+        &mut self,
+        id: device::DeviceId,
+        command: event::CommandCompletionEvent,
+    ) {
+        let Some(device) = self.find_device_by_id(id) else {
+            error!("xhci: command completion references a removed device");
+            return;
+        };
+        let action = device
+            .lock(|device| device.on_command_completion(command, self.max_slots, &self.dcbaa));
+        match action {
+            Ok(action) => self.execute_device_action(id, action),
+            Err(reason) => error!("xhci: device command completion failed: {}", reason),
+        }
+    }
+
+    fn dispatch_device_transfer_completion(&mut self, transfer: event::TransferEvent) {
+        let Some(device) = self.find_device_by_slot(transfer.slot_id) else {
+            error!(
+                "xhci: xHCI transfer event has no matching device: slot={}",
+                transfer.slot_id
+            );
+            return;
+        };
+        let result = device.lock(|device| {
+            let id = device.id;
+            device
+                .on_transfer_completion(transfer)
+                .map(|action| (id, action))
+        });
+        match result {
+            Ok((id, action)) => self.execute_device_action(id, action),
+            Err(reason) => error!(
+                "xhci: device transfer completion failed: slot={}, endpoint={}, {}",
+                transfer.slot_id, transfer.endpoint_id, reason
+            ),
+        }
+    }
+
+    fn execute_device_action(&mut self, id: device::DeviceId, action: device::DeviceAction) {
+        match action {
+            device::DeviceAction::SubmitCommand(command) => self.submit_device_command(id, command),
+            device::DeviceAction::RingEndpoint { dci } => {
+                let slot_id = self
+                    .find_device_by_id(id)
+                    .and_then(|device| device.lock(|device| device.slot_id));
+                let Some(slot_id) = slot_id else {
+                    error!("xhci: device action has no xHCI slot");
+                    return;
+                };
+                self.ring_device_doorbell(slot_id, dci);
+            }
+            device::DeviceAction::RecordInSys => {
+                let Some(device) = self.find_device_by_id(id) else {
+                    error!("xhci: configured device was removed before driver probe");
+                    return;
+                };
+                let record = device.lock(|device| device.sys_record(self.bus_number));
+                if let Some(record) = record {
+                    crate::fs::sys::dev::record_usb_device(record);
+                } else {
+                    error!("xhci: configured device cannot produce a sysfs record");
+                }
+                device::XhciDevice::try_find_and_register_driver(device);
+            }
+            device::DeviceAction::Release => {
+                let Some(device) = self.find_device_by_id(id) else {
+                    return;
+                };
+                let port_id = device.lock(|device| device.port_id);
+                crate::fs::sys::dev::remove_usb_device(self.bus_number, port_id);
+                self.devices
+                    .lock(|devices| devices.retain(|candidate| !Arc::ptr_eq(candidate, &device)));
+            }
+        }
+    }
+
+    fn ring_device_doorbell(&self, slot_id: u8, dci: u8) {
+        if slot_id == 0 || slot_id > self.max_slots || dci == 0 || dci > 31 {
+            error!(
+                "xhci: invalid device doorbell slot={}, dci={}",
+                slot_id, dci
+            );
+            return;
+        }
+        dma_write_barrier();
+        self.platform.write32(
+            self.doorbell_offset + usize::from(slot_id) * 4,
+            u32::from(dci),
+        );
     }
 
     fn handle_host_controller_event(&mut self, event: event::HostControllerEvent) {
@@ -632,17 +704,6 @@ impl XhciHost {
 
     /// Start enumeration for a newly connected device.
     fn handle_connect_event(&mut self, event: event::PortStatusChangeEvent) {
-        if self
-            .devices
-            .lock(|devices| devices.iter().any(|device| device.is_enumerating()))
-        {
-            warn!(
-                "xhci: port {} change ignored while another device is enumerating",
-                event.port_id
-            );
-            return;
-        }
-
         let reset = match self.reset_port(event.port_id) {
             Ok(reset) => reset,
             Err(reason) => {
@@ -654,50 +715,60 @@ impl XhciHost {
         // The device owns the rest of enumeration. It is inserted before
         // ringing the command doorbell, so its state is visible when the
         // Enable Slot completion IRQ arrives.
-        let device =
-            device::XhciDevice::new(reset.port_id, reset.speed, self.controller_context_stride);
+        let id = self.allocate_device_id();
+        let device = device::XhciDevice::new(
+            id,
+            reset.port_id,
+            reset.speed,
+            self.controller_context_stride,
+        );
+        let device = Arc::new(NoIrqLock::new(device));
         self.devices.lock(|devices| {
-            devices.retain(|old| old.port_id != device.port_id);
+            devices.retain(|old| old.lock(|old| old.port_id != reset.port_id));
             devices.push(device);
         });
-        let _waiter = self.send_command(event::XhciCommand::EnableSlot);
-        self.bite_dorbell();
+        crate::fs::sys::dev::remove_usb_device(self.bus_number, reset.port_id);
+        self.submit_device_command(id, event::XhciCommand::EnableSlot);
     }
 
     /// Stop the slot and release all resources after a disconnect.
     fn handle_disconnect_event(&mut self, event: event::PortStatusChangeEvent) {
         if !event.ccs {
-            let device_index = self.devices.lock(|devices| {
-                devices
-                    .iter()
-                    .position(|device| device.port_id == event.port_id)
-            });
-
-            let Some(index) = device_index else {
+            // Clear the latched disconnect/change bits without writing zero
+            // to PORTSC's power and link-control fields.
+            let acknowledge = event::portsc_event_ack_value(event.portsc);
+            if acknowledge != 0 {
+                let portsc_offset =
+                    PORT_REGISTER_BASE + (usize::from(event.port_id) - 1) * PORT_REGISTER_STRIDE;
+                self.op_write32(portsc_offset, acknowledge);
+            }
+            crate::fs::sys::dev::remove_usb_device(self.bus_number, event.port_id);
+            let Some(device) = self.find_device_by_port(event.port_id) else {
                 return;
             };
 
-            let mut device = self.devices.lock(|devices| devices.remove(index));
-            let disable_command = match device.disable_slot() {
+            let disable_command = device.lock(|device| device.disable_slot());
+            let disable_command = match disable_command {
                 Ok(command) => command,
                 Err(reason) => {
                     // Enable Slot may not have assigned a slot yet. There is
                     // no controller-owned context to disable in that case.
-                    if device.slot_id.is_none() {
-                        drop(device);
+                    let has_slot = device.lock(|device| device.slot_id.is_some());
+                    if !has_slot {
+                        self.devices.lock(|devices| {
+                            devices.retain(|candidate| !Arc::ptr_eq(candidate, &device));
+                        });
                     } else {
                         error!(
                             "xhci: port {} cannot disable slot: {}",
                             event.port_id, reason
                         );
-                        self.devices.lock(|devices| devices.insert(index, device));
                     }
                     return;
                 }
             };
-            self.devices.lock(|devices| devices.insert(index, device));
-            let _waiter = self.send_command(disable_command);
-            self.bite_dorbell();
+            let id = device.lock(|device| device.id);
+            self.submit_device_command(id, disable_command);
             return;
         }
 

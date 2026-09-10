@@ -1,14 +1,15 @@
 //! xHCI command and event-ring helpers.
 
+use super::device::DeviceId;
 use super::{Trb, XhciHost};
 use crate::arch::riscv64::driver::dma::dma_write_barrier;
-use alloc::sync::Arc;
 use core::ptr::{read_volatile, write_volatile};
-use core::sync::atomic::{AtomicBool, Ordering};
 
 const TRB_TYPE_ENABLE_SLOT_COMMAND: u32 = 9 << 10;
 const TRB_TYPE_DISABLE_SLOT_COMMAND: u32 = 10 << 10;
 const TRB_TYPE_ADDRESS_DEVICE_COMMAND: u32 = 11 << 10;
+const TRB_TYPE_CONFIGURE_ENDPOINT_COMMAND: u32 = 12 << 10;
+const TRB_TYPE_EVALUATE_CONTEXT_COMMAND: u32 = 13 << 10;
 const TRB_TYPE_SETUP_STAGE: u32 = 2 << 10;
 const TRB_TYPE_DATA_STAGE: u32 = 3 << 10;
 const TRB_TYPE_STATUS_STAGE: u32 = 4 << 10;
@@ -177,85 +178,6 @@ impl PortLinkState {
     }
 }
 
-/// The event a task is allowed to wait for.
-///
-/// The variant identifies the event type and its field identifies one
-/// controller transaction. Controller-global events intentionally have no
-/// variant here: they are delivered only to the host-device handlers.
-#[derive(Clone, Debug)]
-pub enum EventWaiter {
-    /// Completion of one command TRB.
-    CommandCompletion {
-        /// Physical address of the command TRB.
-        command_trb_pointer: u64,
-        /// Set by the IRQ path when the matching event is consumed.
-        completed: Arc<AtomicBool>,
-    },
-    /// Completion of one transfer TRB or Event Data TRB.
-    Transfer {
-        /// Physical address reported by the Transfer Event TRB.
-        trb_pointer: u64,
-        /// Set by the IRQ path when the matching event is consumed.
-        completed: Arc<AtomicBool>,
-    },
-}
-
-impl EventWaiter {
-    /// Create a waiter for a transfer TRB submitted by software.
-    pub(crate) fn transfer(trb_pointer: u64) -> Self {
-        Self::Transfer {
-            trb_pointer,
-            completed: Arc::new(AtomicBool::new(false)),
-        }
-    }
-
-    pub(crate) fn is_completed(&self) -> bool {
-        match self {
-            Self::CommandCompletion { completed, .. } | Self::Transfer { completed, .. } => {
-                completed.load(Ordering::Acquire)
-            }
-        }
-    }
-
-    pub(crate) fn complete(&self) {
-        match self {
-            Self::CommandCompletion { completed, .. } | Self::Transfer { completed, .. } => {
-                completed.store(true, Ordering::Release)
-            }
-        }
-    }
-}
-
-impl PartialEq for EventWaiter {
-    fn eq(&self, other: &Self) -> bool {
-        match (self, other) {
-            (
-                Self::CommandCompletion {
-                    command_trb_pointer: left_pointer,
-                    completed: left_completed,
-                },
-                Self::CommandCompletion {
-                    command_trb_pointer: right_pointer,
-                    completed: right_completed,
-                },
-            ) => left_pointer == right_pointer && Arc::ptr_eq(left_completed, right_completed),
-            (
-                Self::Transfer {
-                    trb_pointer: left_pointer,
-                    completed: left_completed,
-                },
-                Self::Transfer {
-                    trb_pointer: right_pointer,
-                    completed: right_completed,
-                },
-            ) => left_pointer == right_pointer && Arc::ptr_eq(left_completed, right_completed),
-            _ => false,
-        }
-    }
-}
-
-impl Eq for EventWaiter {}
-
 /// A command that can be submitted to the xHCI command ring.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum XhciCommand {
@@ -265,6 +187,17 @@ pub enum XhciCommand {
     DisableSlot { slot_id: u8 },
     /// Initialize the slot and EP0, then let the xHC issue SET_ADDRESS.
     AddressDevice {
+        slot_id: u8,
+        input_context_pointer: u64,
+    },
+    /// Add the configured endpoints described by an Input Context.
+    ConfigureEndpoint {
+        slot_id: u8,
+        input_context_pointer: u64,
+    },
+    /// Update an existing slot, currently used to resize EP0 after reading
+    /// bMaxPacketSize0 from the Device Descriptor.
+    EvaluateContext {
         slot_id: u8,
         input_context_pointer: u64,
     },
@@ -294,6 +227,28 @@ impl XhciCommand {
                 status: 0,
                 // BSR is deliberately zero: the xHC must issue SET_ADDRESS.
                 control: TRB_TYPE_ADDRESS_DEVICE_COMMAND
+                    | (u32::from(slot_id) << SLOT_ID_SHIFT)
+                    | cycle_bit,
+            },
+            Self::ConfigureEndpoint {
+                slot_id,
+                input_context_pointer,
+            } => Trb {
+                parameter: input_context_pointer,
+                status: 0,
+                // DC=0: add the endpoint contexts listed by the Input
+                // Control Context; this is the first configuration pass.
+                control: TRB_TYPE_CONFIGURE_ENDPOINT_COMMAND
+                    | (u32::from(slot_id) << SLOT_ID_SHIFT)
+                    | cycle_bit,
+            },
+            Self::EvaluateContext {
+                slot_id,
+                input_context_pointer,
+            } => Trb {
+                parameter: input_context_pointer,
+                status: 0,
+                control: TRB_TYPE_EVALUATE_CONTEXT_COMMAND
                     | (u32::from(slot_id) << SLOT_ID_SHIFT)
                     | cycle_bit,
             },
@@ -345,13 +300,10 @@ impl UsbSetup {
             parameter: setup_data,
             // The Setup Stage always transfers exactly the eight setup bytes.
             status: TRB_SETUP_PACKET_LENGTH,
-            // Setup is followed by Data (or directly by Status), so it is
-            // chained. IDT is required because the setup packet is inline.
-            control: TRB_TYPE_SETUP_STAGE
-                | transfer_type
-                | TRB_CHAIN
-                | TRB_IMMEDIATE_DATA
-                | cycle_bit,
+            // Setup, Data, and Status are separate control-transfer TDs.
+            // Setup bit 4 is reserved, not CH; IDT is required because the
+            // setup packet is inline.
+            control: TRB_TYPE_SETUP_STAGE | transfer_type | TRB_IMMEDIATE_DATA | cycle_bit,
         }
     }
 
@@ -653,28 +605,6 @@ impl XhciEvent {
     }
 }
 
-impl EventWaiter {
-    /// Match an already registered waiter against a decoded event.
-    ///
-    /// A waiter is created by the command/transfer submission path. Event
-    /// decoding only checks that existing identity; it never creates one.
-    pub(crate) fn matches(&self, event: &XhciEvent) -> bool {
-        match (self, event) {
-            (
-                Self::CommandCompletion {
-                    command_trb_pointer,
-                    ..
-                },
-                XhciEvent::CommandCompletion(event),
-            ) => *command_trb_pointer == event.command_trb_pointer,
-            (Self::Transfer { trb_pointer, .. }, XhciEvent::Transfer(event)) => {
-                *trb_pointer == event.trb_pointer
-            }
-            _ => false,
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::{
@@ -699,7 +629,8 @@ mod tests {
         assert_eq!(setup_trb.status, 8);
         assert_eq!(setup_trb.parameter, 0x0012_0000_0100_0680);
         assert_ne!(setup_trb.control & TRB_SETUP_TRT_IN, 0);
-        assert_ne!(setup_trb.control & (TRB_CHAIN | TRB_IMMEDIATE_DATA), 0);
+        assert_eq!(setup_trb.control & TRB_CHAIN, 0);
+        assert_ne!(setup_trb.control & TRB_IMMEDIATE_DATA, 0);
 
         let data_trb = UsbDataStage {
             buffer: 0x4000,
@@ -762,6 +693,24 @@ mod tests {
         assert_eq!(address.parameter, 0x1234_0000);
         assert_eq!((address.control >> SLOT_ID_SHIFT) as u8, 3);
         assert_eq!(address.control & (1 << 9), 0); // BSR=0: issue SET_ADDRESS.
+
+        let configure = XhciCommand::ConfigureEndpoint {
+            slot_id: 3,
+            input_context_pointer: 0x5678_0000,
+        }
+        .into_trb(true);
+        assert_eq!(configure.trb_type(), 12);
+        assert_eq!(configure.parameter, 0x5678_0000);
+        assert_eq!((configure.control >> SLOT_ID_SHIFT) as u8, 3);
+
+        let evaluate = XhciCommand::EvaluateContext {
+            slot_id: 3,
+            input_context_pointer: 0x9abc_0000,
+        }
+        .into_trb(true);
+        assert_eq!(evaluate.trb_type(), 13);
+        assert_eq!(evaluate.parameter, 0x9abc_0000);
+        assert_eq!((evaluate.control >> SLOT_ID_SHIFT) as u8, 3);
     }
 
     #[test]
@@ -799,8 +748,13 @@ mod tests {
 }
 
 impl XhciHost {
-    /// Put one command TRB on the command ring and return its waiter.
-    pub fn send_command(&mut self, command: XhciCommand) -> EventWaiter {
+    /// Submit one controller-internal command owned by a device state machine.
+    pub(crate) fn enqueue_command(&mut self, command: XhciCommand, owner: DeviceId) {
+        let (index, _) = self.next_command_slot();
+        self.publish_command(index, command, owner);
+    }
+
+    fn next_command_slot(&mut self) -> (usize, usize) {
         // The last TRB is permanently reserved for the Link TRB.
         if self.command_enqueue == super::TRBS_PER_RING - 1 {
             self.command_enqueue = 0;
@@ -809,24 +763,21 @@ impl XhciHost {
 
         let index = self.command_enqueue;
         let command_pointer = self.command_ring.phys_addr() + index * super::TRB_SIZE;
-        let waiter = EventWaiter::CommandCompletion {
-            command_trb_pointer: command_pointer as u64,
-            completed: Arc::new(AtomicBool::new(false)),
-        };
+        self.command_enqueue += 1;
+        (index, command_pointer)
+    }
 
-        // Register before writing/ringing the command.  The controller may
-        // complete a No Op very quickly, so registering in wait_event_loop
-        // would leave a race where the IRQ discards the event first.
-        self.register_waiter(waiter.clone());
+    fn publish_command(&mut self, index: usize, command: XhciCommand, owner: DeviceId) {
+        // Store the owner before making the TRB visible. A fast controller
+        // must never be able to complete an unowned command.
+        self.set_command_owner(index, owner);
         unsafe {
             write_volatile(
                 self.command_ring.as_ptr::<Trb>(index * super::TRB_SIZE),
                 command.into_trb(self.command_cycle),
             );
         }
-        self.command_enqueue += 1;
         self.command_ring.clean_for_device();
-        waiter
     }
 
     /// Ring the host-controller doorbell (DB Target 0).
@@ -839,48 +790,7 @@ impl XhciHost {
         self.platform.write32(self.doorbell_offset, 0);
     }
 
-    /// Wait for one identified event using the IRQ-updated waiter flag.
-    pub fn wait_event_irq(&mut self, waiter: EventWaiter) -> Result<(), &'static str> {
-        self.wait_event_loop(waiter)
-    }
-
-    /// Wait for one event by polling instead of blocking the current task.
-    pub fn wait_event_loop(&mut self, waiter: EventWaiter) -> Result<(), &'static str> {
-        self.register_waiter(waiter.clone());
-        let result = self.wait_event_loop_inner(&waiter);
-        self.unregister_waiter(&waiter);
-        result
-    }
-
-    fn wait_event_loop_inner(&mut self, waiter: &EventWaiter) -> Result<(), &'static str> {
-        // Only the IRQ path reads and consumes the Event Ring. This loop
-        // observes the completion flag published by that IRQ path.
-        loop {
-            if waiter.is_completed() {
-                return Ok(());
-            }
-            core::hint::spin_loop();
-        }
-    }
-
-    /// Process events raised by this host's interrupter.
-    pub(crate) fn register_waiter(&self, waiter: EventWaiter) {
-        self.registered_waiters.lock(|waiters| {
-            if !waiters.contains(&waiter) {
-                waiters.push(waiter);
-            }
-        });
-    }
-
-    pub(crate) fn unregister_waiter(&self, waiter: &EventWaiter) {
-        self.registered_waiters.lock(|waiters| {
-            if let Some(index) = waiters.iter().position(|registered| registered == waiter) {
-                waiters.remove(index);
-            }
-        });
-    }
-
-    pub(crate) fn peek_event(&self) -> Option<Trb> {
+    pub(crate) fn take_next_event(&mut self) -> Option<Trb> {
         self.event_ring.invalidate_for_cpu();
         let trb = unsafe {
             read_volatile(
@@ -888,11 +798,9 @@ impl XhciHost {
                     .as_ptr::<Trb>(self.event_dequeue * super::TRB_SIZE),
             )
         };
-        (trb.cycle() == self.event_cycle).then_some(trb)
-    }
-
-    pub(crate) fn take_next_event(&mut self) -> Option<Trb> {
-        let trb = self.peek_event()?;
+        if trb.cycle() != self.event_cycle {
+            return None;
+        }
         self.advance_event_ring();
         Some(trb)
     }

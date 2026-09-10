@@ -6,3 +6,5 @@ pub mod nvme;
 pub mod pcie;
 #[cfg(target_arch = "riscv64")]
 pub mod usb;
+#[cfg(target_arch = "riscv64")]
+pub mod uvc;
