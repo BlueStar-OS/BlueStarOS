@@ -100,7 +100,10 @@ impl RootFs {
                 mounted_ext4_root = Some(fs);
                 break;
             }
-            debug!("{} is not a mountable ext4 rootfs, skipping", candidate.path);
+            debug!(
+                "{} is not a mountable ext4 rootfs, skipping",
+                candidate.path
+            );
         }
 
         let fs = mounted_ext4_root.expect("no mountable ext4 rootfs found");
@@ -125,5 +128,7 @@ impl RootFs {
                 .mount_poinr;
             root_mount_point.insert(MountPath("/dev/".to_string()), old_fs);
         });
+
+        crate::fs::sys::init();
     }
 }

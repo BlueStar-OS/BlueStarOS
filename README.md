@@ -38,7 +38,9 @@ BlueStarOS 是一个使用 Rust 编写的实验性操作系统内核，目标是
 
 - PCIe：枚举、BAR 解析、中断能力
 - xHCI USB Host：QEMU xHCI、4 KiB DMA ring、root-port reset、slot/address
-  分配、EP0 控制传输和设备描述符读取
+  分配、EP0 控制传输，以及设备/配置/接口/备用设置/端点描述符解析
+- 最小 sysfs USB 视图：`/sys/bus/usb/devices/list`，用户态可用
+  `/test/lsusb` 以 `Bus … Device … ID vid:pid` 格式查看已枚举设备
 - NVMe 块设备驱动
 - Intel e1000 网卡驱动
 - virtio-blk / virtio-gpu
@@ -160,8 +162,8 @@ make img
 
 ## 开发方向
 
-- [x] USB：QEMU xHCI 基础枚举与 EP0 Get Descriptor
-- [ ] USB：配置端点、读取完整配置描述符和 USB class 驱动
+- [x] USB：QEMU xHCI 基础枚举、EP0 Get Descriptor 与完整配置描述符解析
+- [x] USB：SET_CONFIGURATION、Configure Endpoint；USB class 驱动待补
 - [x] RISC-V：QEMU PLIC 外部中断与 Zicbom DMA 基础支持
 - [ ] 完善 socket syscall 与用户态 UDP/TCP
 - [ ] SMP 多核支持
